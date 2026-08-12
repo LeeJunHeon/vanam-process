@@ -16,18 +16,24 @@ export async function GET(request: Request) {
     const q = searchParams.get("q")?.trim();
 
     const items = await prisma.substrateReceipt.findMany({
-      where: q
-        ? {
-            OR: [
-              { manager: { contains: q, mode: "insensitive" } },
-              { source: { contains: q, mode: "insensitive" } },
-              { clientName: { contains: q, mode: "insensitive" } },
-              { memo: { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : undefined,
+      where: {
+        // 소프트 삭제된 기록은 목록에서 제외
+        deletedAt: null,
+        ...(q
+          ? {
+              OR: [
+                { manager: { contains: q, mode: "insensitive" } },
+                { source: { contains: q, mode: "insensitive" } },
+                { clientName: { contains: q, mode: "insensitive" } },
+                { memo: { contains: q, mode: "insensitive" } },
+              ],
+            }
+          : {}),
+      },
       include: {
         photos: {
+          // 뗀 사진은 목록에 보이지 않는다 (이력에서만 조회 가능)
+          where: { deletedAt: null },
           select: { id: true, originalName: true, mimeType: true },
           orderBy: { id: "asc" },
         },

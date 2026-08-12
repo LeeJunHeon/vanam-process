@@ -26,11 +26,11 @@ model User {
 
 // hr.employees — 권한 판정(직급)용
 model Employee {
-  id       Int       @id @default(autoincrement())
-  userId   Int?      @unique @map("user_id")
-  name     String    @db.VarChar(100)
-  position Position? @relation(fields: [positionId], references: [id])
-  positionId Int?    @map("position_id")
+  id         Int       @id @default(autoincrement())
+  userId     Int?      @unique @map("user_id")
+  name       String    @db.VarChar(100)
+  position   Position? @relation(fields: [positionId], references: [id])
+  positionId Int?      @map("position_id")
 
   @@map("employees")
   @@schema("hr")
@@ -53,32 +53,39 @@ model Position {
 
 // 기판 반입 기록 1건
 model SubstrateReceipt {
-  id             Int      @id @default(autoincrement())
-  receivedAt     DateTime @map("received_at") @db.Timestamptz(6)
-  manager        String   @db.VarChar(50)
-  source         String?  @db.VarChar(100)
-  clientName     String?  @map("client_name") @db.VarChar(100)
+  id             Int       @id @default(autoincrement())
+  receivedAt     DateTime  @map("received_at") @db.Timestamptz(6)
+  manager        String    @db.VarChar(50)
+  source         String?   @db.VarChar(100)
+  clientName     String?   @map("client_name") @db.VarChar(100)
   memo           String?
-  createdByEmail String   @map("created_by_email") @db.VarChar(255)
-  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdByEmail String    @map("created_by_email") @db.VarChar(255)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  // 소프트 삭제 — 증거 보존을 위해 실제로 지우지 않는다
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedByEmail String?   @map("deleted_by_email") @db.VarChar(255)
 
   photos SubstratePhoto[]
 
   @@index([receivedAt])
+  @@index([deletedAt])
   @@map("substrate_receipt")
   @@schema("process")
 }
 
 // 기판 사진 (건당 1장 이상 필수)
 model SubstratePhoto {
-  id           Int      @id @default(autoincrement())
-  receiptId    Int      @map("receipt_id")
-  originalName String   @map("original_name") @db.VarChar(255)
-  storedPath   String   @map("stored_path") @db.VarChar(500)
-  fileSize     Int?     @map("file_size")
-  mimeType     String?  @map("mime_type") @db.VarChar(100)
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id             Int       @id @default(autoincrement())
+  receiptId      Int       @map("receipt_id")
+  originalName   String    @map("original_name") @db.VarChar(255)
+  storedPath     String    @map("stored_path") @db.VarChar(500)
+  fileSize       Int?      @map("file_size")
+  mimeType       String?   @map("mime_type") @db.VarChar(100)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  // 소프트 삭제 — 사진 파일은 디스크에서 절대 지우지 않는다
+  deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedByEmail String?   @map("deleted_by_email") @db.VarChar(255)
 
   receipt SubstrateReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
 

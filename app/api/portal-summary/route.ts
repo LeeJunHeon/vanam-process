@@ -29,8 +29,10 @@ export async function GET() {
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const [total, thisMonth] = await Promise.all([
-      prisma.substrateReceipt.count(),
-      prisma.substrateReceipt.count({ where: { receivedAt: { gte: monthStart } } }),
+      prisma.substrateReceipt.count({ where: { deletedAt: null } }),
+      prisma.substrateReceipt.count({
+        where: { deletedAt: null, receivedAt: { gte: monthStart } },
+      }),
     ]);
 
     return withCors(NextResponse.json({ total, thisMonth }));

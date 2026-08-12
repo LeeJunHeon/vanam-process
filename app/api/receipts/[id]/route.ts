@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, canModify } from "@/lib/auth-helpers";
-import { deletePhotos } from "@/lib/photoStorage";
 import { logActivity } from "@/lib/activity";
 
 export const runtime = "nodejs";
@@ -21,6 +20,12 @@ export async function PATCH(
     });
     if (!row) {
       return NextResponse.json({ error: "기록을 찾을 수 없습니다." }, { status: 404 });
+    }
+    if (row.deletedAt) {
+      return NextResponse.json(
+        { error: "삭제된 기록은 수정할 수 없습니다." },
+        { status: 400 },
+      );
     }
     if (!canModify(_auth.session, row.createdByEmail)) {
       return NextResponse.json(
@@ -49,7 +54,7 @@ export async function PATCH(
   }
 }
 
-// DELETE /api/receipts/[id] — 기록 + 사진 파일 삭제
+// DELETE /api/receipts/[id] — 소프트 삭제 (사진 파일은 보존)
 export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -66,6 +71,9 @@ export async function DELETE(
     if (!row) {
       return NextResponse.json({ error: "기록을 찾을 수 없습니다." }, { status: 404 });
     }
+    if (row.deletedAt) {
+      return NextResponse.json({ error: "이미 삭제된 기록입니다." }, { status: 400 });
+    }
     if (!canModify(_auth.session, row.createdByEmail)) {
       return NextResponse.json(
         { error: "본인이 등록한 기록만 삭제할 수 있습니다." },
@@ -73,17 +81,20 @@ export async function DELETE(
       );
     }
 
-    // 실제 파일 먼저 정리 (실패해도 DB 삭제는 진행)
-    await deletePhotos(row.photos.map((p) => p.storedPath));
-
-    // substrate_photo 는 FK cascade 로 함께 삭제됨
-    await prisma.substrateReceipt.delete({ where: { id: row.id } });
+    // 증거 보존: DB 행도 사진 파일도 지우지 않고 삭제 표시만 남긴다.
+    await prisma.substrateReceipt.update({
+      where: { id: row.id },
+      data: {
+        deletedAt: new Date(),
+        deletedByEmail: _auth.session.user?.email ?? "unknown",
+      },
+    });
 
     await logActivity(
       _auth.session,
       "delete",
       row.id,
-      `${row.manager} 기록 삭제 (사진 ${row.photos.length}장)`,
+      `${row.manager} 기록 삭제 (사진 ${row.photos.length}장 보존)`,
     );
     return NextResponse.json({ ok: true });
   } catch {
