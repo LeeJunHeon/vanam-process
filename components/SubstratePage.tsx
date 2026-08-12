@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Trash2, ImageOff } from "lucide-react";
 import SubstrateFormModal from "@/components/SubstrateFormModal";
+import { assetPath } from "@/lib/assetPath";
 
 type Photo = { id: number; originalName: string; mimeType: string | null };
 type Receipt = {
@@ -148,7 +149,7 @@ export default function SubstratePage() {
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={`/api/photos/${p.id}/file`}
+                        src={assetPath(`/api/photos/${p.id}/file`)}
                         alt={p.originalName}
                         className="h-full w-full object-cover"
                       />
@@ -173,7 +174,7 @@ export default function SubstratePage() {
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`/api/photos/${preview}/file`}
+            src={assetPath(`/api/photos/${preview}/file`)}
             alt="기판 사진"
             className="max-h-full max-w-full object-contain"
           />
