@@ -1,0 +1,106 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["process", "hr", "public"]
+}
+
+// ───────────────────────────────────────────────
+// 인증용 매핑 (이 앱이 만들지 않음, 읽기만)
+// ───────────────────────────────────────────────
+
+// public.user — SSO 공유 사용자
+model User {
+  id       Int     @id @default(autoincrement())
+  name     String
+  email    String? @unique
+  role     String?
+  isActive String  @default("Y") @map("is_active")
+
+  @@map("user")
+  @@schema("public")
+}
+
+// hr.employees — 권한 판정(직급)용
+model Employee {
+  id       Int       @id @default(autoincrement())
+  userId   Int?      @unique @map("user_id")
+  name     String    @db.VarChar(100)
+  position Position? @relation(fields: [positionId], references: [id])
+  positionId Int?    @map("position_id")
+
+  @@map("employees")
+  @@schema("hr")
+}
+
+// hr.positions — CEO / ADMIN / EMPLOYEE
+model Position {
+  id        Int        @id @default(autoincrement())
+  code      String     @unique @db.VarChar(50)
+  name      String     @db.VarChar(100)
+  employees Employee[]
+
+  @@map("positions")
+  @@schema("hr")
+}
+
+// ───────────────────────────────────────────────
+// process 스키마 — 이 앱이 소유
+// ───────────────────────────────────────────────
+
+// 기판 반입 기록 1건
+model SubstrateReceipt {
+  id             Int      @id @default(autoincrement())
+  receivedAt     DateTime @map("received_at") @db.Timestamptz(6)
+  manager        String   @db.VarChar(50)
+  source         String?  @db.VarChar(100)
+  clientName     String?  @map("client_name") @db.VarChar(100)
+  memo           String?
+  createdByEmail String   @map("created_by_email") @db.VarChar(255)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  photos SubstratePhoto[]
+
+  @@index([receivedAt])
+  @@map("substrate_receipt")
+  @@schema("process")
+}
+
+// 기판 사진 (건당 1장 이상 필수)
+model SubstratePhoto {
+  id           Int      @id @default(autoincrement())
+  receiptId    Int      @map("receipt_id")
+  originalName String   @map("original_name") @db.VarChar(255)
+  storedPath   String   @map("stored_path") @db.VarChar(500)
+  fileSize     Int?     @map("file_size")
+  mimeType     String?  @map("mime_type") @db.VarChar(100)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  receipt SubstrateReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  @@index([receiptId])
+  @@map("substrate_photo")
+  @@schema("process")
+}
+
+// 활동 이력 — 등록/수정/삭제 전부 기록
+// ★ 기판 기록이 삭제돼도 이력은 남아야 하므로 FK를 걸지 않는다 (의도적)
+model ActivityLog {
+  id         Int      @id @default(autoincrement())
+  targetType String   @map("target_type") @db.VarChar(50)
+  targetId   Int      @map("target_id")
+  action     String   @db.VarChar(20)
+  actorEmail String   @map("actor_email") @db.VarChar(255)
+  actorName  String?  @map("actor_name") @db.VarChar(100)
+  summary    String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([targetType, targetId])
+  @@map("activity_log")
+  @@schema("process")
+}
