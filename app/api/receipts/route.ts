@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth-helpers";
-import { uploadDir } from "@/lib/uploadDir";
+import { savePhoto } from "@/lib/photoStorage";
 import { logActivity } from "@/lib/activity";
 
 export const runtime = "nodejs"; // Prisma·fs는 edge 불가
@@ -91,26 +89,11 @@ export async function POST(request: Request) {
       },
     });
 
-    // 2) 사진 저장 (연월 폴더로 분산)
-    const now = new Date();
-    const dir = `substrate/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, "0")}`;
-    await fs.mkdir(path.join(uploadDir(), dir), { recursive: true });
-
+    // 2) 사진 저장 — 저장 규칙은 lib/photoStorage 가 담당
     for (const file of files) {
-      const ext = path.extname(file.name) || ".jpg";
-      const key = `${dir}/${crypto.randomUUID()}${ext}`;
-      await fs.writeFile(
-        path.join(uploadDir(), key),
-        Buffer.from(await file.arrayBuffer()),
-      );
+      const saved = await savePhoto(file);
       await prisma.substratePhoto.create({
-        data: {
-          receiptId: created.id,
-          originalName: file.name,
-          storedPath: key,
-          fileSize: file.size,
-          mimeType: file.type || null,
-        },
+        data: { receiptId: created.id, ...saved },
       });
     }
 

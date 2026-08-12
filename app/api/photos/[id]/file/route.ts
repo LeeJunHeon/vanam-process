@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth-helpers";
-import { uploadDir } from "@/lib/uploadDir";
+import { readPhoto } from "@/lib/photoStorage";
 
 export const runtime = "nodejs";
 
@@ -24,7 +22,7 @@ export async function GET(
       return NextResponse.json({ error: "사진을 찾을 수 없습니다." }, { status: 404 });
     }
 
-    const buf = await fs.readFile(path.join(uploadDir(), row.storedPath));
+    const buf = await readPhoto(row.storedPath);
     const { searchParams } = new URL(request.url);
     const download = searchParams.get("download") === "1";
 

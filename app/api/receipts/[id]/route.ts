@@ -1,9 +1,7 @@
 import { NextResponse } from "next/server";
-import fs from "fs/promises";
-import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireSession, canModify } from "@/lib/auth-helpers";
-import { uploadDir } from "@/lib/uploadDir";
+import { deletePhotos } from "@/lib/photoStorage";
 import { logActivity } from "@/lib/activity";
 
 export const runtime = "nodejs";
@@ -76,13 +74,7 @@ export async function DELETE(
     }
 
     // 실제 파일 먼저 정리 (실패해도 DB 삭제는 진행)
-    for (const p of row.photos) {
-      try {
-        await fs.unlink(path.join(uploadDir(), p.storedPath));
-      } catch {
-        // 파일이 이미 없을 수 있음 — 무시
-      }
-    }
+    await deletePhotos(row.photos.map((p) => p.storedPath));
 
     // substrate_photo 는 FK cascade 로 함께 삭제됨
     await prisma.substrateReceipt.delete({ where: { id: row.id } });
