@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
+import SubstratePage from "@/components/SubstratePage";
+import ActivityPage from "@/components/ActivityPage";
 
 type Page = "substrate" | "activity";
 
@@ -34,20 +36,8 @@ export default function AppShell() {
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
         />
         <main className="flex-1 overflow-y-auto bg-gray-50">
-          {page === "substrate" && (
-            <div className="p-4 sm:p-6">
-              <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">
-                기판 반입 기록 화면 — 다음 단계에서 구현
-              </div>
-            </div>
-          )}
-          {page === "activity" && (
-            <div className="p-4 sm:p-6">
-              <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">
-                활동 이력 화면 — 다음 단계에서 구현
-              </div>
-            </div>
-          )}
+          {page === "substrate" && <SubstratePage />}
+          {page === "activity" && <ActivityPage />}
         </main>
       </div>
     </div>
