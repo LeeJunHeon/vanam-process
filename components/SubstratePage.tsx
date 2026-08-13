@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Plus, Search, Trash2, ImageOff } from "lucide-react";
+import { Plus, Search, Trash2, ImageOff, Pencil } from "lucide-react";
 import SubstrateFormModal from "@/components/SubstrateFormModal";
+import type { EditTarget } from "@/components/SubstrateFormModal";
 import { assetPath } from "@/lib/assetPath";
 
 type Photo = { id: number; originalName: string; mimeType: string | null };
@@ -28,15 +29,22 @@ export default function SubstratePage() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<EditTarget | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(`/api/receipts?q=${encodeURIComponent(q)}`);
-      if (res.ok) setItems(await res.json());
-    } catch {
-      // ignore
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.error ?? `조회 실패 (${res.status})`);
+      }
+      setItems(await res.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
     } finally {
       setLoading(false);
     }
@@ -81,6 +89,18 @@ export default function SubstratePage() {
         </button>
       </div>
 
+      {error && (
+        <div className="mb-3 flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50 px-4 py-3">
+          <span className="text-sm text-rose-600">{error}</span>
+          <button
+            onClick={load}
+            className="rounded-lg bg-white px-3 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-100"
+          >
+            다시 시도
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">
           불러오는 중...
@@ -123,13 +143,34 @@ export default function SubstratePage() {
                     {formatDate(r.receivedAt)} · {r.createdByEmail}
                   </p>
                 </div>
-                <button
-                  onClick={() => remove(r.id)}
-                  className="shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-rose-50 hover:text-rose-500"
-                  title="삭제"
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    onClick={() =>
+                      setEditing({
+                        id: r.id,
+                        receivedAt: r.receivedAt,
+                        source: r.source,
+                        clientName: r.clientName,
+                        memo: r.memo,
+                        photos: r.photos.map((p) => ({
+                          id: p.id,
+                          originalName: p.originalName,
+                        })),
+                      })
+                    }
+                    className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-500"
+                    title="수정"
+                  >
+                    <Pencil size={16} />
+                  </button>
+                  <button
+                    onClick={() => remove(r.id)}
+                    className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-rose-50 hover:text-rose-500"
+                    title="삭제"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
 
               {r.memo && (
@@ -164,6 +205,14 @@ export default function SubstratePage() {
 
       {showForm && (
         <SubstrateFormModal onClose={() => setShowForm(false)} onSaved={load} />
+      )}
+
+      {editing && (
+        <SubstrateFormModal
+          target={editing}
+          onClose={() => setEditing(null)}
+          onSaved={load}
+        />
       )}
 
       {preview !== null && (
