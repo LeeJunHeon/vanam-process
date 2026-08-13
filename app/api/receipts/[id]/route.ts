@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, canModify } from "@/lib/auth-helpers";
-import { logActivity } from "@/lib/activity";
+import { logActivity, toState, currentPhotoIds } from "@/lib/activity";
 
 export const runtime = "nodejs";
 
@@ -34,12 +34,15 @@ export async function PATCH(
       );
     }
 
+    const photoIds = await currentPhotoIds(row.id);
+    const before = toState(row, photoIds);
+
     const body = await request.json();
+    // 담당자(manager)는 등록자 고정값이므로 수정 대상이 아니다.
     const updated = await prisma.substrateReceipt.update({
       where: { id: row.id },
       data: {
         receivedAt: body.receivedAt ? new Date(body.receivedAt) : undefined,
-        manager: typeof body.manager === "string" ? body.manager.trim() : undefined,
         source: typeof body.source === "string" ? body.source.trim() || null : undefined,
         clientName:
           typeof body.clientName === "string" ? body.clientName.trim() || null : undefined,
@@ -47,7 +50,13 @@ export async function PATCH(
       },
     });
 
-    await logActivity(_auth.session, "update", updated.id, `${updated.manager} 기록 수정`);
+    await logActivity(
+      _auth.session,
+      "update",
+      updated.id,
+      `${updated.manager} 기록 수정`,
+      { state: toState(updated, photoIds), before },
+    );
     return NextResponse.json(updated);
   } catch {
     return NextResponse.json({ error: "수정에 실패했습니다." }, { status: 500 });
@@ -90,11 +99,13 @@ export async function DELETE(
       },
     });
 
+    const photoIds = row.photos.filter((p) => !p.deletedAt).map((p) => p.id);
     await logActivity(
       _auth.session,
       "delete",
       row.id,
-      `${row.manager} 기록 삭제 (사진 ${row.photos.length}장 보존)`,
+      `${row.manager} 기록 삭제 (사진 ${photoIds.length}장 보존)`,
+      { state: toState(row, photoIds) },
     );
     return NextResponse.json({ ok: true });
   } catch {

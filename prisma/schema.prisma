@@ -104,6 +104,8 @@ model ActivityLog {
   actorEmail String   @map("actor_email") @db.VarChar(255)
   actorName  String?  @map("actor_name") @db.VarChar(100)
   summary    String?
+  // 그 시점의 기록 전체 값. 이력에서 과거 상태를 그대로 재현하기 위함.
+  snapshot   Json?    @db.JsonB
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@index([createdAt])

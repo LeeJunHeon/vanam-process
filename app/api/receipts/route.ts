@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/auth-helpers";
 import { savePhoto } from "@/lib/photoStorage";
-import { logActivity } from "@/lib/activity";
+import {
+  logActivity,
+  toState,
+  currentPhotoIds,
+  managerFromSession,
+} from "@/lib/activity";
 
 export const runtime = "nodejs"; // Prisma·fs는 edge 불가
 
@@ -59,7 +64,6 @@ export async function POST(request: Request) {
   try {
     const form = await request.formData();
     const receivedAtRaw = form.get("receivedAt");
-    const manager = form.get("manager");
     const sourceRaw = form.get("source");
     const clientNameRaw = form.get("clientName");
     const memoRaw = form.get("memo");
@@ -67,9 +71,6 @@ export async function POST(request: Request) {
 
     if (typeof receivedAtRaw !== "string" || !receivedAtRaw) {
       return NextResponse.json({ error: "날짜는 필수입니다." }, { status: 400 });
-    }
-    if (typeof manager !== "string" || !manager.trim()) {
-      return NextResponse.json({ error: "담당자는 필수입니다." }, { status: 400 });
     }
     if (files.length === 0) {
       return NextResponse.json(
@@ -79,12 +80,14 @@ export async function POST(request: Request) {
     }
 
     const email = _auth.session.user?.email ?? "unknown";
+    // 담당자는 로그인 사용자로 고정한다. 클라이언트가 보낸 값은 신뢰하지 않는다.
+    const manager = managerFromSession(_auth.session);
 
     // 1) 기록 생성
     const created = await prisma.substrateReceipt.create({
       data: {
         receivedAt: new Date(receivedAtRaw),
-        manager: manager.trim(),
+        manager,
         source: typeof sourceRaw === "string" && sourceRaw.trim() ? sourceRaw.trim() : null,
         clientName:
           typeof clientNameRaw === "string" && clientNameRaw.trim()
@@ -103,11 +106,13 @@ export async function POST(request: Request) {
       });
     }
 
+    const photoIds = await currentPhotoIds(created.id);
     await logActivity(
       _auth.session,
       "create",
       created.id,
       `${created.manager} · 사진 ${files.length}장`,
+      { state: toState(created, photoIds) },
     );
 
     return NextResponse.json(created, { status: 201 });

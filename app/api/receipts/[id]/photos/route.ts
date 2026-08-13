@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, canModify } from "@/lib/auth-helpers";
 import { savePhoto } from "@/lib/photoStorage";
-import { logActivity } from "@/lib/activity";
+import { logActivity, toState, currentPhotoIds } from "@/lib/activity";
 
 export const runtime = "nodejs";
 
@@ -72,6 +72,8 @@ export async function POST(
       return NextResponse.json({ error: "사진이 없습니다." }, { status: 400 });
     }
 
+    const beforeIds = await currentPhotoIds(row.id);
+
     for (const file of files) {
       const saved = await savePhoto(file);
       await prisma.substratePhoto.create({
@@ -79,11 +81,13 @@ export async function POST(
       });
     }
 
+    const afterIds = await currentPhotoIds(row.id);
     await logActivity(
       _auth.session,
       "update",
       row.id,
       `${row.manager} 사진 ${files.length}장 추가`,
+      { state: toState(row, afterIds), before: toState(row, beforeIds) },
     );
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch {

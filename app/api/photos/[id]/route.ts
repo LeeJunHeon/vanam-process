@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, canModify } from "@/lib/auth-helpers";
-import { logActivity } from "@/lib/activity";
+import { logActivity, toState, currentPhotoIds } from "@/lib/activity";
 
 export const runtime = "nodejs";
 
@@ -43,6 +43,8 @@ export async function DELETE(
       );
     }
 
+    const beforeIds = await currentPhotoIds(photo.receiptId);
+
     await prisma.substratePhoto.update({
       where: { id: photo.id },
       data: {
@@ -51,11 +53,16 @@ export async function DELETE(
       },
     });
 
+    const afterIds = await currentPhotoIds(photo.receiptId);
     await logActivity(
       _auth.session,
       "update",
       photo.receiptId,
       `사진 제외: ${photo.originalName}`,
+      {
+        state: toState(photo.receipt, afterIds),
+        before: toState(photo.receipt, beforeIds),
+      },
     );
     return NextResponse.json({ ok: true });
   } catch {
