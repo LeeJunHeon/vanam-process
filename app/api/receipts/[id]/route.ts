@@ -34,19 +34,41 @@ export async function PATCH(
       );
     }
 
+    const body = await request.json();
+
+    // 요청값을 확정한다. 필드가 없으면 기존 값 유지.
+    // 담당자(manager)는 등록자 고정값이므로 수정 대상이 아니다.
+    const nextReceivedAt = body.receivedAt ? new Date(body.receivedAt) : row.receivedAt;
+    if (isNaN(nextReceivedAt.getTime())) {
+      return NextResponse.json({ error: "날짜 형식이 올바르지 않습니다." }, { status: 400 });
+    }
+    const nextSource =
+      typeof body.source === "string" ? body.source.trim() || null : row.source;
+    const nextClientName =
+      typeof body.clientName === "string" ? body.clientName.trim() || null : row.clientName;
+    const nextMemo =
+      typeof body.memo === "string" ? body.memo.trim() || null : row.memo;
+
+    // 변경된 것이 하나도 없으면 수정도 이력도 남기지 않는다.
+    const changed =
+      nextReceivedAt.getTime() !== row.receivedAt.getTime() ||
+      nextSource !== row.source ||
+      nextClientName !== row.clientName ||
+      nextMemo !== row.memo;
+    if (!changed) {
+      return NextResponse.json(row);
+    }
+
     const photoIds = await currentPhotoIds(row.id);
     const before = toState(row, photoIds);
 
-    const body = await request.json();
-    // 담당자(manager)는 등록자 고정값이므로 수정 대상이 아니다.
     const updated = await prisma.substrateReceipt.update({
       where: { id: row.id },
       data: {
-        receivedAt: body.receivedAt ? new Date(body.receivedAt) : undefined,
-        source: typeof body.source === "string" ? body.source.trim() || null : undefined,
-        clientName:
-          typeof body.clientName === "string" ? body.clientName.trim() || null : undefined,
-        memo: typeof body.memo === "string" ? body.memo.trim() || null : undefined,
+        receivedAt: nextReceivedAt,
+        source: nextSource,
+        clientName: nextClientName,
+        memo: nextMemo,
       },
     });
 
