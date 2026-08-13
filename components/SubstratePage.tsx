@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Trash2, ImageOff, Pencil } from "lucide-react";
 import SubstrateFormModal from "@/components/SubstrateFormModal";
 import type { EditTarget } from "@/components/SubstrateFormModal";
+import { errorMessage } from "@/lib/fetchError";
 import { assetPath } from "@/lib/assetPath";
 
 type Photo = { id: number; originalName: string; mimeType: string | null };
@@ -44,7 +45,7 @@ export default function SubstratePage() {
       }
       setItems(await res.json());
     } catch (e) {
-      setError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
+      setError(errorMessage(e, "목록을 불러오지 못했습니다."));
     } finally {
       setLoading(false);
     }
@@ -55,14 +56,17 @@ export default function SubstratePage() {
   }, [load]);
 
   const remove = async (id: number) => {
-    if (!confirm("이 기록을 삭제할까요? 첨부된 사진도 함께 삭제됩니다.")) return;
-    const res = await fetch(`/api/receipts/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const d = await res.json().catch(() => null);
-      alert(d?.error ?? "삭제에 실패했습니다.");
-      return;
+    if (!confirm("이 기록을 삭제할까요?")) return;
+    try {
+      const res = await fetch(`/api/receipts/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.error ?? "삭제에 실패했습니다.");
+      }
+      load();
+    } catch (e) {
+      alert(errorMessage(e, "삭제에 실패했습니다."));
     }
-    load();
   };
 
   return (
@@ -149,6 +153,7 @@ export default function SubstratePage() {
                       setEditing({
                         id: r.id,
                         receivedAt: r.receivedAt,
+                        manager: r.manager,
                         source: r.source,
                         clientName: r.clientName,
                         memo: r.memo,

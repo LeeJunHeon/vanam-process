@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Plus, Pencil, Trash2, ChevronRight } from "lucide-react";
 import ActivityDetailModal from "@/components/ActivityDetailModal";
 import type { ActivityDetail } from "@/components/ActivityDetailModal";
+import { errorMessage } from "@/lib/fetchError";
 
 type Log = ActivityDetail & { summary: string | null };
 
@@ -38,7 +39,7 @@ export default function ActivityPage() {
         }
         setItems(await res.json());
       } catch (e) {
-        setError(e instanceof Error ? e.message : "이력을 불러오지 못했습니다.");
+        setError(errorMessage(e, "이력을 불러오지 못했습니다."));
       } finally {
         setLoading(false);
       }

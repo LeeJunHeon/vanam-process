@@ -4,12 +4,14 @@ import { useEffect, useState } from "react";
 import { X, Trash2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import PhotoUploader from "@/components/ui/PhotoUploader";
+import { errorMessage } from "@/lib/fetchError";
 import { assetPath } from "@/lib/assetPath";
 
 type Photo = { id: number; originalName: string };
 export type EditTarget = {
   id: number;
   receivedAt: string;
+  manager: string;
   source: string | null;
   clientName: string | null;
   memo: string | null;
@@ -56,15 +58,17 @@ export default function SubstrateFormModal({ target, onClose, onSaved }: Props) 
 
   // 기존 사진 떼어내기 (파일은 보존되고 목록에서만 제외된다)
   const detachPhoto = async (photoId: number) => {
-    if (!confirm("이 사진을 기록에서 제외할까요?\n파일 자체는 증거 보존을 위해 남습니다."))
-      return;
-    const res = await fetch(`/api/photos/${photoId}`, { method: "DELETE" });
-    if (!res.ok) {
-      const d = await res.json().catch(() => null);
-      alert(d?.error ?? "사진 제외에 실패했습니다.");
-      return;
+    if (!confirm("이 사진을 기록에서 제외할까요?")) return;
+    try {
+      const res = await fetch(`/api/photos/${photoId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d?.error ?? "사진 제외에 실패했습니다.");
+      }
+      setExisting((prev) => prev.filter((p) => p.id !== photoId));
+    } catch (e) {
+      alert(errorMessage(e, "사진 제외에 실패했습니다."));
     }
-    setExisting((prev) => prev.filter((p) => p.id !== photoId));
   };
 
   const submit = async () => {
@@ -121,7 +125,7 @@ export default function SubstrateFormModal({ target, onClose, onSaved }: Props) 
       onSaved();
       onClose();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "저장에 실패했습니다.");
+      setErr(errorMessage(e, "저장에 실패했습니다."));
     } finally {
       setBusy(false);
     }
@@ -161,7 +165,7 @@ export default function SubstrateFormModal({ target, onClose, onSaved }: Props) 
           <div>
             <label className={labelClass}>담당자</label>
             <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2 text-sm text-gray-600">
-              {isEdit ? "등록자 고정" : managerLabel}
+              {isEdit ? target!.manager : managerLabel}
             </div>
             {!isEdit && (
               <p className="mt-1 text-[10px] text-gray-400">
