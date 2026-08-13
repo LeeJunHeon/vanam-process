@@ -4,20 +4,22 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
+import DashboardPage from "@/components/DashboardPage";
 import OrdersPage from "@/components/OrdersPage";
 import SubstratePage from "@/components/SubstratePage";
 import ActivityPage from "@/components/ActivityPage";
 
-type Page = "orders" | "substrate" | "activity";
+type Page = "dashboard" | "orders" | "substrate" | "activity";
 
 const pageTitle: Record<Page, string> = {
+  dashboard: "대시보드",
   orders: "발주 관리",
   substrate: "기판 반입 기록",
   activity: "활동 이력",
 };
 
 export default function AppShell() {
-  const [page, setPage] = useState<Page>("orders");
+  const [page, setPage] = useState<Page>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // 로드 시 열린 상태(애니메이션 없음), 모바일이면 닫기
@@ -31,7 +33,7 @@ export default function AppShell() {
 
   // 비관리자가 활동 이력에 머무르지 않도록 기본 화면으로 되돌린다
   useEffect(() => {
-    if (page === "activity" && session && !isAdmin) setPage("orders");
+    if (page === "activity" && session && !isAdmin) setPage("dashboard");
   }, [page, session, isAdmin]);
 
   return (
@@ -48,6 +50,7 @@ export default function AppShell() {
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
         />
         <main className="flex-1 overflow-y-auto bg-gray-50">
+          {page === "dashboard" && <DashboardPage />}
           {page === "orders" && <OrdersPage />}
           {page === "substrate" && <SubstratePage />}
           {page === "activity" && <ActivityPage />}

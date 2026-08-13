@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Workflow, ClipboardList, Layers, History, X, LogOut, ArrowLeft } from "lucide-react";
+import { Workflow, LayoutDashboard, ClipboardList, Layers, History, X, LogOut, ArrowLeft } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 
-type Page = "orders" | "substrate" | "activity";
+type Page = "dashboard" | "orders" | "substrate" | "activity";
 
 interface SidebarProps {
   currentPage: Page;
@@ -14,6 +14,7 @@ interface SidebarProps {
 }
 
 const ALL_NAV: { key: Page; label: string; icon: typeof Layers; adminOnly?: boolean }[] = [
+  { key: "dashboard", label: "대시보드", icon: LayoutDashboard },
   { key: "orders", label: "발주 관리", icon: ClipboardList },
   { key: "substrate", label: "기판 반입 기록", icon: Layers },
   { key: "activity", label: "활동 이력", icon: History, adminOnly: true },

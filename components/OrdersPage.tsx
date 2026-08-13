@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import {
   Plus, Search, Pencil, Trash2, ChevronDown, ChevronRight, CalendarDays, X,
@@ -8,6 +8,7 @@ import {
 import OrderFormModal from "@/components/OrderFormModal";
 import type { OrderEditTarget, CodeOption, EmployeeOption } from "@/components/OrderFormModal";
 import { errorMessage } from "@/lib/fetchError";
+import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE } from "@/lib/status";
 
 type ProcessItem = {
   id: number;
@@ -29,17 +30,6 @@ type Order = OrderEditTarget & {
   processes: ProcessItem[];
 };
 
-const PROCESS_STATUSES = ["대기", "예약", "진행", "보류", "완료", "취소"];
-
-const STATUS_STYLE: Record<string, string> = {
-  대기: "bg-gray-100 text-gray-600",
-  예약: "bg-blue-50 text-blue-600",
-  진행: "bg-amber-50 text-amber-600",
-  보류: "bg-orange-50 text-orange-600",
-  완료: "bg-emerald-50 text-emerald-600",
-  취소: "bg-rose-50 text-rose-500",
-};
-
 function fmt(d: string | null): string {
   return d ? d.slice(0, 10) : "-";
 }
@@ -53,6 +43,9 @@ export default function OrdersPage() {
   const [codes, setCodes] = useState<CodeOption[]>([]);
   const [employees, setEmployees] = useState<EmployeeOption[]>([]);
   const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("");
+  const [sortKey, setSortKey] = useState<"receivedDesc" | "receivedAsc" | "dueAsc">("receivedDesc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<Set<number>>(new Set());
@@ -93,6 +86,30 @@ export default function OrdersPage() {
       }
     })();
   }, []);
+
+  // 검색은 서버, 필터·정렬은 클라이언트(최대 200건이라 즉각 반응)
+  const view = useMemo(() => {
+    let list = items;
+    if (statusFilter)
+      list = list.filter((o) => o.processes.some((p) => p.status === statusFilter));
+    if (ownerFilter)
+      list = list.filter((o) =>
+        o.processes.some((p) => p.owner?.id === Number(ownerFilter)),
+      );
+    if (sortKey === "receivedDesc") return list; // 서버 기본 정렬 유지
+    const sorted = [...list];
+    if (sortKey === "receivedAsc") {
+      sorted.sort((a, b) => a.receivedAt.localeCompare(b.receivedAt));
+    } else {
+      // 납기 임박순 — 납기 없는 발주는 뒤로
+      sorted.sort((a, b) => {
+        if (!a.dueAt) return 1;
+        if (!b.dueAt) return -1;
+        return a.dueAt.localeCompare(b.dueAt);
+      });
+    }
+    return sorted;
+  }, [items, statusFilter, ownerFilter, sortKey]);
 
   const toggle = (id: number) =>
     setOpen((prev) => {
@@ -149,8 +166,8 @@ export default function OrdersPage() {
 
   return (
     <div className="p-4 sm:p-6">
-      <div className="mb-4 flex items-center gap-2">
-        <div className="relative flex-1">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[220px] flex-1">
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={q}
@@ -159,6 +176,31 @@ export default function OrdersPage() {
             className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-400"
           />
         </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-sm outline-none focus:border-blue-400"
+        >
+          <option value="">상태 전체</option>
+          {PROCESS_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select
+          value={ownerFilter}
+          onChange={(e) => setOwnerFilter(e.target.value)}
+          className="rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-sm outline-none focus:border-blue-400"
+        >
+          <option value="">담당자 전체</option>
+          {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+        </select>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as typeof sortKey)}
+          className="rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-sm outline-none focus:border-blue-400"
+        >
+          <option value="receivedDesc">접수 최신순</option>
+          <option value="receivedAsc">접수 오래된순</option>
+          <option value="dueAsc">납기 임박순</option>
+        </select>
         {isAdmin && (
           <button
             onClick={() => setShowForm(true)}
@@ -180,13 +222,17 @@ export default function OrdersPage() {
 
       {loading ? (
         <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">불러오는 중...</div>
-      ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">등록된 발주가 없습니다.</div>
+      ) : view.length === 0 ? (
+        <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">
+          {items.length === 0 ? "등록된 발주가 없습니다." : "조건에 맞는 발주가 없습니다."}
+        </div>
       ) : (
         <div className="space-y-3">
-          {items.map((o) => {
-            const done = o.processes.filter((p) => p.status === "완료").length;
+          {view.map((o) => {
             const expanded = open.has(o.id);
+            const chips = PROCESS_STATUSES
+              .map((s) => [s, o.processes.filter((p) => p.status === s).length] as const)
+              .filter(([, n]) => n > 0);
             return (
               <div key={o.id} className="rounded-2xl border border-gray-100 bg-white">
                 <div className="flex items-start justify-between gap-3 p-4">
@@ -199,9 +245,19 @@ export default function OrdersPage() {
                         <span className="text-sm font-bold text-gray-900">{o.orderNo}</span>
                         {o.company && <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">{o.company}</span>}
                         {o.jobName && <span className="text-sm text-gray-600">{o.jobName}</span>}
-                        <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
-                          공정 {done}/{o.processes.length}
-                        </span>
+                        {chips.map(([s, n]) => (
+                          <span
+                            key={s}
+                            className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_STYLE[s]}`}
+                          >
+                            {s} {n}
+                          </span>
+                        ))}
+                        {chips.length === 0 && (
+                          <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">
+                            공정 없음
+                          </span>
+                        )}
                       </div>
                       <p className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">
                         <CalendarDays size={11} /> 접수 {fmt(o.receivedAt)} · 납기 {fmt(o.dueAt)} · {o.paymentStatus} · {o.precheckStatus}
@@ -241,7 +297,7 @@ export default function OrdersPage() {
                         </thead>
                         <tbody>
                           {o.processes.map((p) => (
-                            <tr key={p.id} className="border-t border-gray-50">
+                            <tr key={p.id} className={`border-t border-gray-50 ${ROW_STYLE[p.status] ?? ""}`}>
                               <td className="py-2 pr-3 text-[11px] font-bold text-gray-400">{p.sequence}</td>
                               <td className="py-2 pr-3 font-semibold text-gray-800">{p.processCode.code}</td>
                               <td className="py-2 pr-3 text-gray-600">{p.detail ?? "-"}</td>

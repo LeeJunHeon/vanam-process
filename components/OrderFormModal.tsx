@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { X, Plus, Trash2 } from "lucide-react";
 import { errorMessage } from "@/lib/fetchError";
+import { PAYMENT_STATUSES, PRECHECK_STATUSES } from "@/lib/status";
 
 export type CodeOption = { id: number; code: string };
 export type EmployeeOption = { id: number; name: string };
@@ -29,9 +30,6 @@ type ProcessRow = {
   ownerEmployeeId: string;
   memo: string;
 };
-
-const PAYMENT_STATUSES = ["미결제", "세금계산서 발급", "입금확인", "선금확인", "부분입금확인"];
-const PRECHECK_STATUSES = ["해당없음", "미완료", "완료", "이상보고"];
 
 const emptyRow = (): ProcessRow => ({
   processCodeId: "",
