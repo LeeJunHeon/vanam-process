@@ -1,17 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronRight } from "lucide-react";
+import ActivityDetailModal from "@/components/ActivityDetailModal";
+import type { ActivityDetail } from "@/components/ActivityDetailModal";
 
-type Log = {
-  id: number;
-  action: string;
-  targetId: number;
-  actorEmail: string;
-  actorName: string | null;
-  summary: string | null;
-  createdAt: string;
-};
+type Log = ActivityDetail & { summary: string | null };
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -31,14 +25,20 @@ const ACTION_META: Record<
 export default function ActivityPage() {
   const [items, setItems] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Log | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch("/api/activity");
-        if (res.ok) setItems(await res.json());
-      } catch {
-        // ignore
+        if (!res.ok) {
+          const d = await res.json().catch(() => null);
+          throw new Error(d?.error ?? `조회 실패 (${res.status})`);
+        }
+        setItems(await res.json());
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "이력을 불러오지 못했습니다.");
       } finally {
         setLoading(false);
       }
@@ -50,6 +50,16 @@ export default function ActivityPage() {
       <div className="p-4 sm:p-6">
         <div className="rounded-2xl border border-gray-100 bg-white p-8 text-center text-sm text-gray-400">
           불러오는 중...
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-4 sm:p-6">
+        <div className="rounded-2xl border border-rose-100 bg-rose-50 p-8 text-center text-sm text-rose-600">
+          {error}
         </div>
       </div>
     );
@@ -72,9 +82,10 @@ export default function ActivityPage() {
             };
             const Icon = meta.icon;
             return (
-              <div
+              <button
                 key={log.id}
-                className={`flex items-center gap-3 px-4 py-3 ${
+                onClick={() => setSelected(log)}
+                className={`flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-50 ${
                   i > 0 ? "border-t border-gray-50" : ""
                 }`}
               >
@@ -97,10 +108,15 @@ export default function ActivityPage() {
                 <span className="shrink-0 text-[11px] text-gray-400">
                   {formatDateTime(log.createdAt)}
                 </span>
-              </div>
+                <ChevronRight size={14} className="shrink-0 text-gray-300" />
+              </button>
             );
           })}
         </div>
+      )}
+
+      {selected && (
+        <ActivityDetailModal log={selected} onClose={() => setSelected(null)} />
       )}
     </div>
   );

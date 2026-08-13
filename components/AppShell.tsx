@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSession } from "next-auth/react";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import SubstratePage from "@/components/SubstratePage";
@@ -21,6 +22,15 @@ export default function AppShell() {
   useEffect(() => {
     if (window.innerWidth < 1024) setSidebarOpen(false);
   }, []);
+
+  const { data: session } = useSession();
+  const role = (session?.user as { role?: string })?.role;
+  const isAdmin = role === "admin" || role === "ceo";
+
+  // 비관리자가 활동 이력에 머무르지 않도록 기본 화면으로 되돌린다
+  useEffect(() => {
+    if (page === "activity" && session && !isAdmin) setPage("substrate");
+  }, [page, session, isAdmin]);
 
   return (
     <div className="flex h-screen">

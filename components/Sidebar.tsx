@@ -13,9 +13,9 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-const navItems: { key: Page; label: string; icon: typeof Layers }[] = [
+const ALL_NAV: { key: Page; label: string; icon: typeof Layers; adminOnly?: boolean }[] = [
   { key: "substrate", label: "기판 반입 기록", icon: Layers },
-  { key: "activity", label: "활동 이력", icon: History },
+  { key: "activity", label: "활동 이력", icon: History, adminOnly: true },
 ];
 
 export default function Sidebar({
@@ -31,6 +31,8 @@ export default function Sidebar({
   const role = (session?.user as { role?: string })?.role;
   const roleLabel =
     role === "ceo" ? "대표" : role === "admin" ? "관리자" : "직원";
+  const isAdmin = role === "admin" || role === "ceo";
+  const navItems = ALL_NAV.filter((item) => !item.adminOnly || isAdmin);
   const initial = (() => {
     if (!userName || userName === "사용자") return "?";
     const parts = userName.trim().split(" ").filter((p) => p.length > 0);
