@@ -6,7 +6,13 @@ import ActivityDetailModal from "@/components/ActivityDetailModal";
 import type { ActivityDetail } from "@/components/ActivityDetailModal";
 import { errorMessage } from "@/lib/fetchError";
 
-type Log = ActivityDetail & { summary: string | null };
+type Log = ActivityDetail & { summary: string | null; targetType: string };
+
+const TARGET_LABEL: Record<string, string> = {
+  substrate_receipt: "기판",
+  work_order: "발주",
+  work_order_process: "공정",
+};
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -97,6 +103,9 @@ export default function ActivityPage() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm text-gray-700">
+                    <span className="mr-1.5 rounded bg-gray-100 px-1 py-0.5 text-[10px] font-medium text-gray-500">
+                      {TARGET_LABEL[log.targetType] ?? log.targetType}
+                    </span>
                     <span className={`font-semibold ${meta.color}`}>
                       {meta.label}
                     </span>
