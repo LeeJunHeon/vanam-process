@@ -29,8 +29,12 @@ model Employee {
   id         Int       @id @default(autoincrement())
   userId     Int?      @unique @map("user_id")
   name       String    @db.VarChar(100)
+  email      String?   @db.VarChar(255)
+  isActive   Boolean   @default(true) @map("is_active")
   position   Position? @relation(fields: [positionId], references: [id])
   positionId Int?      @map("position_id")
+
+  workProcesses WorkOrderProcess[]
 
   @@map("employees")
   @@schema("hr")
@@ -111,5 +115,88 @@ model ActivityLog {
   @@index([createdAt])
   @@index([targetType, targetId])
   @@map("activity_log")
+  @@schema("process")
+}
+
+// ───────────────────────────────────────────────
+// 발주공정 관리 (구글시트 이관)
+// ───────────────────────────────────────────────
+
+// 공정 코드 마스터 — 시트 '코드' A열 + '캘린더 ID' 시트 통합
+model ProcessCode {
+  id              Int      @id @default(autoincrement())
+  code            String   @unique @db.VarChar(50)
+  calendarId      String?  @map("calendar_id") @db.VarChar(255)
+  calendarEnabled Boolean  @default(false) @map("calendar_enabled")
+  sortOrder       Int      @default(0) @map("sort_order")
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  processes WorkOrderProcess[]
+
+  @@map("process_code")
+  @@schema("process")
+}
+
+// 발주마스터 — 발주번호당 1행
+model WorkOrder {
+  id               Int       @id @default(autoincrement())
+  orderNo          String    @unique @map("order_no") @db.VarChar(20)
+  receivedAt       DateTime  @map("received_at") @db.Date
+  company          String?   @db.VarChar(100)
+  customerName     String?   @map("customer_name") @db.VarChar(100)
+  jobName          String?   @map("job_name") @db.VarChar(200)
+  sampleReceivedAt DateTime? @map("sample_received_at") @db.Date
+  dueAt            DateTime? @map("due_at") @db.Date
+  paymentStatus    String    @default("미결제") @map("payment_status") @db.VarChar(30)
+  precheckStatus   String    @default("미완료") @map("precheck_status") @db.VarChar(30)
+  memo             String?
+  createdByEmail   String    @map("created_by_email") @db.VarChar(255)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedByEmail   String?   @map("deleted_by_email") @db.VarChar(255)
+
+  processes WorkOrderProcess[]
+
+  @@index([receivedAt])
+  @@index([deletedAt])
+  @@map("work_order")
+  @@schema("process")
+}
+
+// 공정내역 — 발주 내 시퀀스 단위. calendar_* 컬럼은 Phase 2 연동용 예약.
+model WorkOrderProcess {
+  id              Int       @id @default(autoincrement())
+  orderId         Int       @map("order_id")
+  sequence        Int
+  processCodeId   Int       @map("process_code_id")
+  detail          String?   @db.VarChar(200)
+  qty             Int?
+  plannedStart    DateTime? @map("planned_start") @db.Date
+  durationHours   Float?    @map("duration_hours")
+  status          String    @default("대기") @db.VarChar(20)
+  location        String?   @db.VarChar(100)
+  ownerEmployeeId Int?      @map("owner_employee_id")
+  memo            String?
+  calendarId      String?   @map("calendar_id") @db.VarChar(255)
+  calendarEventId String?   @map("calendar_event_id") @db.VarChar(255)
+  syncStatus      String?   @map("sync_status") @db.VarChar(30)
+  syncedAt        DateTime? @map("synced_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedByEmail  String?   @map("deleted_by_email") @db.VarChar(255)
+
+  order       WorkOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  processCode ProcessCode @relation(fields: [processCodeId], references: [id])
+  owner       Employee?   @relation(fields: [ownerEmployeeId], references: [id])
+
+  @@unique([orderId, sequence])
+  @@index([orderId])
+  @@index([plannedStart])
+  @@index([deletedAt])
+  @@map("work_order_process")
   @@schema("process")
 }
