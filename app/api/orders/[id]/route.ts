@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, isAdminSession } from "@/lib/auth-helpers";
 import { logActivity, buildOrderState } from "@/lib/activity";
 import { PAYMENT_STATUSES, PRECHECK_STATUSES, parseDateOnly } from "@/lib/orderUtils";
+import { syncProcessCalendar } from "@/lib/calendarSync";
 
 export const runtime = "nodejs";
 
@@ -130,6 +131,12 @@ export async function DELETE(
       { state: buildOrderState(row, row.processes) },
       "work_order",
     );
+
+    // 공정이 방금 소프트 삭제되었으므로 sync 가 '취소' 분기를 타며 일정을 제거한다
+    for (const p of row.processes) {
+      await syncProcessCalendar(p.id);
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("order delete failed:", e);

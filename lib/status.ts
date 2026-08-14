@@ -22,3 +22,12 @@ export const ROW_STYLE: Record<string, string> = {
   완료: "bg-emerald-50/40",
   취소: "bg-rose-50/30 opacity-60",
 };
+
+// 캘린더 연동 상태 배지 (시트 '연동상태' 열의 값 체계 유지)
+export const SYNC_STYLE: Record<string, string> = {
+  동기화완료: "bg-emerald-50 text-emerald-600",
+  미연동: "bg-gray-100 text-gray-500",
+  "필수정보 부족": "bg-amber-50 text-amber-600",
+  동기화오류: "bg-rose-50 text-rose-500",
+  취소: "bg-gray-100 text-gray-400",
+};

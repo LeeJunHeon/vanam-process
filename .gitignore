@@ -43,3 +43,6 @@ next-env.d.ts
 
 # prisma generated client (커밋 금지)
 /app/generated
+
+# 서비스 계정 키 (커밋 금지)
+/secrets

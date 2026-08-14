@@ -9,6 +9,7 @@ import {
   parseDateOnly,
   generateOrderNo,
 } from "@/lib/orderUtils";
+import { syncProcessCalendar } from "@/lib/calendarSync";
 
 export const runtime = "nodejs";
 
@@ -185,6 +186,11 @@ export async function POST(request: Request) {
       { state: buildOrderState(full!, full!.processes) },
       "work_order",
     );
+
+    // 캘린더 동기화 — 공정별로 순차 실행 (실패는 sync_status 에만 기록)
+    for (const p of full!.processes) {
+      await syncProcessCalendar(p.id);
+    }
 
     return NextResponse.json(full, { status: 201 });
   } catch (e) {

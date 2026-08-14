@@ -17,8 +17,11 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       AUTH_TRUST_HOST: "true"
       UPLOAD_DIR: ${UPLOAD_DIR:-/app/uploads}
+      GOOGLE_CALENDAR_SUBJECT: ${GOOGLE_CALENDAR_SUBJECT}
+      GOOGLE_CALENDAR_KEY_FILE: ${GOOGLE_CALENDAR_KEY_FILE:-/app/secrets/service-account-key.json}
     volumes:
       - /volume1/docker/process-web/uploads:/app/uploads
+      - /volume1/docker/process-web/secrets:/app/secrets:ro
     networks:
       - vanam-db-net
 

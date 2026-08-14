@@ -8,7 +8,7 @@ import {
 import OrderFormModal from "@/components/OrderFormModal";
 import type { OrderEditTarget, CodeOption, EmployeeOption } from "@/components/OrderFormModal";
 import { errorMessage } from "@/lib/fetchError";
-import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE } from "@/lib/status";
+import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE, SYNC_STYLE } from "@/lib/status";
 
 type ProcessItem = {
   id: number;
@@ -22,6 +22,7 @@ type ProcessItem = {
   location: string | null;
   owner: { id: number; name: string } | null;
   memo: string | null;
+  syncStatus: string | null;
 };
 
 type Order = OrderEditTarget & {
@@ -292,6 +293,7 @@ export default function OrdersPage() {
                             <th className="py-1.5 pr-3">상태</th>
                             <th className="py-1.5 pr-3">담당자</th>
                             <th className="py-1.5 pr-3">현위치</th>
+                            <th className="py-1.5 pr-3">연동</th>
                             <th className="py-1.5"></th>
                           </tr>
                         </thead>
@@ -315,6 +317,17 @@ export default function OrdersPage() {
                               </td>
                               <td className="py-2 pr-3 text-gray-600">{p.owner?.name ?? "-"}</td>
                               <td className="py-2 pr-3 text-gray-600">{p.location ?? "-"}</td>
+                              <td className="py-2 pr-3">
+                                {p.syncStatus ? (
+                                  <span
+                                    className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${SYNC_STYLE[p.syncStatus] ?? "bg-gray-100 text-gray-500"}`}
+                                  >
+                                    {p.syncStatus}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] text-gray-300">-</span>
+                                )}
+                              </td>
                               <td className="py-2 text-right">
                                 <div className="flex items-center justify-end gap-1">
                                   <button onClick={() => setEditingProc(p)} className="rounded-lg p-1 text-gray-400 hover:bg-blue-50 hover:text-blue-500" title="공정 수정">

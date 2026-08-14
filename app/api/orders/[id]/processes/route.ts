@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, isAdminSession } from "@/lib/auth-helpers";
 import { logActivity, buildOrderState } from "@/lib/activity";
 import { PROCESS_STATUSES, parseDateOnly } from "@/lib/orderUtils";
+import { syncProcessCalendar } from "@/lib/calendarSync";
 
 export const runtime = "nodejs";
 
@@ -105,6 +106,13 @@ export async function POST(
       { state: buildOrderState(order, afterProcs), before: buildOrderState(order, beforeProcs) },
       "work_order",
     );
+
+    // 새로 추가된 공정만 캘린더 동기화
+    const firstNewSeq = procData[0].sequence as number;
+    for (const p of afterProcs.filter((x) => x.sequence >= firstNewSeq)) {
+      await syncProcessCalendar(p.id);
+    }
+
     return NextResponse.json({ ok: true, added: procData.length }, { status: 201 });
   } catch (e) {
     console.error("process add failed:", e);

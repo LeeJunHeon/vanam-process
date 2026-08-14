@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession, isAdminSession } from "@/lib/auth-helpers";
 import { logActivity, buildProcessState } from "@/lib/activity";
 import { PROCESS_STATUSES, parseDateOnly } from "@/lib/orderUtils";
+import { syncProcessCalendar } from "@/lib/calendarSync";
 
 export const runtime = "nodejs";
 
@@ -98,6 +99,9 @@ export async function PATCH(
       { state: buildProcessState(updated), before },
       "work_order_process",
     );
+
+    await syncProcessCalendar(updated.id);
+
     return NextResponse.json(updated);
   } catch (e) {
     console.error("process update failed:", e);
@@ -135,6 +139,9 @@ export async function DELETE(
       { state: buildProcessState(row) },
       "work_order_process",
     );
+
+    await syncProcessCalendar(row.id);
+
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("process delete failed:", e);

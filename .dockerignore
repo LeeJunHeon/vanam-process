@@ -4,6 +4,7 @@ node_modules
 .env
 .env.*
 uploads
+secrets
 npm-debug.log
 README.md
 AGENTS.md
