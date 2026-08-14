@@ -18,7 +18,7 @@ export async function syncProcessCalendar(processId: number): Promise<void> {
         processCode: {
           select: { code: true, calendarId: true, calendarEnabled: true },
         },
-        owner: { select: { name: true } },
+        owner: { select: { name: true, email: true } },
       },
     });
     if (!p) return;
@@ -78,6 +78,9 @@ export async function syncProcessCalendar(processId: number): Promise<void> {
         `메모: ${p.memo ?? ""}`,
       ].join("\n"),
       date: dateStr(p.plannedStart),
+      // 담당자를 참석자로 등록 — 연구원 개인 캘린더에도 일정이 뜬다.
+      // 담당자 미지정 또는 이메일 없음 → 빈 배열 (기존 참석자 제거)
+      attendees: p.owner?.email ? [p.owner.email] : [],
     };
 
     // 4) 공정 변경으로 대상 캘린더가 바뀜 → 옛 일정 삭제 후 새 캘린더에 생성 (시트 방식)

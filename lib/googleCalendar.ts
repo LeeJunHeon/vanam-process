@@ -36,7 +36,12 @@ function jwt(): JWT {
   return (globalForCal.gjwt ??= createClient());
 }
 
-type EventBody = { title: string; description: string; date: string };
+type EventBody = {
+  title: string;
+  description: string;
+  date: string;
+  attendees: string[]; // 참석자 이메일 목록 (빈 배열이면 참석자 제거)
+};
 
 // 구글 종일 일정은 end.date 가 "다음날"이어야 한다 (exclusive)
 function nextDay(date: string): string {
@@ -51,6 +56,9 @@ function payload(b: EventBody) {
     description: b.description,
     start: { date: b.date },
     end: { date: nextDay(b.date) },
+    attendees: b.attendees.map((email) => ({ email })),
+    // hr-calendar-syncer 패턴: 시스템 생성 일정 식별 표식
+    extendedProperties: { private: { vanam_source: "process-web" } },
   };
 }
 
@@ -62,7 +70,7 @@ async function request<T>(
 ): Promise<{ status: number; data: T | null }> {
   const res = await jwt().request<T>({
     url: `${API}${path}`,
-    method: method as "GET" | "POST" | "PUT" | "DELETE",
+    method: method as "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     data: body,
     validateStatus: () => true, // 상태코드는 호출부가 판정
   });
@@ -77,7 +85,7 @@ function enc(s: string): string {
 export async function insertAllDayEvent(calendarId: string, b: EventBody): Promise<string> {
   const { status, data } = await request<{ id?: string }>(
     "POST",
-    `/calendars/${enc(calendarId)}/events`,
+    `/calendars/${enc(calendarId)}/events?sendUpdates=none`,
     payload(b),
   );
   if (status >= 300 || !data?.id) {
@@ -92,9 +100,11 @@ export async function updateAllDayEvent(
   eventId: string,
   b: EventBody,
 ): Promise<boolean> {
+  // PATCH = 부분 수정. PUT(전체 교체)은 사용자가 일정에 수동 설정한
+  // 색상·알림까지 지워버리므로 쓰지 않는다 (앱스크립트의 setTitle 방식과 동일 효과).
   const { status } = await request(
-    "PUT",
-    `/calendars/${enc(calendarId)}/events/${enc(eventId)}`,
+    "PATCH",
+    `/calendars/${enc(calendarId)}/events/${enc(eventId)}?sendUpdates=none`,
     payload(b),
   );
   if (status === 404 || status === 410) return false;
@@ -106,7 +116,7 @@ export async function updateAllDayEvent(
 export async function deleteEvent(calendarId: string, eventId: string): Promise<void> {
   const { status } = await request(
     "DELETE",
-    `/calendars/${enc(calendarId)}/events/${enc(eventId)}`,
+    `/calendars/${enc(calendarId)}/events/${enc(eventId)}?sendUpdates=none`,
   );
   if (status === 404 || status === 410) return;
   if (status >= 300) throw new Error(`이벤트 삭제 실패 (HTTP ${status})`);
