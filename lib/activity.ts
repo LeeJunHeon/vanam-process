@@ -13,6 +13,8 @@ export type ReceiptState = {
   clientName: string | null;
   memo: string | null;
   photoIds: number[];
+  // 연결된 발주 공정 표기 (예: "20260814-001 #1 Ch-1"). 미연결이면 null
+  processRef: string | null;
 };
 
 type ReceiptLike = {
@@ -21,7 +23,24 @@ type ReceiptLike = {
   source: string | null;
   clientName: string | null;
   memo: string | null;
+  orderProcess?: {
+    sequence: number;
+    processCode: { code: string };
+    order: { orderNo: string };
+  } | null;
 };
+
+// 기판 기록 조회 시 연결 공정을 함께 가져오기 위한 공용 include
+export const RECEIPT_PROCESS_INCLUDE = {
+  orderProcess: {
+    select: {
+      id: true,
+      sequence: true,
+      processCode: { select: { code: true } },
+      order: { select: { orderNo: true } },
+    },
+  },
+} as const;
 
 // 기록 + 사진 id 목록을 스냅샷 형태로 변환
 export function toState(r: ReceiptLike, photoIds: number[]): ReceiptState {
@@ -32,6 +51,9 @@ export function toState(r: ReceiptLike, photoIds: number[]): ReceiptState {
     clientName: r.clientName,
     memo: r.memo,
     photoIds,
+    processRef: r.orderProcess
+      ? `${r.orderProcess.order.orderNo} #${r.orderProcess.sequence} ${r.orderProcess.processCode.code}`
+      : null,
   };
 }
 

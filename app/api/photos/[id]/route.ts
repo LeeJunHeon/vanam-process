@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, canModify } from "@/lib/auth-helpers";
-import { logActivity, toState, currentPhotoIds } from "@/lib/activity";
+import {
+  logActivity,
+  toState,
+  currentPhotoIds,
+  RECEIPT_PROCESS_INCLUDE,
+} from "@/lib/activity";
 
 export const runtime = "nodejs";
 
@@ -17,7 +22,7 @@ export async function DELETE(
     const { id } = await params;
     const photo = await prisma.substratePhoto.findUnique({
       where: { id: Number(id) },
-      include: { receipt: true },
+      include: { receipt: { include: RECEIPT_PROCESS_INCLUDE } },
     });
     if (!photo) {
       return NextResponse.json({ error: "사진을 찾을 수 없습니다." }, { status: 404 });

@@ -71,10 +71,15 @@ model SubstrateReceipt {
   deletedAt      DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedByEmail String?   @map("deleted_by_email") @db.VarChar(255)
 
+  // 발주 공정 연결 (선택). 공정이 DB에서 정리돼도 기판 기록은 남아야 하므로 SetNull.
+  orderProcessId Int?              @map("order_process_id")
+  orderProcess   WorkOrderProcess? @relation(fields: [orderProcessId], references: [id], onDelete: SetNull)
+
   photos SubstratePhoto[]
 
   @@index([receivedAt])
   @@index([deletedAt])
+  @@index([orderProcessId])
   @@map("substrate_receipt")
   @@schema("process")
 }
@@ -208,6 +213,8 @@ model WorkOrderProcess {
   order       WorkOrder   @relation(fields: [orderId], references: [id], onDelete: Cascade)
   processCode ProcessCode @relation(fields: [processCodeId], references: [id])
   owner       Employee?   @relation(fields: [ownerEmployeeId], references: [id])
+
+  substrateReceipts SubstrateReceipt[]
 
   @@unique([orderId, sequence])
   @@index([orderId])

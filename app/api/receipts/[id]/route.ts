@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSession, canModify } from "@/lib/auth-helpers";
-import { logActivity, toState, currentPhotoIds } from "@/lib/activity";
+import {
+  logActivity,
+  toState,
+  currentPhotoIds,
+  RECEIPT_PROCESS_INCLUDE,
+} from "@/lib/activity";
 
 export const runtime = "nodejs";
 
@@ -17,6 +22,7 @@ export async function PATCH(
     const { id } = await params;
     const row = await prisma.substrateReceipt.findUnique({
       where: { id: Number(id) },
+      include: RECEIPT_PROCESS_INCLUDE,
     });
     if (!row) {
       return NextResponse.json({ error: "기록을 찾을 수 없습니다." }, { status: 404 });
@@ -64,6 +70,7 @@ export async function PATCH(
 
     const updated = await prisma.substrateReceipt.update({
       where: { id: row.id },
+      include: RECEIPT_PROCESS_INCLUDE,
       data: {
         receivedAt: nextReceivedAt,
         source: nextSource,
@@ -97,7 +104,7 @@ export async function DELETE(
     const { id } = await params;
     const row = await prisma.substrateReceipt.findUnique({
       where: { id: Number(id) },
-      include: { photos: true },
+      include: { photos: true, ...RECEIPT_PROCESS_INCLUDE },
     });
     if (!row) {
       return NextResponse.json({ error: "기록을 찾을 수 없습니다." }, { status: 404 });

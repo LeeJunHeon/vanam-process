@@ -19,6 +19,7 @@ const PROCESS_INCLUDE = {
   include: {
     processCode: { select: { id: true, code: true } },
     owner: { select: { id: true, name: true } },
+    _count: { select: { substrateReceipts: { where: { deletedAt: null } } } },
   },
   orderBy: { sequence: "asc" as const },
 };
@@ -27,6 +28,9 @@ const PROCESS_INCLUDE = {
 export async function GET(request: Request) {
   const _auth = await requireSession();
   if (!_auth.ok) return _auth.response;
+  if (!isAdminSession(_auth.session)) {
+    return NextResponse.json({ error: "발주 관리는 관리자만 조회할 수 있습니다." }, { status: 403 });
+  }
 
   try {
     const { searchParams } = new URL(request.url);
