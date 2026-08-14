@@ -1,3 +1,4 @@
+import fs from "fs";
 import { JWT } from "google-auth-library";
 
 // hr-calendar-syncer 와 동일: 서비스계정 + 도메인 위임(subject 대행).
@@ -12,7 +13,21 @@ function createClient(): JWT {
   if (!keyFile || !subject) {
     throw new Error("GOOGLE_CALENDAR_KEY_FILE / GOOGLE_CALENDAR_SUBJECT 가 설정되지 않았습니다.");
   }
-  return new JWT({ keyFile, scopes: SCOPES, subject });
+  // v11 JWT 는 keyFile 옵션에서 iss(client_email)를 로드하지 못한다.
+  // 키 파일을 직접 읽어 명시적으로 전달한다 (hr syncer 의 파이썬 방식과 동일 동작).
+  const raw = JSON.parse(fs.readFileSync(keyFile, "utf8")) as {
+    client_email?: string;
+    private_key?: string;
+  };
+  if (!raw.client_email || !raw.private_key) {
+    throw new Error("서비스 계정 키 파일에 client_email / private_key 가 없습니다.");
+  }
+  return new JWT({
+    email: raw.client_email,
+    key: raw.private_key,
+    scopes: SCOPES,
+    subject,
+  });
 }
 
 // 핫리로드 중복 생성 방지 (lib/prisma.ts 와 동일 패턴)
