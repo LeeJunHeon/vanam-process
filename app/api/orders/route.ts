@@ -10,6 +10,7 @@ import {
   generateOrderNo,
 } from "@/lib/orderUtils";
 import { syncProcessCalendar } from "@/lib/calendarSync";
+import { sendProcessAssignMail } from "@/lib/processMail";
 
 export const runtime = "nodejs";
 
@@ -190,6 +191,11 @@ export async function POST(request: Request) {
     // 캘린더 동기화 — 공정별로 순차 실행 (실패는 sync_status 에만 기록)
     for (const p of full!.processes) {
       await syncProcessCalendar(p.id);
+    }
+
+    // 담당자 배정 메일 (담당자·이메일 없는 공정은 내부에서 스킵)
+    for (const p of full!.processes) {
+      await sendProcessAssignMail(p.id);
     }
 
     return NextResponse.json(full, { status: 201 });

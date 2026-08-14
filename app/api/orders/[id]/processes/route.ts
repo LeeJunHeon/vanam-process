@@ -4,6 +4,7 @@ import { requireSession, isAdminSession } from "@/lib/auth-helpers";
 import { logActivity, buildOrderState } from "@/lib/activity";
 import { PROCESS_STATUSES, parseDateOnly } from "@/lib/orderUtils";
 import { syncProcessCalendar } from "@/lib/calendarSync";
+import { sendProcessAssignMail } from "@/lib/processMail";
 
 export const runtime = "nodejs";
 
@@ -107,10 +108,14 @@ export async function POST(
       "work_order",
     );
 
-    // 새로 추가된 공정만 캘린더 동기화
+    // 새로 추가된 공정만 캘린더 동기화 + 배정 메일
     const firstNewSeq = procData[0].sequence as number;
-    for (const p of afterProcs.filter((x) => x.sequence >= firstNewSeq)) {
+    const newProcs = afterProcs.filter((x) => x.sequence >= firstNewSeq);
+    for (const p of newProcs) {
       await syncProcessCalendar(p.id);
+    }
+    for (const p of newProcs) {
+      await sendProcessAssignMail(p.id);
     }
 
     return NextResponse.json({ ok: true, added: procData.length }, { status: 201 });

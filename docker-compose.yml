@@ -19,6 +19,11 @@ services:
       UPLOAD_DIR: ${UPLOAD_DIR:-/app/uploads}
       GOOGLE_CALENDAR_SUBJECT: ${GOOGLE_CALENDAR_SUBJECT}
       GOOGLE_CALENDAR_KEY_FILE: ${GOOGLE_CALENDAR_KEY_FILE:-/app/secrets/service-account-key.json}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
     volumes:
       - /volume1/docker/process-web/uploads:/app/uploads
       - /volume1/docker/process-web/secrets:/app/secrets:ro

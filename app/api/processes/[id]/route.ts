@@ -4,6 +4,7 @@ import { requireSession, isAdminSession } from "@/lib/auth-helpers";
 import { logActivity, buildProcessState } from "@/lib/activity";
 import { PROCESS_STATUSES, parseDateOnly } from "@/lib/orderUtils";
 import { syncProcessCalendar } from "@/lib/calendarSync";
+import { sendProcessAssignMail } from "@/lib/processMail";
 
 export const runtime = "nodejs";
 
@@ -101,6 +102,11 @@ export async function PATCH(
     );
 
     await syncProcessCalendar(updated.id);
+
+    // 담당자가 새로 지정되거나 다른 사람으로 변경된 경우에만 배정 메일
+    if (nextOwner !== row.ownerEmployeeId && nextOwner !== null) {
+      await sendProcessAssignMail(updated.id);
+    }
 
     return NextResponse.json(updated);
   } catch (e) {
