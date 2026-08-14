@@ -1,24 +1,27 @@
-import { google, type calendar_v3 } from "googleapis";
+import { JWT } from "google-auth-library";
 
 // hr-calendar-syncer 와 동일: 서비스계정 + 도메인 위임(subject 대행).
-// admin 콘솔에 등록된 scope 와 일치해야 한다.
+// googleapis 전체 패키지는 NAS 빌드를 다운시킬 만큼 무거워서
+// 인증 라이브러리 + Calendar v3 REST 직접 호출로 대체했다.
 const SCOPES = ["https://www.googleapis.com/auth/calendar"];
+const API = "https://www.googleapis.com/calendar/v3";
 
-function createClient(): calendar_v3.Calendar {
+function createClient(): JWT {
   const keyFile = process.env.GOOGLE_CALENDAR_KEY_FILE;
   const subject = process.env.GOOGLE_CALENDAR_SUBJECT;
   if (!keyFile || !subject) {
     throw new Error("GOOGLE_CALENDAR_KEY_FILE / GOOGLE_CALENDAR_SUBJECT 가 설정되지 않았습니다.");
   }
-  const auth = new google.auth.JWT({ keyFile, scopes: SCOPES, subject });
-  return google.calendar({ version: "v3", auth });
+  return new JWT({ keyFile, scopes: SCOPES, subject });
 }
 
 // 핫리로드 중복 생성 방지 (lib/prisma.ts 와 동일 패턴)
-const globalForCal = globalThis as unknown as { gcal?: calendar_v3.Calendar };
-function cal(): calendar_v3.Calendar {
-  return (globalForCal.gcal ??= createClient());
+const globalForCal = globalThis as unknown as { gjwt?: JWT };
+function jwt(): JWT {
+  return (globalForCal.gjwt ??= createClient());
 }
+
+type EventBody = { title: string; description: string; date: string };
 
 // 구글 종일 일정은 end.date 가 "다음날"이어야 한다 (exclusive)
 function nextDay(date: string): string {
@@ -27,16 +30,7 @@ function nextDay(date: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-function isGone(e: unknown): boolean {
-  const code =
-    (e as { code?: number }).code ??
-    (e as { response?: { status?: number } }).response?.status;
-  return code === 404 || code === 410;
-}
-
-type EventBody = { title: string; description: string; date: string };
-
-function body(b: EventBody): calendar_v3.Schema$Event {
+function payload(b: EventBody) {
   return {
     summary: b.title,
     description: b.description,
@@ -45,11 +39,36 @@ function body(b: EventBody): calendar_v3.Schema$Event {
   };
 }
 
+// JWT 인증이 붙은 REST 요청. google-auth-library 가 토큰 발급·갱신을 처리한다.
+async function request<T>(
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<{ status: number; data: T | null }> {
+  const res = await jwt().request<T>({
+    url: `${API}${path}`,
+    method: method as "GET" | "POST" | "PUT" | "DELETE",
+    data: body,
+    validateStatus: () => true, // 상태코드는 호출부가 판정
+  });
+  return { status: res.status, data: (res.data as T) ?? null };
+}
+
+function enc(s: string): string {
+  return encodeURIComponent(s);
+}
+
 // 종일 일정 생성 → eventId 반환
 export async function insertAllDayEvent(calendarId: string, b: EventBody): Promise<string> {
-  const res = await cal().events.insert({ calendarId, requestBody: body(b) });
-  if (!res.data.id) throw new Error("생성된 이벤트에 ID가 없습니다.");
-  return res.data.id;
+  const { status, data } = await request<{ id?: string }>(
+    "POST",
+    `/calendars/${enc(calendarId)}/events`,
+    payload(b),
+  );
+  if (status >= 300 || !data?.id) {
+    throw new Error(`이벤트 생성 실패 (HTTP ${status})`);
+  }
+  return data.id;
 }
 
 // 종일 일정 갱신. 일정이 캘린더에서 이미 지워졌으면 false (호출부가 재생성).
@@ -58,21 +77,22 @@ export async function updateAllDayEvent(
   eventId: string,
   b: EventBody,
 ): Promise<boolean> {
-  try {
-    await cal().events.update({ calendarId, eventId, requestBody: body(b) });
-    return true;
-  } catch (e) {
-    if (isGone(e)) return false;
-    throw e;
-  }
+  const { status } = await request(
+    "PUT",
+    `/calendars/${enc(calendarId)}/events/${enc(eventId)}`,
+    payload(b),
+  );
+  if (status === 404 || status === 410) return false;
+  if (status >= 300) throw new Error(`이벤트 갱신 실패 (HTTP ${status})`);
+  return true;
 }
 
 // 일정 삭제. 이미 없으면 조용히 통과.
 export async function deleteEvent(calendarId: string, eventId: string): Promise<void> {
-  try {
-    await cal().events.delete({ calendarId, eventId });
-  } catch (e) {
-    if (isGone(e)) return;
-    throw e;
-  }
+  const { status } = await request(
+    "DELETE",
+    `/calendars/${enc(calendarId)}/events/${enc(eventId)}`,
+  );
+  if (status === 404 || status === 410) return;
+  if (status >= 300) throw new Error(`이벤트 삭제 실패 (HTTP ${status})`);
 }
