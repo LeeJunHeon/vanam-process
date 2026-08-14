@@ -56,7 +56,13 @@ function payload(b: EventBody) {
     description: b.description,
     start: { date: b.date },
     end: { date: nextDay(b.date) },
-    attendees: b.attendees.map((email) => ({ email })),
+    // hr syncer 와 동일: responseStatus='accepted' 로 미리 수락 처리해
+    // 담당자 캘린더에서 "회신 대기" 반투명이 아닌 확정 일정으로 표시.
+    // (권한에 따라 무시되면 needsAction 으로 폴백 — 시도는 안전)
+    attendees: b.attendees.map((email) => ({
+      email,
+      responseStatus: "accepted",
+    })),
     // hr-calendar-syncer 패턴: 시스템 생성 일정 식별 표식
     extendedProperties: { private: { vanam_source: "process-web" } },
   };
