@@ -10,9 +10,10 @@ import SubstrateFormModal from "@/components/SubstrateFormModal";
 import type { CodeOption, EmployeeOption } from "@/components/OrderFormModal";
 import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE } from "@/lib/status";
 import { errorMessage } from "@/lib/fetchError";
+import { dueProgress, PROGRESS_BAR, PROGRESS_TEXT } from "@/lib/progress";
 
 type Row = ProcessItem & {
-  order: { id: number; orderNo: string; company: string | null; jobName: string | null; dueAt: string | null };
+  order: { id: number; orderNo: string; company: string | null; jobName: string | null; receivedAt: string; dueAt: string | null };
   mine: boolean;
   receiptCount: number;
 };
@@ -218,6 +219,24 @@ export default function ProcessesPage() {
                       {p.durationHours !== null && <span>소요 {p.durationHours}h</span>}
                       {isAdmin && <span>담당 {p.owner?.name ?? "-"}</span>}
                     </p>
+                    {(() => {
+                      const dp = dueProgress(p.order.receivedAt, p.order.dueAt);
+                      return (
+                        dp && (
+                          <div className="mt-1.5 flex items-center gap-2">
+                            <div className="h-1.5 max-w-[280px] flex-1 overflow-hidden rounded-full bg-gray-100">
+                              <div
+                                className={`h-full rounded-full ${PROGRESS_BAR[dp.state]}`}
+                                style={{ width: `${dp.pct}%` }}
+                              />
+                            </div>
+                            <span className={`shrink-0 text-[10px] font-semibold ${PROGRESS_TEXT[dp.state]}`}>
+                              {dp.label}
+                            </span>
+                          </div>
+                        )
+                      );
+                    })()}
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1.5">

@@ -34,7 +34,7 @@ export async function GET(request: Request) {
       },
       include: {
         order: {
-          select: { id: true, orderNo: true, company: true, jobName: true, dueAt: true },
+          select: { id: true, orderNo: true, company: true, jobName: true, receivedAt: true, dueAt: true },
         },
         processCode: { select: { id: true, code: true } },
         owner: { select: { id: true, name: true, email: true } },

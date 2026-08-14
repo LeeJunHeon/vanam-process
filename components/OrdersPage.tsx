@@ -12,6 +12,7 @@ import type { ProcessItem } from "@/components/ProcessEditModal";
 import ReceiptListModal from "@/components/ReceiptListModal";
 import { errorMessage } from "@/lib/fetchError";
 import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE, SYNC_STYLE } from "@/lib/status";
+import { dueProgress, PROGRESS_BAR, PROGRESS_TEXT } from "@/lib/progress";
 
 type OrderProcess = ProcessItem & { _count?: { substrateReceipts: number } };
 
@@ -254,6 +255,24 @@ export default function OrdersPage() {
                       <p className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">
                         <CalendarDays size={11} /> 접수 {fmt(o.receivedAt)} · 납기 {fmt(o.dueAt)} · {o.paymentStatus} · {o.precheckStatus}
                       </p>
+                      {(() => {
+                        const dp = dueProgress(o.receivedAt, o.dueAt);
+                        return (
+                          dp && (
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <div className="h-1.5 max-w-[320px] flex-1 overflow-hidden rounded-full bg-gray-100">
+                                <div
+                                  className={`h-full rounded-full ${PROGRESS_BAR[dp.state]}`}
+                                  style={{ width: `${dp.pct}%` }}
+                                />
+                              </div>
+                              <span className={`shrink-0 text-[10px] font-semibold ${PROGRESS_TEXT[dp.state]}`}>
+                                {dp.label}
+                              </span>
+                            </div>
+                          )
+                        );
+                      })()}
                     </div>
                   </button>
 
