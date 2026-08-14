@@ -27,6 +27,7 @@ type DueItem = {
   total: number;
 };
 type Data = {
+  scope: "all" | "mine";
   today: string;
   statusCounts: Record<string, number>;
   overdue: ProcItem[];
@@ -131,6 +132,11 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-4 p-4 sm:p-6">
+      {data.scope === "mine" && (
+        <p className="text-[11px] font-medium text-gray-400">
+          내가 담당한 공정 기준입니다.
+        </p>
+      )}
       {/* 상태별 공정 수 */}
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
         {PROCESS_STATUSES.map((s) => (
@@ -163,6 +169,7 @@ export default function DashboardPage() {
         {data.upcoming.map(procLine)}
       </Section>
 
+      {data.scope === "all" && (
       <Section
         icon={<CalendarDays size={15} className="text-amber-500" />}
         title="납기 임박·초과 발주"
@@ -185,6 +192,7 @@ export default function DashboardPage() {
           </div>
         ))}
       </Section>
+      )}
     </div>
   );
 }

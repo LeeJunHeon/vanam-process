@@ -12,6 +12,7 @@ export type EditTarget = {
   id: number;
   receivedAt: string;
   manager: string;
+  processRef: string | null;
   source: string | null;
   clientName: string | null;
   memo: string | null;
@@ -20,6 +21,8 @@ export type EditTarget = {
 
 interface Props {
   target?: EditTarget | null; // 없으면 신규 등록
+  // 공정 관리 화면에서 열릴 때: 이 공정에 고정 연결 (선택 UI 없음)
+  lockedProcess?: { id: number; label: string } | null;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -34,7 +37,7 @@ const inputClass =
   "w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400";
 const labelClass = "mb-1.5 block text-[11px] font-semibold text-gray-500";
 
-export default function SubstrateFormModal({ target, onClose, onSaved }: Props) {
+export default function SubstrateFormModal({ target, lockedProcess, onClose, onSaved }: Props) {
   const { data: session } = useSession();
   const isEdit = !!target;
 
@@ -114,6 +117,7 @@ export default function SubstrateFormModal({ target, onClose, onSaved }: Props) 
         form.append("source", source);
         form.append("clientName", clientName);
         form.append("memo", memo);
+        if (lockedProcess) form.append("orderProcessId", String(lockedProcess.id));
         photos.forEach((f) => form.append("photos", f));
 
         const res = await fetch("/api/receipts", { method: "POST", body: form });
@@ -173,6 +177,15 @@ export default function SubstrateFormModal({ target, onClose, onSaved }: Props) 
               </p>
             )}
           </div>
+
+          {(lockedProcess || (isEdit && target?.processRef)) && (
+            <div>
+              <label className={labelClass}>연결 공정</label>
+              <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-medium text-blue-700">
+                {lockedProcess?.label ?? target?.processRef}
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

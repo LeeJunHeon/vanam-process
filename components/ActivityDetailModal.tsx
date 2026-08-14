@@ -10,6 +10,7 @@ export type ReceiptState = {
   clientName: string | null;
   memo: string | null;
   photoIds: number[];
+  processRef?: string | null;
 };
 
 export type ActivityDetail = {
@@ -244,6 +245,7 @@ export default function ActivityDetailModal({
               {row("요청처", s!.clientName, before?.clientName ?? null, !!before)}
             </div>
             {row("메모", s!.memo, before?.memo ?? null, !!before)}
+            {row("연결 공정", s!.processRef ?? null, before?.processRef ?? null, !!before)}
 
             <div>
               <label className={labelClass}>

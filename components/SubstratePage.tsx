@@ -17,6 +17,12 @@ type Receipt = {
   memo: string | null;
   createdByEmail: string;
   photos: Photo[];
+  orderProcess: {
+    id: number;
+    sequence: number;
+    processCode: { code: string };
+    order: { orderNo: string };
+  } | null;
 };
 
 function formatDate(iso: string): string {
@@ -136,6 +142,11 @@ export default function SubstratePage() {
                         {r.clientName}
                       </span>
                     )}
+                    {r.orderProcess && (
+                      <span className="rounded-md bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
+                        {r.orderProcess.order.orderNo} #{r.orderProcess.sequence} {r.orderProcess.processCode.code}
+                      </span>
+                    )}
                     {r.photos.length === 0 && (
                       <span className="flex items-center gap-1 rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-600">
                         <ImageOff size={10} />
@@ -154,6 +165,9 @@ export default function SubstratePage() {
                         id: r.id,
                         receivedAt: r.receivedAt,
                         manager: r.manager,
+                        processRef: r.orderProcess
+                          ? `${r.orderProcess.order.orderNo} #${r.orderProcess.sequence} ${r.orderProcess.processCode.code}`
+                          : null,
                         source: r.source,
                         clientName: r.clientName,
                         memo: r.memo,

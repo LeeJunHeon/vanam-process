@@ -1,10 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { Workflow, LayoutDashboard, ClipboardList, Layers, History, X, LogOut, ArrowLeft } from "lucide-react";
+import { Workflow, LayoutDashboard, ClipboardList, ListChecks, Layers, History, X, LogOut, ArrowLeft } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 
-type Page = "dashboard" | "orders" | "substrate" | "activity";
+type Page = "dashboard" | "processes" | "orders" | "substrate" | "activity";
 
 interface SidebarProps {
   currentPage: Page;
@@ -15,8 +15,9 @@ interface SidebarProps {
 
 const ALL_NAV: { key: Page; label: string; icon: typeof Layers; adminOnly?: boolean }[] = [
   { key: "dashboard", label: "대시보드", icon: LayoutDashboard },
-  { key: "orders", label: "발주 관리", icon: ClipboardList },
+  { key: "processes", label: "공정 관리", icon: ListChecks },
   { key: "substrate", label: "기판 반입 기록", icon: Layers },
+  { key: "orders", label: "발주 관리", icon: ClipboardList, adminOnly: true },
   { key: "activity", label: "활동 이력", icon: History, adminOnly: true },
 ];
 
@@ -34,7 +35,8 @@ export default function Sidebar({
   const roleLabel =
     role === "ceo" ? "대표" : role === "admin" ? "관리자" : "직원";
   const isAdmin = role === "admin" || role === "ceo";
-  const navItems = ALL_NAV.filter((item) => !item.adminOnly || isAdmin);
+  const commonItems = ALL_NAV.filter((item) => !item.adminOnly);
+  const adminItems = isAdmin ? ALL_NAV.filter((item) => item.adminOnly) : [];
   const initial = (() => {
     if (!userName || userName === "사용자") return "?";
     const parts = userName.trim().split(" ").filter((p) => p.length > 0);
@@ -45,6 +47,29 @@ export default function Sidebar({
   const handleNav = (page: Page) => {
     onNavigate(page);
     if (window.innerWidth < 1024) onClose();
+  };
+
+  // 공통 / 관리자 그룹에서 같은 버튼을 재사용한다
+  const renderNavItem = (item: (typeof ALL_NAV)[number]) => {
+    const Icon = item.icon;
+    const active = currentPage === item.key;
+    return (
+      <button
+        key={item.key}
+        onClick={() => handleNav(item.key)}
+        className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
+          active
+            ? "bg-blue-50 font-semibold text-blue-600"
+            : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+        }`}
+      >
+        <Icon
+          size={18}
+          className={active ? "text-blue-500" : "text-gray-400"}
+        />
+        <span className="flex-1 text-left">{item.label}</span>
+      </button>
+    );
   };
 
   return (
@@ -96,27 +121,17 @@ export default function Sidebar({
 
         {/* 네비게이션 */}
         <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const active = currentPage === item.key;
-            return (
-              <button
-                key={item.key}
-                onClick={() => handleNav(item.key)}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-all ${
-                  active
-                    ? "bg-blue-50 font-semibold text-blue-600"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                }`}
-              >
-                <Icon
-                  size={18}
-                  className={active ? "text-blue-500" : "text-gray-400"}
-                />
-                <span className="flex-1 text-left">{item.label}</span>
-              </button>
-            );
-          })}
+          {commonItems.map(renderNavItem)}
+          {adminItems.length > 0 && (
+            <>
+              <div className="px-3 pt-3 pb-1">
+                <p className="px-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+                  관리자
+                </p>
+              </div>
+              {adminItems.map(renderNavItem)}
+            </>
+          )}
         </nav>
 
         {/* 사용자 정보 */}
