@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { X, Plus, Trash2 } from "lucide-react";
 import { errorMessage } from "@/lib/fetchError";
-import { PAYMENT_STATUSES, PRECHECK_STATUSES } from "@/lib/status";
+import { PAYMENT_STATUSES, PRECHECK_STATUSES, PROCESS_STATUSES } from "@/lib/status";
 
 export type CodeOption = { id: number; code: string };
 export type EmployeeOption = { id: number; name: string };
@@ -27,6 +27,8 @@ type ProcessRow = {
   qty: string;
   plannedStart: string;
   durationHours: string;
+  status: string;
+  location: string;
   ownerEmployeeId: string;
   memo: string;
 };
@@ -37,6 +39,8 @@ const emptyRow = (): ProcessRow => ({
   qty: "",
   plannedStart: "",
   durationHours: "",
+  status: "대기",
+  location: "",
   ownerEmployeeId: "",
   memo: "",
 });
@@ -50,6 +54,7 @@ function today(): string {
 const inputClass =
   "w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400";
 const labelClass = "mb-1.5 block text-[11px] font-semibold text-gray-500";
+const rowLabelClass = "mb-1 block text-[10px] font-semibold text-gray-400";
 
 export default function OrderFormModal({
   target,
@@ -131,6 +136,8 @@ export default function OrderFormModal({
               qty: r.qty === "" ? null : Number(r.qty),
               plannedStart: r.plannedStart || null,
               durationHours: r.durationHours === "" ? null : Number(r.durationHours),
+              status: r.status,
+              location: r.location,
               ownerEmployeeId: r.ownerEmployeeId === "" ? null : Number(r.ownerEmployeeId),
               memo: r.memo,
             })),
@@ -247,27 +254,58 @@ export default function OrderFormModal({
                       )}
                     </div>
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      <select
-                        value={r.processCodeId}
-                        onChange={(e) => setRow(i, { processCodeId: e.target.value })}
-                        className={inputClass}
-                      >
-                        <option value="">공정 선택</option>
-                        {codes.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
-                      </select>
-                      <input placeholder="공정상세" value={r.detail} onChange={(e) => setRow(i, { detail: e.target.value })} className={inputClass} />
-                      <input type="number" min={1} placeholder="횟수" value={r.qty} onChange={(e) => setRow(i, { qty: e.target.value })} className={inputClass} />
-                      <input type="date" value={r.plannedStart} onChange={(e) => setRow(i, { plannedStart: e.target.value })} className={inputClass} title="작업시작예정" />
-                      <input type="number" min={0} step={0.5} placeholder="소요시간(h)" value={r.durationHours} onChange={(e) => setRow(i, { durationHours: e.target.value })} className={inputClass} />
-                      <select
-                        value={r.ownerEmployeeId}
-                        onChange={(e) => setRow(i, { ownerEmployeeId: e.target.value })}
-                        className={inputClass}
-                      >
-                        <option value="">담당자 선택</option>
-                        {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                      </select>
-                      <input placeholder="공정메모" value={r.memo} onChange={(e) => setRow(i, { memo: e.target.value })} className={`${inputClass} col-span-2`} />
+                      <div>
+                        <label className={rowLabelClass}>공정 <span className="text-rose-500">*</span></label>
+                        <select
+                          value={r.processCodeId}
+                          onChange={(e) => setRow(i, { processCodeId: e.target.value })}
+                          className={inputClass}
+                        >
+                          <option value="">공정 선택</option>
+                          {codes.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={rowLabelClass}>공정상세</label>
+                        <input value={r.detail} onChange={(e) => setRow(i, { detail: e.target.value })} className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={rowLabelClass}>횟수</label>
+                        <input type="number" min={1} value={r.qty} onChange={(e) => setRow(i, { qty: e.target.value })} className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={rowLabelClass}>작업시작예정</label>
+                        <input type="date" value={r.plannedStart} onChange={(e) => setRow(i, { plannedStart: e.target.value })} className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={rowLabelClass}>소요시간(h)</label>
+                        <input type="number" min={0} step={0.5} value={r.durationHours} onChange={(e) => setRow(i, { durationHours: e.target.value })} className={inputClass} />
+                      </div>
+                      <div>
+                        <label className={rowLabelClass}>상태</label>
+                        <select value={r.status} onChange={(e) => setRow(i, { status: e.target.value })} className={inputClass}>
+                          {PROCESS_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={rowLabelClass}>담당자</label>
+                        <select
+                          value={r.ownerEmployeeId}
+                          onChange={(e) => setRow(i, { ownerEmployeeId: e.target.value })}
+                          className={inputClass}
+                        >
+                          <option value="">담당자 선택</option>
+                          {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className={rowLabelClass}>현위치</label>
+                        <input value={r.location} onChange={(e) => setRow(i, { location: e.target.value })} className={inputClass} />
+                      </div>
+                      <div className="col-span-2 sm:col-span-4">
+                        <label className={rowLabelClass}>공정메모</label>
+                        <input value={r.memo} onChange={(e) => setRow(i, { memo: e.target.value })} className={inputClass} />
+                      </div>
                     </div>
                   </div>
                 ))}
