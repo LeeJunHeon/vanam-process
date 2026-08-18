@@ -4,7 +4,7 @@ import { requireSession, isAdminSession } from "@/lib/auth-helpers";
 import { logActivity, buildProcessState } from "@/lib/activity";
 import { PROCESS_STATUSES, parseDateOnly } from "@/lib/orderUtils";
 import { syncProcessCalendar } from "@/lib/calendarSync";
-import { sendProcessAssignMail } from "@/lib/processMail";
+import { sendProcessAssignMail, sendProcessRescheduleMail } from "@/lib/processMail";
 
 export const runtime = "nodejs";
 
@@ -103,9 +103,16 @@ export async function PATCH(
 
     await syncProcessCalendar(updated.id);
 
-    // 담당자가 새로 지정되거나 다른 사람으로 변경된 경우에만 배정 메일
-    if (nextOwner !== row.ownerEmployeeId && nextOwner !== null) {
+    // 담당자 변경 → 배정 메일 (본문에 새 날짜가 이미 들어가므로 일정 변경 알림은 생략)
+    // 담당자 유지 + 작업시작예정일 변경 → 일정 변경 알림
+    // row 는 update 이전에 조회한 값이라 row.plannedStart 가 변경 전 날짜다
+    const ownerChanged = nextOwner !== row.ownerEmployeeId && nextOwner !== null;
+    const plannedChanged =
+      (nextPlanned?.getTime() ?? null) !== (row.plannedStart?.getTime() ?? null);
+    if (ownerChanged) {
       await sendProcessAssignMail(updated.id);
+    } else if (plannedChanged) {
+      await sendProcessRescheduleMail(updated.id, row.plannedStart);
     }
 
     return NextResponse.json(updated);
