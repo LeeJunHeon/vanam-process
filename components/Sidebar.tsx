@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Workflow, LayoutDashboard, ClipboardList, ListChecks, Layers, History, Gauge, X, LogOut, ArrowLeft } from "lucide-react";
+import { Workflow, LayoutDashboard, ClipboardList, ListChecks, Layers, History, Gauge, Cpu, Box, Wind, Waves, Flame, Factory, X, LogOut, ArrowLeft } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 
-type Page = "dashboard" | "processes" | "orders" | "substrate" | "activity" | "opsDashboard";
+type Page =
+  | "dashboard" | "processes" | "orders" | "substrate" | "activity"
+  | "opsDashboard"
+  | "equipCh12" | "equipChk" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline";
 type Workspace = "business" | "ops";
 
 interface SidebarProps {
@@ -27,10 +30,15 @@ const BUSINESS_NAV: NavItem[] = [
   { key: "activity", label: "활동 이력", icon: History, adminOnly: true },
 ];
 
-// 장비 운전 워크스페이스 — Phase 0은 운전 대시보드만.
-// 이후 Chamber 1/2, 로드락, 로봇 셀, 레시피, 런 이력 메뉴가 여기에 추가된다.
+// 장비 운전 워크스페이스
 const OPS_NAV: NavItem[] = [
   { key: "opsDashboard", label: "운전 대시보드", icon: Gauge },
+  { key: "equipCh12", label: "CH1&2 Sputter", icon: Cpu },
+  { key: "equipChk", label: "CHK", icon: Box },
+  { key: "equipRayvac", label: "Rayvac ALD", icon: Wind },
+  { key: "equipNcd", label: "NCD ALD", icon: Waves },
+  { key: "equipEvap", label: "Evaporator", icon: Flame },
+  { key: "equipInline", label: "In-Line Sputter", icon: Factory },
 ];
 
 export default function Sidebar({

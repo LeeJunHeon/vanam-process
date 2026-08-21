@@ -184,9 +184,8 @@ export default function OpsDashboardPage() {
 
       {/* CH1&2 Sputter — 하나의 장비, 챔버 2기 독립 운전, LoadLock 공유 */}
       <div className="rounded-2xl border border-gray-100 bg-white p-4">
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <div className="mb-3">
           <h2 className="text-sm font-bold text-gray-900">CH1&2 Sputter</h2>
-          <span className="text-[11px] text-gray-400">챔버 2기 독립 운전 · LoadLock 공유</span>
         </div>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -198,9 +197,6 @@ export default function OpsDashboardPage() {
         {/* 공유 LoadLock */}
         <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-gray-100 bg-gray-50/60 px-3 py-2.5">
           <div className="flex min-w-0 items-center gap-2">
-            <span className="shrink-0 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">
-              공유
-            </span>
             <span className="shrink-0 text-xs font-bold text-gray-700">{data.loadlock.name}</span>
             <span
               className={`truncate text-xs ${data.loadlock.state === "미연결" ? "text-gray-300" : "text-gray-500"}`}

@@ -10,8 +10,13 @@ import OrdersPage from "@/components/OrdersPage";
 import SubstratePage from "@/components/SubstratePage";
 import ActivityPage from "@/components/ActivityPage";
 import OpsDashboardPage from "@/components/OpsDashboardPage";
+import Ch12Page from "@/components/Ch12Page";
+import EquipmentStubPage from "@/components/EquipmentStubPage";
 
-type Page = "dashboard" | "processes" | "orders" | "substrate" | "activity" | "opsDashboard";
+type Page =
+  | "dashboard" | "processes" | "orders" | "substrate" | "activity"
+  | "opsDashboard"
+  | "equipCh12" | "equipChk" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline";
 type Workspace = "business" | "ops";
 
 const pageTitle: Record<Page, string> = {
@@ -21,6 +26,12 @@ const pageTitle: Record<Page, string> = {
   substrate: "기판 반입 기록",
   activity: "활동 이력",
   opsDashboard: "운전 대시보드",
+  equipCh12: "CH1&2 Sputter",
+  equipChk: "CHK",
+  equipRayvac: "Rayvac ALD",
+  equipNcd: "NCD ALD",
+  equipEvap: "Evaporator",
+  equipInline: "In-Line Sputter",
 };
 
 // 워크스페이스별 시작 페이지
@@ -92,6 +103,12 @@ export default function AppShell() {
           {page === "substrate" && <SubstratePage />}
           {page === "activity" && <ActivityPage />}
           {page === "opsDashboard" && <OpsDashboardPage />}
+          {page === "equipCh12" && <Ch12Page />}
+          {page === "equipChk" && <EquipmentStubPage equip="chk" />}
+          {page === "equipRayvac" && <EquipmentStubPage equip="rayvac" />}
+          {page === "equipNcd" && <EquipmentStubPage equip="ncd" />}
+          {page === "equipEvap" && <EquipmentStubPage equip="evap" />}
+          {page === "equipInline" && <EquipmentStubPage equip="inline" />}
         </main>
       </div>
     </div>
