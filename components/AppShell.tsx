@@ -9,8 +9,10 @@ import ProcessesPage from "@/components/ProcessesPage";
 import OrdersPage from "@/components/OrdersPage";
 import SubstratePage from "@/components/SubstratePage";
 import ActivityPage from "@/components/ActivityPage";
+import OpsDashboardPage from "@/components/OpsDashboardPage";
 
-type Page = "dashboard" | "processes" | "orders" | "substrate" | "activity";
+type Page = "dashboard" | "processes" | "orders" | "substrate" | "activity" | "opsDashboard";
+type Workspace = "business" | "ops";
 
 const pageTitle: Record<Page, string> = {
   dashboard: "대시보드",
@@ -18,16 +20,45 @@ const pageTitle: Record<Page, string> = {
   orders: "발주 관리",
   substrate: "기판 반입 기록",
   activity: "활동 이력",
+  opsDashboard: "운전 대시보드",
 };
 
+// 워크스페이스별 시작 페이지
+const WS_HOME: Record<Workspace, Page> = {
+  business: "dashboard",
+  ops: "opsDashboard",
+};
+
+const WS_STORAGE_KEY = "vanam-process:workspace";
+
 export default function AppShell() {
+  const [workspace, setWorkspace] = useState<Workspace>("business");
   const [page, setPage] = useState<Page>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // 로드 시 열린 상태(애니메이션 없음), 모바일이면 닫기
+  // 로드 시 열린 상태(애니메이션 없음), 모바일이면 닫기 + 마지막 워크스페이스 복원
   useEffect(() => {
     if (window.innerWidth < 1024) setSidebarOpen(false);
+    try {
+      if (window.localStorage.getItem(WS_STORAGE_KEY) === "ops") {
+        setWorkspace("ops");
+        setPage(WS_HOME.ops);
+      }
+    } catch {
+      // localStorage 접근 실패(사파리 프라이빗 모드 등)는 무시
+    }
   }, []);
+
+  // 워크스페이스 전환 시 해당 홈 페이지로 이동하고 선택을 저장한다
+  const changeWorkspace = (ws: Workspace) => {
+    setWorkspace(ws);
+    setPage(WS_HOME[ws]);
+    try {
+      window.localStorage.setItem(WS_STORAGE_KEY, ws);
+    } catch {
+      // 저장 실패는 무시
+    }
+  };
 
   const { data: session } = useSession();
   const role = (session?.user as { role?: string })?.role;
@@ -42,6 +73,8 @@ export default function AppShell() {
   return (
     <div className="flex h-screen">
       <Sidebar
+        workspace={workspace}
+        onWorkspaceChange={changeWorkspace}
         currentPage={page}
         onNavigate={setPage}
         isOpen={sidebarOpen}
@@ -58,6 +91,7 @@ export default function AppShell() {
           {page === "orders" && <OrdersPage />}
           {page === "substrate" && <SubstratePage />}
           {page === "activity" && <ActivityPage />}
+          {page === "opsDashboard" && <OpsDashboardPage />}
         </main>
       </div>
     </div>

@@ -1,19 +1,25 @@
 "use client";
 
 import { useState } from "react";
-import { Workflow, LayoutDashboard, ClipboardList, ListChecks, Layers, History, X, LogOut, ArrowLeft } from "lucide-react";
+import { Workflow, LayoutDashboard, ClipboardList, ListChecks, Layers, History, Gauge, X, LogOut, ArrowLeft } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 
-type Page = "dashboard" | "processes" | "orders" | "substrate" | "activity";
+type Page = "dashboard" | "processes" | "orders" | "substrate" | "activity" | "opsDashboard";
+type Workspace = "business" | "ops";
 
 interface SidebarProps {
+  workspace: Workspace;
+  onWorkspaceChange: (ws: Workspace) => void;
   currentPage: Page;
   onNavigate: (page: Page) => void;
   isOpen: boolean;
   onClose: () => void;
 }
 
-const ALL_NAV: { key: Page; label: string; icon: typeof Layers; adminOnly?: boolean }[] = [
+type NavItem = { key: Page; label: string; icon: typeof Layers; adminOnly?: boolean };
+
+// 업무 관리 워크스페이스 — 기존 메뉴 그대로 (ISA-95 Level 4 영역)
+const BUSINESS_NAV: NavItem[] = [
   { key: "dashboard", label: "대시보드", icon: LayoutDashboard },
   { key: "processes", label: "공정 관리", icon: ListChecks },
   { key: "substrate", label: "기판 반입 기록", icon: Layers },
@@ -21,7 +27,15 @@ const ALL_NAV: { key: Page; label: string; icon: typeof Layers; adminOnly?: bool
   { key: "activity", label: "활동 이력", icon: History, adminOnly: true },
 ];
 
+// 장비 운전 워크스페이스 — Phase 0은 운전 대시보드만.
+// 이후 Chamber 1/2, 로드락, 로봇 셀, 레시피, 런 이력 메뉴가 여기에 추가된다.
+const OPS_NAV: NavItem[] = [
+  { key: "opsDashboard", label: "운전 대시보드", icon: Gauge },
+];
+
 export default function Sidebar({
+  workspace,
+  onWorkspaceChange,
   currentPage,
   onNavigate,
   isOpen,
@@ -35,8 +49,9 @@ export default function Sidebar({
   const roleLabel =
     role === "ceo" ? "대표" : role === "admin" ? "관리자" : "직원";
   const isAdmin = role === "admin" || role === "ceo";
-  const commonItems = ALL_NAV.filter((item) => !item.adminOnly);
-  const adminItems = isAdmin ? ALL_NAV.filter((item) => item.adminOnly) : [];
+  const nav = workspace === "ops" ? OPS_NAV : BUSINESS_NAV;
+  const commonItems = nav.filter((item) => !item.adminOnly);
+  const adminItems = isAdmin ? nav.filter((item) => item.adminOnly) : [];
   const initial = (() => {
     if (!userName || userName === "사용자") return "?";
     const parts = userName.trim().split(" ").filter((p) => p.length > 0);
@@ -50,7 +65,7 @@ export default function Sidebar({
   };
 
   // 공통 / 관리자 그룹에서 같은 버튼을 재사용한다
-  const renderNavItem = (item: (typeof ALL_NAV)[number]) => {
+  const renderNavItem = (item: NavItem) => {
     const Icon = item.icon;
     const active = currentPage === item.key;
     return (
@@ -115,6 +130,32 @@ export default function Sidebar({
               className="rounded-lg p-1.5 hover:bg-gray-100 lg:hidden"
             >
               <X size={18} className="text-gray-400" />
+            </button>
+          </div>
+        </div>
+
+        {/* 워크스페이스 전환 (업무 관리 ↔ 장비 운전) */}
+        <div className="px-3 pt-4">
+          <div className="flex rounded-xl bg-gray-100 p-1">
+            <button
+              onClick={() => onWorkspaceChange("business")}
+              className={`flex-1 rounded-lg py-1.5 text-xs transition-all ${
+                workspace === "business"
+                  ? "bg-white font-semibold text-blue-600 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              업무 관리
+            </button>
+            <button
+              onClick={() => onWorkspaceChange("ops")}
+              className={`flex-1 rounded-lg py-1.5 text-xs transition-all ${
+                workspace === "ops"
+                  ? "bg-white font-semibold text-blue-600 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              장비 운전
             </button>
           </div>
         </div>
