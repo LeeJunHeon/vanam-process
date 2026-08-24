@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Workflow, LayoutDashboard, ClipboardList, ListChecks, Layers, History, Gauge, Cpu, Box, Wind, Waves, Flame, Factory, X, LogOut, ArrowLeft } from "lucide-react";
+import { Workflow, LayoutDashboard, ClipboardList, ListChecks, Layers, History, Gauge, Cpu, X, LogOut, ArrowLeft } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
 
 type Page =
@@ -30,15 +30,15 @@ const BUSINESS_NAV: NavItem[] = [
   { key: "activity", label: "활동 이력", icon: History, adminOnly: true },
 ];
 
-// 장비 운전 워크스페이스
+// 장비 운전 워크스페이스 — 장비 아이콘은 Cpu로 통일
 const OPS_NAV: NavItem[] = [
   { key: "opsDashboard", label: "운전 대시보드", icon: Gauge },
   { key: "equipCh12", label: "CH1&2 Sputter", icon: Cpu },
-  { key: "equipChk", label: "CHK", icon: Box },
-  { key: "equipRayvac", label: "Rayvac ALD", icon: Wind },
-  { key: "equipNcd", label: "NCD ALD", icon: Waves },
-  { key: "equipEvap", label: "Evaporator", icon: Flame },
-  { key: "equipInline", label: "In-Line Sputter", icon: Factory },
+  { key: "equipChk", label: "CHK", icon: Cpu },
+  { key: "equipRayvac", label: "Rayvac ALD", icon: Cpu },
+  { key: "equipNcd", label: "NCD ALD", icon: Cpu },
+  { key: "equipEvap", label: "Evaporator", icon: Cpu },
+  { key: "equipInline", label: "In-Line Sputter", icon: Cpu },
 ];
 
 export default function Sidebar({
