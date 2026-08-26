@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 import { AlertTriangle, Info } from "lucide-react";
+import { useOpsStatus } from "@/components/ops/OpsKit";
+import { fmtDateTime, RUN_LABEL } from "@/lib/ops";
 
 // ─────────────────────────────────────────────────────────────
 // Phase 0: 웹 골격만 구현. erp-agent 연결 전이므로 기본은 '미연결' 상태.
@@ -143,9 +145,34 @@ export default function OpsDashboardPage() {
   const data = PREVIEW ? PREVIEW_DATA : OFFLINE_DATA;
   const events: EventLine[] = PREVIEW ? PREVIEW_EVENTS : [];
 
+  // CHK만 실데이터로 대체 (나머지 장비는 리포터 연동 후 동일 방식으로 추가)
+  const chk = useOpsStatus("CHK");
+  const chkPayload = chk.data?.state?.payload ?? {};
+  const chkLast = chk.data?.runs?.find((r) => r.status !== "running") ?? null;
+
+  const chkUnit: Unit = !chk.online
+    ? { key: "chk", name: "CHK", state: "미연결", summary: "리포터 미연결" }
+    : chkPayload.status === "running" || chk.data?.run
+      ? {
+          key: "chk",
+          name: "CHK",
+          state: "가동",
+          summary: `${chk.data?.run?.processName ?? "공정 진행"} · ${chkPayload.stage ?? ""}`.trim(),
+        }
+      : {
+          key: "chk",
+          name: "CHK",
+          state: "대기",
+          summary: chkLast
+            ? `마지막 공정 ${fmtDateTime(chkLast.startedAt)} · ${RUN_LABEL[chkLast.status] ?? chkLast.status}`
+            : "대기 중",
+        };
+
+  const mergedStandalone = data.standalone.map((u) => (u.key === "chk" ? chkUnit : u));
+
   const allUnits = useMemo(
-    () => [...data.ch12, data.loadlock, ...data.standalone],
-    [data],
+    () => [...data.ch12, data.loadlock, ...mergedStandalone],
+    [data, mergedStandalone],
   );
 
   const counts = useMemo(() => {
@@ -210,7 +237,7 @@ export default function OpsDashboardPage() {
 
       {/* 단독 장비 */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {data.standalone.map((u) => (
+        {mergedStandalone.map((u) => (
           <UnitCard key={u.key} u={u} />
         ))}
       </div>
