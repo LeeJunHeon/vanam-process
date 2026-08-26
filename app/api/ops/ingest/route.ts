@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 type IngestMsg = {
   id?: string; // 리포터가 부여하는 메시지 고유 ID (재전송 중복 차단용)
-  type: "hello" | "state" | "event" | "run_start" | "run_end";
+  type: "hello" | "state" | "event" | "run_start" | "run_end" | "cmd_result";
   ts?: string;
   data?: Record<string, unknown>;
   level?: string;
@@ -15,6 +15,8 @@ type IngestMsg = {
   params?: Record<string, unknown>;
   result?: string;
   errorMsg?: string;
+  cmdId?: number;
+  ok?: boolean;
 };
 
 type PendingEvent = {
@@ -75,6 +77,23 @@ export async function POST(req: NextRequest) {
         latestState = (m.data ?? {}) as Record<string, unknown>;
       } else if (m.type === "hello") {
         // 세션 시작 표시. payload를 덮어쓰지 않는다.
+        // 프로그램이 새로 시작됐다. 꺼져 있는 동안 쌓인 명령이 지금 실행되면
+        // 조작자의 의도와 다르므로 전부 만료시킨다. (안전상 매우 중요)
+        await prisma.opsCommand.updateMany({
+          where: { equipment, status: "pending" },
+          data: { status: "expired", finishedAt: ts, result: "프로그램 재시작으로 취소" },
+        });
+      } else if (m.type === "cmd_result") {
+        if (typeof m.cmdId === "number") {
+          await prisma.opsCommand.updateMany({
+            where: { id: m.cmdId, equipment },
+            data: {
+              status: m.ok ? "done" : "failed",
+              finishedAt: ts,
+              result: m.errorMsg ?? null,
+            },
+          });
+        }
       } else if (m.type === "event") {
         pending.push({
           equipment,
@@ -131,7 +150,32 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    return NextResponse.json({ ok: true });
+    // ── 대기 중인 명령 배달 ──────────────────────────────
+    // updateMany로 원자적으로 sent 전환하므로 같은 명령이 두 번 배달되지 않는다.
+    const now = new Date();
+    const ready = await prisma.opsCommand.findMany({
+      where: { equipment, status: "pending", expiresAt: { gt: now } },
+      orderBy: { requestedAt: "asc" },
+      take: 10,
+      select: { id: true, command: true, args: true },
+    });
+
+    const delivered: typeof ready = [];
+    for (const c of ready) {
+      const claimed = await prisma.opsCommand.updateMany({
+        where: { id: c.id, status: "pending" },
+        data: { status: "sent", sentAt: now },
+      });
+      if (claimed.count === 1) delivered.push(c);
+    }
+
+    // 만료 처리(배달되지 못한 것)
+    await prisma.opsCommand.updateMany({
+      where: { equipment, status: "pending", expiresAt: { lte: now } },
+      data: { status: "expired", finishedAt: now, result: "시간 초과" },
+    });
+
+    return NextResponse.json({ ok: true, commands: delivered });
   } catch (e) {
     console.error("[ops/ingest]", e);
     return NextResponse.json({ error: "server error" }, { status: 500 });

@@ -39,6 +39,7 @@ export type OpsStatus = {
   run: OpsRun | null;
   events: OpsEvent[];
   runs: OpsRun[];
+  commands?: OpsCommand[];
 };
 
 const KST = "Asia/Seoul";
@@ -85,3 +86,29 @@ export const ONLINE_WINDOW_MS = 30_000;
 export const RUN_LABEL: Record<string, string> = {
   running: "진행 중", done: "정상 종료", error: "오류 종료", aborted: "중단",
 };
+
+export type OpsCommand = {
+  id: number;
+  command: string;
+  label: string | null;
+  args: unknown;
+  status: string;
+  requestedBy: string;
+  requestedAt: string;
+  finishedAt: string | null;
+  result: string | null;
+};
+
+export const CMD_STATUS_LABEL: Record<string, string> = {
+  pending: "대기", sent: "전송됨", done: "완료", failed: "실패", expired: "만료",
+};
+
+// 로그가 멈춘 것으로 오해하지 않도록 상대 시각을 함께 보여준다
+export function fmtAgo(iso?: string | null): string {
+  if (!iso) return "";
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return "방금";
+  if (s < 3600) return `${Math.floor(s / 60)}분 전`;
+  if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
+  return `${Math.floor(s / 86400)}일 전`;
+}

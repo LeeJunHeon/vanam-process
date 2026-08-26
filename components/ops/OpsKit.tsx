@@ -3,9 +3,12 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import {
-  ONLINE_WINDOW_MS, RUN_LABEL, fmtDateTime, fmtDuration, fmtTime, secBetween,
-  type MetricGroup, type MetricItem, type OpsEvent, type OpsRun, type OpsStatus,
+  CMD_STATUS_LABEL, ONLINE_WINDOW_MS, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
+  fmtTime, secBetween,
+  type MetricGroup, type MetricItem, type OpsCommand, type OpsEvent, type OpsRun,
+  type OpsStatus,
 } from "@/lib/ops";
+import type { CmdDef } from "@/lib/opsCommands";
 
 // ── 데이터 훅 ────────────────────────────────────────────────
 export function useOpsStatus(equipment: string) {
@@ -346,18 +349,22 @@ export function EventFeed({ events }: { events?: OpsEvent[] }) {
     <Collapsible
       title="최근 이벤트"
       right={
-        <span
-          role="button"
-          tabIndex={0}
-          onClick={(e) => { e.stopPropagation(); setOnlyIssue((v) => !v); }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); setOnlyIssue((v) => !v); }
-          }}
-          className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${
-            onlyIssue ? "bg-rose-50 text-rose-600" : "text-gray-400"
-          }`}
-        >
-          경고·오류{issueCount > 0 && ` ${issueCount}`}
+        <span className="flex items-center gap-2">
+          {events?.[0] && (
+            <span className="text-[10px] text-gray-300">최근 {fmtAgo(events[0].ts)}</span>
+          )}
+          <span
+            role="button" tabIndex={0}
+            onClick={(e) => { e.stopPropagation(); setOnlyIssue((v) => !v); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); setOnlyIssue((v) => !v); }
+            }}
+            className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${
+              onlyIssue ? "bg-rose-50 text-rose-600" : "text-gray-400"
+            }`}
+          >
+            경고·오류{issueCount > 0 && ` ${issueCount}`}
+          </span>
         </span>
       }
     >
@@ -480,5 +487,183 @@ export function ReadOnlyNote() {
       읽기 전용 모니터링입니다. 원격 제어는 다음 단계에서 추가되며, 비상정지는 항상 현장
       E-Stop이 우선입니다.
     </p>
+  );
+}
+
+// ── 원격 제어 ────────────────────────────────────────────────
+// 모든 명령은 확인창을 거친다. 확인창 없이 실행되는 경로는 존재하지 않는다.
+export function ControlPanel({
+  equipment, defs, valves, online, disabled,
+}: {
+  equipment: string;
+  defs: CmdDef[];
+  valves?: Record<string, boolean>;
+  online: boolean;
+  disabled?: boolean;
+}) {
+  const [confirm, setConfirm] = useState<{ def: CmdDef; next?: boolean } | null>(null);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const groups = Array.from(new Set(defs.map((d) => d.group)));
+
+  const send = async () => {
+    if (!confirm) return;
+    setBusy(true);
+    setMsg(null);
+    try {
+      const args: Record<string, unknown> = {};
+      if (confirm.def.toggle) args.on = confirm.next;
+      if (confirm.def.needsValue) args.value = Number(value);
+      const res = await fetch("/api/ops/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ equipment, command: confirm.def.key, args }),
+      });
+      const j = await res.json();
+      setMsg(res.ok ? "명령을 전송했습니다." : (j?.error ?? "전송에 실패했습니다."));
+    } catch {
+      setMsg("전송에 실패했습니다.");
+    } finally {
+      setBusy(false);
+      setConfirm(null);
+      setValue("");
+    }
+  };
+
+  return (
+    <>
+      <Collapsible
+        title="원격 제어"
+        defaultOpen={false}
+        right={
+          <span className="text-[11px] text-gray-400">
+            {online ? "조작 가능" : "장비 미연결"}
+          </span>
+        }
+      >
+        {msg && <p className="mb-2 text-[11px] text-gray-500">{msg}</p>}
+        <div className="space-y-3">
+          {groups.map((g) => (
+            <div key={g}>
+              <p className="mb-1.5 text-[11px] font-semibold text-gray-400">{g}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {defs.filter((d) => d.group === g).map((d) => {
+                  const cur = d.stateKey ? Boolean(valves?.[d.stateKey]) : false;
+                  const next = d.toggle ? !cur : undefined;
+                  return (
+                    <button
+                      key={d.key}
+                      disabled={!online || disabled || busy}
+                      onClick={() => setConfirm({ def: d, next })}
+                      className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-40 ${
+                        d.danger
+                          ? "border-rose-200 text-rose-600 hover:bg-rose-50"
+                          : cur
+                            ? "border-gray-800 bg-gray-800 text-white"
+                            : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                      }`}
+                    >
+                      {d.label}
+                      {d.toggle && (
+                        <span className="ml-1 font-normal opacity-70">
+                          {cur ? "→ OFF" : "→ ON"}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </Collapsible>
+
+      {confirm && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-4">
+            <p className="text-sm font-bold text-gray-900">원격 제어 확인</p>
+            <p className="mt-2 text-sm text-gray-700">
+              <span className="font-semibold">{confirm.def.label}</span>
+              {confirm.def.toggle && (confirm.next ? " → ON" : " → OFF")} 명령을 실제 장비에
+              보냅니다.
+            </p>
+            {confirm.def.danger && (
+              <p className="mt-2 rounded-lg bg-rose-50 p-2 text-[11px] leading-relaxed text-rose-600">
+                물리적 위험이 있는 조작입니다. 장비 주변에 사람이 없는지 반드시 확인하세요.
+              </p>
+            )}
+            {confirm.def.needsValue && (
+              <input
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                inputMode="decimal"
+                placeholder="목표 온도 (℃)"
+                className="mt-3 w-full rounded-lg border border-gray-200 px-2 py-1.5 text-sm"
+              />
+            )}
+            <p className="mt-3 text-[11px] text-gray-400">
+              이 조작은 실행자 계정과 함께 기록됩니다.
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => { setConfirm(null); setValue(""); }}
+                className="rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={send}
+                disabled={busy || (!!confirm.def.needsValue && !value.trim())}
+                className={`rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 ${
+                  confirm.def.danger ? "bg-rose-600" : "bg-gray-800"
+                }`}
+              >
+                실행
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ── 조작 감사 로그 ───────────────────────────────────────────
+export function CommandLog({ commands }: { commands?: OpsCommand[] }) {
+  if (!commands?.length) {
+    return (
+      <OpsCard title="조작 기록">
+        <p className="py-5 text-center text-xs text-gray-300">원격 조작 기록이 없습니다</p>
+      </OpsCard>
+    );
+  }
+  return (
+    <OpsCard title="조작 기록">
+      <div className="divide-y divide-gray-50">
+        {commands.map((c) => (
+          <div key={c.id} className="flex items-center justify-between gap-2 py-1.5 text-xs">
+            <span className="min-w-0">
+              <span className="font-medium text-gray-800">{c.label ?? c.command}</span>
+              <span className="ml-2 text-[11px] text-gray-400">{c.requestedBy}</span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="text-[11px] text-gray-300">{fmtAgo(c.requestedAt)}</span>
+              <span
+                className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                  c.status === "done" ? "bg-gray-100 text-gray-500"
+                  : c.status === "failed" ? "bg-rose-50 text-rose-600"
+                  : c.status === "expired" ? "bg-amber-50 text-amber-600"
+                  : "bg-gray-800 text-white"
+                }`}
+              >
+                {CMD_STATUS_LABEL[c.status] ?? c.status}
+              </span>
+            </span>
+          </div>
+        ))}
+      </div>
+    </OpsCard>
   );
 }

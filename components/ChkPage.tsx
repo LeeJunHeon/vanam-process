@@ -1,10 +1,11 @@
 "use client";
 
 import {
-  ConnBadge, EventFeed, FlatMetrics, HeaterCard, MetricSections,
-  ReadOnlyNote, RunHistory, StatusHero, useOpsStatus,
+  CommandLog, ConnBadge, ControlPanel, EventFeed, FlatMetrics, HeaterCard,
+  MetricSections, RunHistory, StatusHero, useOpsStatus,
 } from "@/components/ops/OpsKit";
 import ChkMimic from "@/components/ops/ChkMimic";
+import { CHK_COMMANDS } from "@/lib/opsCommands";
 
 export default function ChkPage() {
   const { data, failed, online, updatedAt } = useOpsStatus("CHK");
@@ -43,9 +44,20 @@ export default function ChkPage() {
         </div>
       </div>
 
+      <ControlPanel
+        equipment="CHK"
+        defs={CHK_COMMANDS}
+        valves={p.valves}
+        online={online}
+      />
+
       <EventFeed events={data?.events} />
       <RunHistory runs={data?.runs} />
-      <ReadOnlyNote />
+      <CommandLog commands={data?.commands} />
+      <p className="flex items-start gap-1.5 px-1 text-[11px] leading-relaxed text-gray-400">
+        원격 조작은 모두 확인 후 실행되며 실행자와 함께 기록됩니다. 비상정지는 항상 현장
+        E-Stop이 우선입니다.
+      </p>
     </div>
   );
 }

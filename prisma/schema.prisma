@@ -268,3 +268,23 @@ model OpsEvent {
   @@map("ops_event")
   @@schema("process")
 }
+
+model OpsCommand {
+  id          Int       @id @default(autoincrement())
+  equipment   String
+  command     String
+  args        Json?
+  status      String    @default("pending")
+  label       String?
+  requestedBy String    @map("requested_by")
+  requestedAt DateTime  @default(now()) @map("requested_at")
+  expiresAt   DateTime  @map("expires_at")
+  sentAt      DateTime? @map("sent_at")
+  finishedAt  DateTime? @map("finished_at")
+  result      String?
+
+  @@index([equipment, requestedAt])
+  @@index([equipment, status])
+  @@map("ops_command")
+  @@schema("process")
+}
