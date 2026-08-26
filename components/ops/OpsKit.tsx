@@ -223,33 +223,29 @@ export function HeaterCard({
 }
 
 // ── 계측 ─────────────────────────────────────────────────────
-function Tile({ item }: { item: MetricItem }) {
+function MetricRow({ item }: { item: MetricItem }) {
   const pv = norm(item.value);
   const sv = norm(item.setpoint);
   const svOnly = !pv && !!sv;
   const main = pv || sv;
 
   return (
-    <div className="rounded-lg bg-gray-50 px-2 py-1.5">
-      <p className="flex items-center gap-1 text-[10px] leading-tight text-gray-400">
+    <div className="flex items-baseline justify-between gap-2 py-0.5 text-xs">
+      <span className="flex shrink-0 items-center gap-1 text-gray-400">
         <span className="truncate">{item.label}</span>
         {svOnly && (
-          <span className="shrink-0 rounded bg-gray-200 px-1 text-[9px] font-semibold text-gray-500">
-            설정
+          <span className="shrink-0 rounded bg-gray-100 px-1 text-[9px] font-semibold text-gray-400">
+            SV
           </span>
         )}
-      </p>
-      <p className={`truncate text-sm font-semibold leading-tight tabular-nums ${main ? "text-gray-900" : "text-gray-300"}`}>
-        {main || "—"}
-        {main && item.unit && (
-          <span className="ml-0.5 text-[10px] font-normal text-gray-400">{item.unit}</span>
-        )}
-      </p>
-      {(!svOnly && sv) || item.sub ? (
-        <p className="truncate text-[10px] leading-tight text-gray-300">
-          {!svOnly && sv ? `설정 ${sv}` : item.sub}
-        </p>
-      ) : null}
+      </span>
+      <span className="truncate text-right">
+        <span className={`font-semibold tabular-nums ${main ? "text-gray-900" : "text-gray-300"}`}>
+          {main || "—"}
+        </span>
+        {main && item.unit && <span className="ml-0.5 text-[10px] text-gray-400">{item.unit}</span>}
+        {!svOnly && sv && <span className="ml-1 text-[10px] text-gray-300">/ {sv}</span>}
+      </span>
     </div>
   );
 }
@@ -258,17 +254,19 @@ export function MetricSections({ groups }: { groups?: MetricGroup[] }) {
   if (!groups?.length) return null;
   return (
     <OpsCard title="계측">
-      <div className="@container space-y-2.5">
-        {groups.map((g) => (
-          <div key={g.label}>
-            <p className="mb-1 text-[11px] font-semibold text-gray-400">{g.label}</p>
-            <div className="grid grid-cols-2 gap-1.5 @sm:grid-cols-3 @2xl:grid-cols-5 @5xl:grid-cols-8">
+      <div className="@container">
+        <div className="grid grid-cols-1 gap-x-6 gap-y-3 @md:grid-cols-2 @3xl:grid-cols-3 @5xl:grid-cols-4">
+          {groups.map((g) => (
+            <div key={g.label}>
+              <p className="mb-1 border-b border-gray-100 pb-1 text-[11px] font-semibold text-gray-400">
+                {g.label}
+              </p>
               {g.items.map((it) => (
-                <Tile key={it.label} item={it} />
+                <MetricRow key={it.label} item={it} />
               ))}
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </OpsCard>
   );

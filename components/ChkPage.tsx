@@ -2,8 +2,9 @@
 
 import {
   ConnBadge, EventFeed, FlatMetrics, HeaterCard, MetricSections,
-  ReadOnlyNote, RunHistory, StateChips, StatusHero, useOpsStatus,
+  ReadOnlyNote, RunHistory, StatusHero, useOpsStatus,
 } from "@/components/ops/OpsKit";
+import ChkMimic from "@/components/ops/ChkMimic";
 
 export default function ChkPage() {
   const { data, failed, online, updatedAt } = useOpsStatus("CHK");
@@ -11,7 +12,7 @@ export default function ChkPage() {
   const lastRun = data?.runs?.find((r) => r.status !== "running") ?? null;
 
   return (
-    <div className="space-y-3 p-3 sm:space-y-4 sm:p-6">
+    <div className="space-y-3 p-3 sm:p-6">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-bold text-gray-900">CHK</h2>
         <ConnBadge online={online} updatedAt={updatedAt} />
@@ -33,12 +34,15 @@ export default function ChkPage() {
         lastRun={lastRun}
       />
 
-      <HeaterCard heater={p.heater} />
+      <div className="grid grid-cols-1 gap-3 @container xl:grid-cols-2">
+        <ChkMimic indicators={p.indicators} valves={p.valves} heater={p.heater} />
+        <div className="space-y-3">
+          <HeaterCard heater={p.heater} />
+          <MetricSections groups={p.groups} />
+          {!p.groups?.length && <FlatMetrics metrics={p.metrics} />}
+        </div>
+      </div>
 
-      <MetricSections groups={p.groups} />
-      {!p.groups?.length && <FlatMetrics metrics={p.metrics} />}
-
-      <StateChips indicators={p.indicators} valves={p.valves} />
       <EventFeed events={data?.events} />
       <RunHistory runs={data?.runs} />
       <ReadOnlyNote />
