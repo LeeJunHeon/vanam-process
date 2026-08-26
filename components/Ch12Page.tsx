@@ -1056,7 +1056,7 @@ export default function Ch12Page() {
   };
 
   return (
-    <div className="space-y-4 p-4 sm:p-6">
+    <div className="space-y-3 p-3 sm:space-y-4 sm:p-6">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-base font-bold text-gray-900">CH1&2 Sputter</h2>
         <SampleBadge />

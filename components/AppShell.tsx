@@ -103,7 +103,7 @@ export default function AppShell() {
           {page === "orders" && <OrdersPage />}
           {page === "substrate" && <SubstratePage />}
           {page === "activity" && <ActivityPage />}
-          {page === "opsDashboard" && <OpsDashboardPage />}
+          {page === "opsDashboard" && <OpsDashboardPage onNavigate={setPage} />}
           {page === "equipCh12" && <Ch12Page />}
           {page === "equipChk" && <ChkPage />}
           {page === "equipRayvac" && <EquipmentStubPage equip="rayvac" />}
