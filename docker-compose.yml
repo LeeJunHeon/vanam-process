@@ -24,6 +24,7 @@ services:
       SMTP_USER: ${SMTP_USER}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM: ${SMTP_FROM}
+      OPS_INGEST_TOKEN: ${OPS_INGEST_TOKEN}
     volumes:
       - /volume1/docker/process-web/uploads:/app/uploads
       - /volume1/docker/process-web/secrets:/app/secrets:ro
