@@ -24,6 +24,10 @@ export default auth((req: NextRequest & { auth: any }) => {
   // 포털 대시보드 카드용 cross-origin API — route 핸들러가 자체 인증/CORS 처리
   if (pathname === "/api/portal-summary") return NextResponse.next();
 
+  // 장비 리포터 수집 API — 세션이 아닌 Bearer 토큰(OPS_INGEST_TOKEN) 인증.
+  // route 핸들러가 자체 검증하므로 미들웨어 세션 검사에서 제외한다.
+  if (pathname === "/api/ops/ingest") return NextResponse.next();
+
   // /api/* 미인증 시 401 JSON
   if (pathname.startsWith("/api/")) {
     if (!req.auth?.user)
