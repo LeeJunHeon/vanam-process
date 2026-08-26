@@ -239,6 +239,7 @@ model OpsState {
 
 model OpsRun {
   id          Int        @id @default(autoincrement())
+  msgId       String?    @unique @map("msg_id")
   equipment   String
   status      String
   processName String?    @map("process_name")
@@ -255,6 +256,7 @@ model OpsRun {
 
 model OpsEvent {
   id        Int      @id @default(autoincrement())
+  msgId     String?  @unique @map("msg_id")
   equipment String
   runId     Int?     @map("run_id")
   run       OpsRun?  @relation(fields: [runId], references: [id])
