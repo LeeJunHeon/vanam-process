@@ -12,6 +12,7 @@ import ActivityPage from "@/components/ActivityPage";
 import OpsDashboardPage from "@/components/OpsDashboardPage";
 import Ch12Page from "@/components/Ch12Page";
 import EquipmentStubPage from "@/components/EquipmentStubPage";
+import ChkPage from "@/components/ChkPage";
 
 type Page =
   | "dashboard" | "processes" | "orders" | "substrate" | "activity"
@@ -104,7 +105,7 @@ export default function AppShell() {
           {page === "activity" && <ActivityPage />}
           {page === "opsDashboard" && <OpsDashboardPage />}
           {page === "equipCh12" && <Ch12Page />}
-          {page === "equipChk" && <EquipmentStubPage equip="chk" />}
+          {page === "equipChk" && <ChkPage />}
           {page === "equipRayvac" && <EquipmentStubPage equip="rayvac" />}
           {page === "equipNcd" && <EquipmentStubPage equip="ncd" />}
           {page === "equipEvap" && <EquipmentStubPage equip="evap" />}

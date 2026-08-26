@@ -223,3 +223,46 @@ model WorkOrderProcess {
   @@map("work_order_process")
   @@schema("process")
 }
+
+// ───────────────────────────────────────────────
+// 장비 운전 모니터링 (erp-agent / 장비 리포터가 수집)
+// ───────────────────────────────────────────────
+
+model OpsState {
+  equipment String   @id
+  payload   Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("ops_state")
+  @@schema("process")
+}
+
+model OpsRun {
+  id          Int        @id @default(autoincrement())
+  equipment   String
+  status      String
+  processName String?    @map("process_name")
+  params      Json?
+  startedAt   DateTime   @map("started_at")
+  endedAt     DateTime?  @map("ended_at")
+  errorMsg    String?    @map("error_msg")
+  events      OpsEvent[]
+
+  @@index([equipment, startedAt])
+  @@map("ops_run")
+  @@schema("process")
+}
+
+model OpsEvent {
+  id        Int      @id @default(autoincrement())
+  equipment String
+  runId     Int?     @map("run_id")
+  run       OpsRun?  @relation(fields: [runId], references: [id])
+  ts        DateTime
+  level     String
+  message   String
+
+  @@index([equipment, ts])
+  @@map("ops_event")
+  @@schema("process")
+}
