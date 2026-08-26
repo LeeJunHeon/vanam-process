@@ -62,9 +62,9 @@ export function OpsCard({
   title, right, children, className = "",
 }: { title?: string; right?: ReactNode; children: ReactNode; className?: string }) {
   return (
-    <section className={`rounded-2xl border border-gray-100 bg-white p-3 sm:p-4 ${className}`}>
+    <section className={`rounded-2xl border border-gray-100 bg-white p-3 ${className}`}>
       {(title || right) && (
-        <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
           {title && <h3 className="text-sm font-bold text-gray-900">{title}</h3>}
           {right}
         </div>
@@ -83,7 +83,7 @@ export function Collapsible({
     <section className="rounded-2xl border border-gray-100 bg-white">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-3 text-left sm:px-4"
+        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
       >
         <span className="text-sm font-bold text-gray-900">{title}</span>
         <span className="flex items-center gap-2">
@@ -94,7 +94,7 @@ export function Collapsible({
           />
         </span>
       </button>
-      {open && <div className="px-3 pb-3 sm:px-4 sm:pb-4">{children}</div>}
+      {open && <div className="px-3 pb-3">{children}</div>}
     </section>
   );
 }
@@ -138,7 +138,7 @@ export function StatusHero({
   if (!running) {
     return (
       <OpsCard>
-        <p className="text-xl font-bold tracking-tight text-gray-900 sm:text-2xl">대기 중</p>
+        <p className="text-lg font-bold tracking-tight text-gray-900 sm:text-xl">대기 중</p>
         <p className="mt-1 text-xs text-gray-400">
           {lastRun
             ? `마지막 공정 ${fmtDateTime(lastRun.startedAt)} · ${lastRun.processName ?? "이름 없음"} · ${RUN_LABEL[lastRun.status] ?? lastRun.status}`
@@ -205,26 +205,18 @@ export function HeaterCard({
 
   return (
     <OpsCard title="기판 히터">
-      <div className="flex flex-wrap items-end gap-x-5 gap-y-2">
-        <div>
-          <p className="text-[11px] text-gray-400">현재</p>
-          <p className={`text-2xl font-bold tabular-nums ${pv ? "text-gray-900" : "text-gray-300"}`}>
-            {pv || "—"}
-            {pv && <span className="ml-1 text-xs font-normal text-gray-400">℃</span>}
-          </p>
-        </div>
-        <div className="pb-1">
-          <p className="text-[11px] text-gray-400">목표</p>
-          <p className={`text-sm font-semibold tabular-nums ${sv ? "text-gray-600" : "text-gray-300"}`}>
-            {sv ? `${sv} ℃` : "—"}
-          </p>
-        </div>
-        <div className="ml-auto pb-1 text-right">
-          {st && <p className={`text-xs font-semibold ${tone}`}>{st}</p>}
-          {norm(heater.output) && (
-            <p className="text-[10px] text-gray-400">{heater.output}</p>
-          )}
-        </div>
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+        <p className={`text-xl font-bold tabular-nums ${pv ? "text-gray-900" : "text-gray-300"}`}>
+          {pv || "—"}
+          {pv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
+        </p>
+        <p className="text-[11px] text-gray-400">
+          목표 <span className={sv ? "text-gray-600" : "text-gray-300"}>{sv ? `${sv} ℃` : "—"}</span>
+        </p>
+        {st && <p className={`text-[11px] font-semibold ${tone}`}>{st}</p>}
+        {norm(heater.output) && (
+          <p className="text-[10px] text-gray-400">{heater.output}</p>
+        )}
       </div>
     </OpsCard>
   );
@@ -238,8 +230,8 @@ function Tile({ item }: { item: MetricItem }) {
   const main = pv || sv;
 
   return (
-    <div className="rounded-xl bg-gray-50 px-2.5 py-2">
-      <p className="flex items-center gap-1 text-[10px] text-gray-400">
+    <div className="rounded-lg bg-gray-50 px-2 py-1.5">
+      <p className="flex items-center gap-1 text-[10px] leading-tight text-gray-400">
         <span className="truncate">{item.label}</span>
         {svOnly && (
           <span className="shrink-0 rounded bg-gray-200 px-1 text-[9px] font-semibold text-gray-500">
@@ -247,15 +239,17 @@ function Tile({ item }: { item: MetricItem }) {
           </span>
         )}
       </p>
-      <p className={`truncate text-base font-semibold tabular-nums ${main ? "text-gray-900" : "text-gray-300"}`}>
+      <p className={`truncate text-sm font-semibold leading-tight tabular-nums ${main ? "text-gray-900" : "text-gray-300"}`}>
         {main || "—"}
         {main && item.unit && (
-          <span className="ml-0.5 text-[11px] font-normal text-gray-400">{item.unit}</span>
+          <span className="ml-0.5 text-[10px] font-normal text-gray-400">{item.unit}</span>
         )}
       </p>
-      <p className="h-3.5 truncate text-[10px] text-gray-300">
-        {!svOnly && sv ? `설정 ${sv}` : (item.sub ?? "")}
-      </p>
+      {(!svOnly && sv) || item.sub ? (
+        <p className="truncate text-[10px] leading-tight text-gray-300">
+          {!svOnly && sv ? `설정 ${sv}` : item.sub}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -264,11 +258,11 @@ export function MetricSections({ groups }: { groups?: MetricGroup[] }) {
   if (!groups?.length) return null;
   return (
     <OpsCard title="계측">
-      <div className="space-y-4">
+      <div className="@container space-y-2.5">
         {groups.map((g) => (
           <div key={g.label}>
-            <p className="mb-1.5 text-[11px] font-semibold text-gray-400">{g.label}</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            <p className="mb-1 text-[11px] font-semibold text-gray-400">{g.label}</p>
+            <div className="grid grid-cols-2 gap-1.5 @sm:grid-cols-3 @2xl:grid-cols-5 @5xl:grid-cols-8">
               {g.items.map((it) => (
                 <Tile key={it.label} item={it} />
               ))}
@@ -377,7 +371,7 @@ export function EventFeed({ events }: { events?: OpsEvent[] }) {
         <>
           <div className="space-y-1">
             {shown.map((e) => (
-              <p key={e.id} className="flex gap-2 text-[11px] leading-relaxed">
+              <p key={e.id} className="flex gap-2 text-[11px] leading-snug">
                 <span className="shrink-0 font-mono text-gray-300">{fmtTime(e.ts)}</span>
                 <span
                   className={
