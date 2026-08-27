@@ -1,16 +1,18 @@
 "use client";
 
 import {
-  CommandLog, ConnBadge, ControlPanel, EventFeed, FlatMetrics, HeaterCard,
-  MetricSections, RunHistory, StatusHero, useOpsStatus,
+  CommandLog, ConnBadge, EventFeed, HeaterCard, MetricSections,
+  RunHistory, StatusHero, useCommandSender, useOpsStatus,
 } from "@/components/ops/OpsKit";
 import ChkMimic from "@/components/ops/ChkMimic";
-import { CHK_COMMANDS } from "@/lib/opsCommands";
+import ChkProcessForm from "@/components/ops/ChkProcessForm";
 
 export default function ChkPage() {
   const { data, failed, online, updatedAt } = useOpsStatus("CHK");
+  const { request, dialog, msg } = useCommandSender("CHK");
   const p = data?.state?.payload ?? {};
   const lastRun = data?.runs?.find((r) => r.status !== "running") ?? null;
+  const running = online && (p.status === "running" || !!data?.run);
 
   return (
     <div className="space-y-3 p-3 sm:p-6">
@@ -19,9 +21,9 @@ export default function ChkPage() {
         <ConnBadge online={online} updatedAt={updatedAt} />
       </div>
 
-      {failed && (
-        <p className="rounded-2xl border border-gray-100 bg-white p-3 text-xs text-gray-500">
-          상태를 불러오지 못했습니다. 로그인 상태를 확인해 주세요.
+      {(failed || msg) && (
+        <p className="rounded-2xl border border-gray-100 bg-white p-3 text-xs text-gray-600">
+          {failed ? "상태를 불러오지 못했습니다. 로그인 상태를 확인해 주세요." : msg}
         </p>
       )}
 
@@ -35,29 +37,27 @@ export default function ChkPage() {
         lastRun={lastRun}
       />
 
-      <div className="grid grid-cols-1 gap-3 @container xl:grid-cols-2">
-        <ChkMimic indicators={p.indicators} valves={p.valves} heater={p.heater} />
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <ChkMimic
+          indicators={p.indicators}
+          valves={p.valves}
+          heater={p.heater}
+          online={online}
+          onRequest={request}
+        />
         <div className="space-y-3">
           <HeaterCard heater={p.heater} />
           <MetricSections groups={p.groups} />
-          {!p.groups?.length && <FlatMetrics metrics={p.metrics} />}
         </div>
       </div>
 
-      <ControlPanel
-        equipment="CHK"
-        defs={CHK_COMMANDS}
-        valves={p.valves}
-        online={online}
-      />
+      <ChkProcessForm online={online} running={running} onRequest={request} />
 
       <EventFeed events={data?.events} />
       <RunHistory runs={data?.runs} />
       <CommandLog commands={data?.commands} />
-      <p className="flex items-start gap-1.5 px-1 text-[11px] leading-relaxed text-gray-400">
-        원격 조작은 모두 확인 후 실행되며 실행자와 함께 기록됩니다. 비상정지는 항상 현장
-        E-Stop이 우선입니다.
-      </p>
+
+      {dialog}
     </div>
   );
 }

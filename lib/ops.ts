@@ -44,11 +44,19 @@ export type OpsStatus = {
 
 const KST = "Asia/Seoul";
 
+// 오늘 발생한 이벤트는 시:분:초만, 이전 날짜는 월-일을 함께 보여준다.
+// (날짜가 없으면 어제 로그를 오늘 것으로 오해하게 된다)
 export function fmtTime(iso?: string | null): string {
   if (!iso) return "-";
-  return new Date(iso).toLocaleTimeString("ko-KR", {
+  const d = new Date(iso);
+  const t = d.toLocaleTimeString("ko-KR", {
     hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: KST,
   });
+  const day = (x: Date) =>
+    x.toLocaleDateString("ko-KR", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: KST });
+  if (day(d) === day(new Date())) return t;
+  const md = d.toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit", timeZone: KST });
+  return `${md.replace(/\.$/, "")} ${t}`;
 }
 
 export function fmtDateTime(iso?: string | null): string {

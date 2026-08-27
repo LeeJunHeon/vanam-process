@@ -4,39 +4,39 @@
 export type CmdDef = {
   key: string;
   label: string;
-  group: "공정" | "가스" | "펌프·밸브" | "셔터" | "도어" | "히터" | "기타";
-  toggle?: boolean;      // on/off 상태를 갖는 조작
-  stateKey?: string;     // payload.valves 에서 현재 상태를 읽을 키
+  stateKey?: string;   // payload.valves 의 현재 상태 키
   danger?: boolean;
-  needsValue?: "number"; // 값 입력이 필요한 명령(히터 목표온도)
+};
+
+// 계통도에서 클릭 가능한 조작 (PLC 코일 및 도어)
+export const CHK_NODE_COMMANDS: Record<string, CmdDef> = {
+  Ar_Button:      { key: "Ar_Button", label: "Ar 밸브", stateKey: "Ar" },
+  O2_Button:      { key: "O2_Button", label: "O₂ 밸브", stateKey: "O2" },
+  Rotary_button:  { key: "Rotary_button", label: "Rotary 펌프", stateKey: "Rotary" },
+  Turbo_button:   { key: "Turbo_button", label: "Turbo 펌프", stateKey: "Turbo" },
+  RV_button:      { key: "RV_button", label: "R.V.", stateKey: "RV" },
+  FV_button:      { key: "FV_button", label: "F.V.", stateKey: "FV" },
+  MV_button:      { key: "MV_button", label: "M.V.", stateKey: "MV" },
+  Vent_button:    { key: "Vent_button", label: "Vent", stateKey: "Vent", danger: true },
+  MS_button:      { key: "MS_button", label: "메인 셔터", stateKey: "MS" },
+  S1_button:      { key: "S1_button", label: "S1 셔터", stateKey: "S1" },
+  S2_button:      { key: "S2_button", label: "S2 셔터", stateKey: "S2" },
+  Door_Button:    { key: "Door_Button", label: "도어", stateKey: "Door", danger: true },
+  BuzzStop_Button:{ key: "BuzzStop_Button", label: "부저 정지", stateKey: "BuzzStop" },
+};
+
+// 공정·히터 등 상태 토글이 아닌 명령
+export const CHK_ACTION_COMMANDS: Record<string, CmdDef> = {
+  PROCESS_START: { key: "PROCESS_START", label: "공정 시작", danger: true },
+  PROCESS_STOP:  { key: "PROCESS_STOP", label: "공정 정지" },
+  ALL_STOP:      { key: "ALL_STOP", label: "비상 정지(ALL STOP)", danger: true },
+  HEATER_SV:     { key: "HEATER_SV", label: "히터 목표온도 설정" },
+  HEATER_ONOFF:  { key: "HEATER_ONOFF", label: "히터 운전" },
 };
 
 export const CHK_COMMANDS: CmdDef[] = [
-  { key: "PROCESS_START", label: "공정 시작", group: "공정", danger: true },
-  { key: "PROCESS_STOP", label: "공정 정지", group: "공정" },
-  { key: "ALL_STOP", label: "비상 정지(ALL STOP)", group: "공정", danger: true },
-
-  { key: "Ar_Button", label: "Ar 밸브", group: "가스", toggle: true, stateKey: "Ar" },
-  { key: "O2_Button", label: "O₂ 밸브", group: "가스", toggle: true, stateKey: "O2" },
-
-  { key: "Rotary_button", label: "Rotary 펌프", group: "펌프·밸브", toggle: true, stateKey: "Rotary" },
-  { key: "Turbo_button", label: "Turbo 펌프", group: "펌프·밸브", toggle: true, stateKey: "Turbo" },
-  { key: "RV_button", label: "R.V.", group: "펌프·밸브", toggle: true, stateKey: "RV" },
-  { key: "FV_button", label: "F.V.", group: "펌프·밸브", toggle: true, stateKey: "FV" },
-  { key: "MV_button", label: "M.V.", group: "펌프·밸브", toggle: true, stateKey: "MV" },
-  { key: "Vent_button", label: "Vent", group: "펌프·밸브", toggle: true, stateKey: "Vent", danger: true },
-
-  { key: "MS_button", label: "메인 셔터", group: "셔터", toggle: true, stateKey: "MS" },
-  { key: "S1_button", label: "S1 셔터", group: "셔터", toggle: true, stateKey: "S1" },
-  { key: "S2_button", label: "S2 셔터", group: "셔터", toggle: true, stateKey: "S2" },
-
-  { key: "Doorup_button", label: "도어 상승", group: "도어", toggle: true, stateKey: "Doorup", danger: true },
-  { key: "Doordn_button", label: "도어 하강", group: "도어", toggle: true, stateKey: "Doordn", danger: true },
-
-  { key: "HEATER_SV", label: "히터 목표온도 설정", group: "히터", needsValue: "number" },
-  { key: "HEATER_ONOFF", label: "히터 운전", group: "히터", toggle: true },
-
-  { key: "BuzzStop_Button", label: "부저 정지", group: "기타", toggle: true, stateKey: "BuzzStop" },
+  ...Object.values(CHK_NODE_COMMANDS),
+  ...Object.values(CHK_ACTION_COMMANDS),
 ];
 
 export const COMMAND_MAP: Record<string, CmdDef[]> = { CHK: CHK_COMMANDS };
