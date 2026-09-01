@@ -74,16 +74,15 @@ export default function ChkPage() {
         lastRun={lastRun}
       />
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
         <ChkMimic
           indicators={p.indicators}
           valves={valves}
-          heater={p.heater}
           online={online}
           pendingStates={pendingFlat}
           onRequest={request}
         />
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           <HeaterCard heater={p.heater} online={online} running={running} onRequest={request} />
           <IonizerCard
             ion={p.ion}
@@ -91,7 +90,9 @@ export default function ChkPage() {
             online={online}
             onRequest={request}
           />
-          <MetricSections groups={p.groups} />
+          <div className="flex-1">
+            <MetricSections groups={p.groups} />
+          </div>
         </div>
       </div>
 

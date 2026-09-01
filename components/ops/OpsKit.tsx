@@ -239,13 +239,17 @@ export function HeaterCard({
             return (
               <button
                 key={String(want)}
-                disabled={!online}
+                disabled={!online || (want && !target.trim() && !sv)}
                 onClick={() =>
                   onRequest({
                     command: "HEATER_ONOFF",
                     label: "히터 운전",
-                    detail: want ? "→ ON" : "→ OFF",
-                    args: { on: want },
+                    detail: want
+                      ? `→ ON${(target.trim() || sv) ? ` (${target.trim() || sv}℃)` : ""}`
+                      : "→ OFF",
+                    args: want
+                      ? { on: true, value: target.trim() || sv || "" }
+                      : { on: false },
                   })
                 }
                 className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40 ${
@@ -261,6 +265,11 @@ export function HeaterCard({
             );
           })}
         </span>
+        {!sv && !target.trim() && (
+          <span className="w-full text-[10px] text-gray-400">
+            목표 온도를 입력해야 운전을 켤 수 있습니다
+          </span>
+        )}
         {heater?.recipeRunning && (
           <span className="text-[10px] font-semibold text-blue-600">히터 레시피 실행 중</span>
         )}
@@ -349,13 +358,13 @@ function MetricRow({ item }: { item: MetricItem }) {
 export function MetricSections({ groups }: { groups?: MetricGroup[] }) {
   if (!groups?.length) {
     return (
-      <OpsCard title="현재 값">
+      <OpsCard title="현재 값" className="h-full">
         <p className="py-4 text-center text-xs text-gray-300">수신된 값이 없습니다</p>
       </OpsCard>
     );
   }
   return (
-    <OpsCard title="현재 값">
+    <OpsCard title="현재 값" className="h-full">
       <div className="@container">
         <div className="grid grid-cols-1 gap-x-6 gap-y-3 @md:grid-cols-2">
           {groups.map((g) => (

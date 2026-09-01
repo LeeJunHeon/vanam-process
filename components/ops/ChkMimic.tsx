@@ -6,7 +6,6 @@ import type { PendingCmd } from "@/components/ops/OpsKit";
 type Props = {
   valves?: Record<string, boolean>;
   indicators?: Record<string, boolean>;
-  heater?: { pv?: string; sv?: string; status?: string };
   online: boolean;
   /** stateKey → 요청한 목표 상태. 실제 상태가 도달할 때까지 "전환 중"으로 표시 */
   pendingStates?: Record<string, boolean>;
@@ -22,7 +21,7 @@ const PIPE = "#d4d4d8";
 const PIPE_ON = "#86efac";
 
 export default function ChkMimic({
-  valves, indicators, heater, online, pendingStates, onRequest,
+  valves, indicators, online, pendingStates, onRequest,
 }: Props) {
   const v = (k: string) => Boolean(valves?.[k]);
   const ind = (k: string) => Boolean(indicators?.[k]);
@@ -82,16 +81,15 @@ export default function ChkMimic({
       strokeLinecap="round" strokeLinejoin="round" />
   );
 
-  const heaterOn = (heater?.status ?? "").includes("운전");
   const lamps = [
     { key: "Air", label: "Air" }, { key: "G1", label: "G1" }, { key: "G2", label: "G2" },
     { key: "ATM", label: "ATM", alert: true }, { key: "Water", label: "Water" },
   ];
 
   return (
-    <section className="rounded-2xl border border-gray-100 bg-white p-3">
+    <section className="flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-sm font-bold text-gray-900">챔버 계통도</h3>
+        <h3 className="text-sm font-bold text-gray-900">HMI</h3>
         <span className="text-[11px] text-gray-400">
           {online ? "노드를 눌러 조작" : "장비 미연결"}
         </span>
@@ -113,26 +111,26 @@ export default function ChkMimic({
         })}
       </div>
 
-      <svg viewBox="0 0 640 344" className="w-full select-none"
-        role="img" aria-label="CHK 챔버 계통도">
+      <svg viewBox="0 0 640 320" className="my-auto w-full select-none"
+        role="img" aria-label="CHK HMI">
         {/* 1층: 배관 */}
         <g>
           <Pipe d="M 92 76 H 118" on={isOn("Ar_Button")} />
           <Pipe d="M 190 76 H 232" on={isOn("Ar_Button")} />
-          <Pipe d="M 92 152 H 118" on={isOn("O2_Button")} />
-          <Pipe d="M 190 152 H 232" on={isOn("O2_Button")} />
+          <Pipe d="M 92 140 H 118" on={isOn("O2_Button")} />
+          <Pipe d="M 190 140 H 232" on={isOn("O2_Button")} />
           <Pipe d="M 320 40 V 52" on={isOn("Door_Button")} />
           <Pipe d="M 408 76 H 448" on={isOn("Vent_button")} />
-          <Pipe d="M 290 208 V 236" on={isOn("MV_button")} />
-          <Pipe d="M 290 282 V 300" on={isOn("Turbo_button")} />
-          <Pipe d="M 352 322 H 400" on={isOn("FV_button")} />
-          <Pipe d="M 492 322 H 528" on={isOn("Rotary_button")} />
-          <Pipe d="M 386 208 V 222 H 576 V 236" on={isOn("RV_button")} />
-          <Pipe d="M 576 282 V 300" on={isOn("RV_button")} />
+          <Pipe d="M 290 176 V 204" on={isOn("MV_button")} />
+          <Pipe d="M 290 250 V 268" on={isOn("Turbo_button")} />
+          <Pipe d="M 352 290 H 400" on={isOn("FV_button")} />
+          <Pipe d="M 492 290 H 528" on={isOn("Rotary_button")} />
+          <Pipe d="M 386 176 V 190 H 576 V 204" on={isOn("RV_button")} />
+          <Pipe d="M 576 250 V 268" on={isOn("RV_button")} />
         </g>
 
         {/* 2층: 챔버 본체 */}
-        <rect x={232} y={52} width={176} height={156} rx={12}
+        <rect x={232} y={52} width={176} height={124} rx={12}
           fill="#fafafa" stroke="#a1a1aa" strokeWidth={2} />
         <text x={320} y={70} textAnchor="middle" fontSize={13} fontWeight={700} fill="#52525b">
           Chamber
@@ -142,27 +140,18 @@ export default function ChkMimic({
         <g>
           <Static x={16} y={54} w={76} h={44} label="MFC" />
           <Node x={118} y={54} w={72} h={44} label="Ar" btn="Ar_Button" fs={13} />
-          <Static x={16} y={130} w={76} h={44} label="MFC" />
-          <Node x={118} y={130} w={72} h={44} label="O₂" btn="O2_Button" fs={13} />
+          <Static x={16} y={118} w={76} h={44} label="MFC" />
+          <Node x={118} y={118} w={72} h={44} label="O₂" btn="O2_Button" fs={13} />
           <Node x={262} y={2} w={116} h={38} label="Door" btn="Door_Button" fs={13} />
           <Node x={448} y={54} w={96} h={44} label="Vent" btn="Vent_button" fs={13} />
-          <Node x={244} y={80} w={78} h={30} label="S1" btn="S1_button" fs={12} />
-          <Node x={318} y={80} w={78} h={30} label="S2" btn="S2_button" fs={12} />
-          <Node x={252} y={120} w={136} h={30} label="M.S." btn="MS_button" fs={12} />
-          <g>
-            <rect x={252} y={160} width={136} height={32} rx={8}
-              fill={heaterOn ? GREEN : "#ffffff"} stroke={heaterOn ? GREEN_D : GRAY_D}
-              strokeWidth={heaterOn ? 2 : 1.25} />
-            <text x={320} y={176} textAnchor="middle" dominantBaseline="central"
-              fontSize={12} fontWeight={700} fill={heaterOn ? "#052e16" : "#52525b"}>
-              Heater{heater?.pv ? ` ${heater.pv}℃` : ""}
-            </text>
-          </g>
-          <Node x={238} y={236} w={104} h={46} label="M.V." btn="MV_button" fs={13} />
-          <Node x={232} y={300} w={120} h={44} label="Turbo" btn="Turbo_button" fs={13} />
-          <Node x={400} y={300} w={92} h={44} label="F.V." btn="FV_button" fs={13} />
-          <Node x={528} y={300} w={96} h={44} label="Rotary" btn="Rotary_button" fs={13} />
-          <Node x={524} y={236} w={104} h={46} label="R.V." btn="RV_button" fs={13} />
+          <Node x={242} y={84} w={76} h={30} label="S1" btn="S1_button" fs={12} />
+          <Node x={322} y={84} w={76} h={30} label="S2" btn="S2_button" fs={12} />
+          <Node x={252} y={128} w={136} h={30} label="M.S." btn="MS_button" fs={12} />
+          <Node x={238} y={204} w={104} h={46} label="M.V." btn="MV_button" fs={13} />
+          <Node x={232} y={268} w={120} h={44} label="Turbo" btn="Turbo_button" fs={13} />
+          <Node x={400} y={268} w={92} h={44} label="F.V." btn="FV_button" fs={13} />
+          <Node x={528} y={268} w={96} h={44} label="Rotary" btn="Rotary_button" fs={13} />
+          <Node x={524} y={204} w={104} h={46} label="R.V." btn="RV_button" fs={13} />
         </g>
       </svg>
 
