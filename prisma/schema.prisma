@@ -288,3 +288,20 @@ model OpsCommand {
   @@map("ops_command")
   @@schema("process")
 }
+
+model OpsRecipe {
+  id        Int      @id @default(autoincrement())
+  equipment String
+  kind      String
+  name      String
+  rows      Json
+  createdBy String   @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedBy String   @map("updated_by")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@unique([equipment, kind, name])
+  @@index([equipment, kind, name])
+  @@map("ops_recipe")
+  @@schema("process")
+}

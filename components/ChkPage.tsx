@@ -104,7 +104,7 @@ export default function ChkPage() {
           <RunHistory runs={data?.runs} />
           <CommandLog commands={data?.commands} />
         </div>
-        <ChkRecipe online={online} onRequest={request} />
+        <ChkRecipe />
       </div>
 
       {dialog}

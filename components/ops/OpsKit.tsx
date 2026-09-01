@@ -8,6 +8,7 @@ import {
   type MetricGroup, type MetricItem, type OpsCommand, type OpsEvent, type OpsRun,
   type OpsStatus,
 } from "@/lib/ops";
+import RecipePicker, { type RecipeItem } from "@/components/ops/RecipePicker";
 
 // ── 데이터 훅 ────────────────────────────────────────────────
 // 기본 2.5초 폴링. 명령을 보낸 직후에는 boost()로 0.6초 간격 고속 조회로 전환한다.
@@ -191,6 +192,8 @@ export function HeaterCard({
   onRequest: (c: PendingCmd) => void;
 }) {
   const [target, setTarget] = useState("");
+  const [picker, setPicker] = useState(false);
+  const [recipe, setRecipe] = useState<RecipeItem | null>(null);
   const pv = norm(heater?.pv);
   const sv = norm(heater?.sv);
   const st = norm(heater?.status);
@@ -198,7 +201,15 @@ export function HeaterCard({
     : st === "인터락" ? "text-amber-600" : "text-gray-500";
 
   return (
-    <OpsCard title="기판 히터">
+    <OpsCard
+      title="히터"
+      right={
+        <button onClick={() => setPicker(true)}
+          className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-700">
+          레시피 불러오기
+        </button>
+      }
+    >
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <p className={`text-xl font-bold tabular-nums ${pv ? "text-gray-900" : "text-gray-300"}`}>
           {pv || "-"}
@@ -275,6 +286,34 @@ export function HeaterCard({
         )}
         {running && <span className="text-[10px] text-amber-600">공정 중 변경 주의</span>}
       </div>
+
+      {recipe && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
+          <span className="text-[11px] font-semibold text-gray-700">
+            레시피 · {recipe.name} ({recipe.rows.length}단계)
+          </span>
+          <button disabled={!online}
+            onClick={() => onRequest({
+              command: "RECIPE_HEATER_RUN", label: "히터 레시피 실행",
+              detail: recipe.name, args: { rows: recipe.rows },
+            })}
+            className="rounded-lg bg-gray-800 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40">
+            실행
+          </button>
+          <button disabled={!online}
+            onClick={() => onRequest({ command: "RECIPE_HEATER_STOP", label: "히터 레시피 중단" })}
+            className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 disabled:opacity-40">
+            중단
+          </button>
+          <button onClick={() => setRecipe(null)}
+            className="ml-auto text-[11px] text-gray-400 hover:text-gray-600">해제</button>
+        </div>
+      )}
+      {picker && (
+        <RecipePicker equipment="CHK" kind="heater"
+          onPick={(r) => { setRecipe(r); setPicker(false); }}
+          onClose={() => setPicker(false)} />
+      )}
     </OpsCard>
   );
 }

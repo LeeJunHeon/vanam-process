@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { PendingCmd } from "@/components/ops/OpsKit";
+import RecipePicker, { type RecipeItem } from "@/components/ops/RecipePicker";
 
 type Props = {
   online: boolean;
@@ -23,6 +24,8 @@ function Chk({ label, on, set }: { label: string; on: boolean; set: (v: boolean)
 }
 
 export default function ChkProcessForm({ online, running, onRequest }: Props) {
+  const [picker, setPicker] = useState(false);
+  const [recipe, setRecipe] = useState<RecipeItem | null>(null);
   const [useG1, setUseG1] = useState(false);
   const [g1, setG1] = useState("");
   const [useG2, setUseG2] = useState(false);
@@ -41,6 +44,23 @@ export default function ChkProcessForm({ online, running, onRequest }: Props) {
   const [ptime, setPtime] = useState("10");
   const [offset, setOffset] = useState("6.79");
   const [param, setParam] = useState("1.0395");
+
+  const pickRecipe = (r: RecipeItem) => {
+    setRecipe(r);
+    setPicker(false);
+    const s = r.rows?.[0];
+    if (!s) return;
+    const b = (v?: string) => v === "1";
+    setUseG1(b(s.gun1)); setUseG2(b(s.gun2));
+    setUseAr(b(s.Ar)); setAr(s.Ar_flow ?? "");
+    setUseO2(b(s.O2)); setO2(s.O2_flow ?? "");
+    setWp(s.working_pressure ?? "");
+    setUseRf(b(s.use_rf_power)); setRf(s.rf_power ?? "");
+    setUseDc(b(s.use_dc_power)); setDc(s.dc_power ?? "");
+    setDcDelay(b(s.use_dc_delay));
+    setShutter(s.shutter_delay ?? "");
+    setPtime(s.process_time ?? "");
+  };
 
   const start = () =>
     onRequest({
@@ -62,8 +82,14 @@ export default function ChkProcessForm({ online, running, onRequest }: Props) {
     <section className="rounded-2xl border border-gray-100 bg-white p-3">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-gray-900">공정 설정</h3>
-        <span className="text-[11px] text-gray-400">
-          {running ? "공정 진행 중" : online ? "시작 가능" : "장비 미연결"}
+        <span className="flex items-center gap-2">
+          <button onClick={() => setPicker(true)}
+            className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-700">
+            레시피 불러오기
+          </button>
+          <span className="text-[11px] text-gray-400">
+            {running ? "공정 진행 중" : online ? "시작 가능" : "장비 미연결"}
+          </span>
         </span>
       </div>
 
@@ -95,6 +121,33 @@ export default function ChkProcessForm({ online, running, onRequest }: Props) {
         <div className="flex items-end pb-1"><Chk label="DC stabilize" on={dcDelay} set={setDcDelay} /></div>
       </div>
 
+      {recipe && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
+          <span className="text-[11px] font-semibold text-gray-700">
+            레시피 · {recipe.name} ({recipe.rows.length}스텝)
+          </span>
+          <button disabled={!online}
+            onClick={() => onRequest({
+              command: "RECIPE_PROCESS_RUN", label: "레시피 적재",
+              detail: `${recipe.name} (${recipe.rows.length}스텝)`,
+              args: { rows: recipe.rows },
+            })}
+            className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 disabled:opacity-40">
+            1. 적재
+          </button>
+          <button disabled={!online}
+            onClick={() => onRequest({
+              command: "RECIPE_PROCESS_START", label: "레시피 공정 시작",
+              detail: recipe.name, danger: true,
+            })}
+            className="rounded-lg bg-gray-800 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40">
+            2. 레시피로 시작
+          </button>
+          <button onClick={() => setRecipe(null)}
+            className="ml-auto text-[11px] text-gray-400 hover:text-gray-600">해제</button>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-3">
         <button
           onClick={start}
@@ -121,6 +174,10 @@ export default function ChkProcessForm({ online, running, onRequest }: Props) {
       <p className="mt-2 text-[10px] text-gray-400">
         시작하면 이 값들이 장비 프로그램의 입력란에 그대로 적용된 뒤 공정이 시작됩니다.
       </p>
+
+      {picker && (
+        <RecipePicker equipment="CHK" kind="process" onPick={pickRecipe} onClose={() => setPicker(false)} />
+      )}
     </section>
   );
 }
