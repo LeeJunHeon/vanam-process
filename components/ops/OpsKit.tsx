@@ -40,12 +40,22 @@ export function useOpsStatus(equipment: string) {
     return () => { alive.current = false; };
   }, [load]);
 
-  // 응답을 받을 때마다 다음 조회를 예약한다(고속/일반 전환이 즉시 반영됨)
+  // 응답을 받을 때마다 다음 조회를 예약한다.
+  // 명령 직후(고속) > 장비가 움직이는 중(1초) > 대기 중(3초) 순으로 주기를 정한다.
+  const payload = data?.state?.payload as
+    | { status?: string; heater?: { on?: boolean; recipeRunning?: boolean } }
+    | undefined;
+  const active =
+    payload?.status === "running" ||
+    Boolean(payload?.heater?.on) ||
+    Boolean(payload?.heater?.recipeRunning) ||
+    Boolean(data?.run);
+
   useEffect(() => {
-    const wait = Date.now() < fastUntil ? 600 : 2500;
+    const wait = Date.now() < fastUntil ? 600 : active ? 1000 : 3000;
     const t = setTimeout(() => { if (!document.hidden) load(); }, wait);
     return () => clearTimeout(t);
-  }, [load, nowMs, fastUntil]);
+  }, [load, nowMs, fastUntil, active]);
 
   const boost = useCallback(() => {
     setFastUntil(Date.now() + 12_000);

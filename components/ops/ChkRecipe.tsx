@@ -14,7 +14,7 @@ const newProc = (n: number): ProcRow => ({
   use_rf_power: "1", rf_power: "200", use_dc_power: "0", dc_power: "",
   use_dc_delay: "0", use_heater: "0", heater_temp: "", gun1: "1", gun2: "0",
 });
-const newHeat = (): HeatRow => ({ target_c: "120", ramp_c_per_min: "10", soak_min: "30" });
+const newHeat = (): HeatRow => ({ target_c: "120", ramp_c_per_min: "12", soak_min: "30" });
 
 const IN = "w-full rounded border border-gray-200 px-1.5 py-1 text-[11px]";
 const on1 = (v?: string) => v === "1";
@@ -187,7 +187,7 @@ export default function ChkRecipe() {
         <>
           <div className="space-y-1.5">
             <div className="grid grid-cols-[22px_1fr_1fr_1fr_26px] gap-2 text-[10px] text-gray-400">
-              <span /><span>목표 온도 ℃</span><span>승온 속도 ℃/분</span><span>유지 시간 분</span><span />
+              <span /><span>목표 온도 ℃</span><span>승온 ℃/분 (6배수)</span><span>유지 시간 분</span><span />
             </div>
             {heats.map((r, i) => (
               <div key={i} className="grid grid-cols-[22px_1fr_1fr_1fr_26px] items-center gap-2">
@@ -208,7 +208,8 @@ export default function ChkRecipe() {
             <Plus size={12} /> 단계 추가
           </button>
           <p className="mt-2 text-[10px] text-gray-400">
-            승온 속도는 최소 6 ℃/분입니다. 저장한 레시피는 히터 카드에서 불러와 실행합니다.
+            승온 속도는 6 ℃/분 단위로만 설정됩니다(6, 12, 18 …). 그 외 값은 장비가
+            가장 가까운 배수로 보정합니다. 저장한 레시피는 히터 카드에서 불러와 실행합니다.
           </p>
         </>
       )}
