@@ -1,16 +1,52 @@
 "use client";
 
+import { useCallback, useEffect, useState } from "react";
 import {
   CommandLog, ConnBadge, EventFeed, HeaterCard, MetricSections,
-  RunHistory, StatusHero, useCommandSender, useOpsStatus,
+  RunHistory, StatusHero, useCommandSender, useOpsStatus, type PendingCmd,
 } from "@/components/ops/OpsKit";
 import ChkMimic from "@/components/ops/ChkMimic";
 import ChkProcessForm from "@/components/ops/ChkProcessForm";
 
+const PENDING_TTL = 20_000;
+
 export default function ChkPage() {
-  const { data, failed, online, updatedAt } = useOpsStatus("CHK");
-  const { request, dialog, msg } = useCommandSender("CHK");
+  const { data, failed, online, updatedAt, boost } = useOpsStatus("CHK");
+  const [pendingStates, setPendingStates] = useState<Record<string, { want: boolean; at: number }>>({});
+
   const p = data?.state?.payload ?? {};
+  const valves = p.valves;
+
+  const handleSent = useCallback((c: PendingCmd) => {
+    if (c.stateKey && typeof c.args?.on === "boolean") {
+      const key = c.stateKey;
+      const want = c.args.on as boolean;
+      setPendingStates((s) => ({ ...s, [key]: { want, at: Date.now() } }));
+    }
+    boost(); // 명령 직후 고속 조회로 전환
+  }, [boost]);
+
+  const { request, dialog, msg } = useCommandSender("CHK", handleSent);
+
+  // 실제 상태가 목표에 도달했거나 시간이 지나면 "전환 중" 표시를 해제한다
+  useEffect(() => {
+    setPendingStates((s) => {
+      const next: typeof s = {};
+      let changed = false;
+      for (const [k, val] of Object.entries(s)) {
+        const reached = Boolean(valves?.[k]) === val.want;
+        const stale = Date.now() - val.at > PENDING_TTL;
+        if (reached || stale) changed = true;
+        else next[k] = val;
+      }
+      return changed ? next : s;
+    });
+  }, [valves, updatedAt]);
+
+  const pendingFlat = Object.fromEntries(
+    Object.entries(pendingStates).map(([k, val]) => [k, val.want]),
+  );
+
   const lastRun = data?.runs?.find((r) => r.status !== "running") ?? null;
   const running = online && (p.status === "running" || !!data?.run);
 
@@ -37,21 +73,22 @@ export default function ChkPage() {
         lastRun={lastRun}
       />
 
-      <ChkMimic
-        indicators={p.indicators}
-        valves={p.valves}
-        heater={p.heater}
-        online={online}
-        onRequest={request}
-      />
-
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <ChkMimic
+          indicators={p.indicators}
+          valves={valves}
+          heater={p.heater}
+          online={online}
+          pendingStates={pendingFlat}
+          onRequest={request}
+        />
         <div className="space-y-3">
           <HeaterCard heater={p.heater} />
           <MetricSections groups={p.groups} />
         </div>
-        <ChkProcessForm online={online} running={running} onRequest={request} />
       </div>
+
+      <ChkProcessForm online={online} running={running} onRequest={request} />
 
       <EventFeed events={data?.events} />
       <RunHistory runs={data?.runs} />

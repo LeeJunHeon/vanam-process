@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import {
   CMD_STATUS_LABEL, ONLINE_WINDOW_MS, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
@@ -10,37 +10,50 @@ import {
 } from "@/lib/ops";
 
 // ── 데이터 훅 ────────────────────────────────────────────────
+// 기본 2.5초 폴링. 명령을 보낸 직후에는 boost()로 0.6초 간격 고속 조회로 전환한다.
 export function useOpsStatus(equipment: string) {
   const [data, setData] = useState<OpsStatus | null>(null);
   const [failed, setFailed] = useState(false);
-  // 온라인 판정은 '지금'에 의존하므로 렌더 중 Date.now()를 부르지 않고 폴링 시각을 상태로 둔다
   const [nowMs, setNowMs] = useState(0);
+  const [fastUntil, setFastUntil] = useState(0);
+  const alive = useRef(true);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/ops/status?equipment=${encodeURIComponent(equipment)}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(String(res.status));
+      const j = (await res.json()) as OpsStatus;
+      if (alive.current) { setData(j); setFailed(false); }
+    } catch {
+      if (alive.current) setFailed(true);
+    } finally {
+      if (alive.current) setNowMs(Date.now());
+    }
+  }, [equipment]);
 
   useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      if (document.hidden) return;
-      try {
-        const res = await fetch(`/api/ops/status?equipment=${encodeURIComponent(equipment)}`, {
-          cache: "no-store",
-        });
-        if (!res.ok) throw new Error(String(res.status));
-        const j = (await res.json()) as OpsStatus;
-        if (alive) { setData(j); setFailed(false); }
-      } catch {
-        if (alive) setFailed(true);
-      } finally {
-        if (alive) setNowMs(Date.now());
-      }
-    };
+    alive.current = true;
     load();
-    const t = setInterval(load, 3000);
-    return () => { alive = false; clearInterval(t); };
-  }, [equipment]);
+    return () => { alive.current = false; };
+  }, [load]);
+
+  // 응답을 받을 때마다 다음 조회를 예약한다(고속/일반 전환이 즉시 반영됨)
+  useEffect(() => {
+    const wait = Date.now() < fastUntil ? 600 : 2500;
+    const t = setTimeout(() => { if (!document.hidden) load(); }, wait);
+    return () => clearTimeout(t);
+  }, [load, nowMs, fastUntil]);
+
+  const boost = useCallback(() => {
+    setFastUntil(Date.now() + 12_000);
+    load();
+  }, [load]);
 
   const updatedMs = data?.state?.updatedAt ? new Date(data.state.updatedAt).getTime() : 0;
   const online = updatedMs > 0 && nowMs - updatedMs < ONLINE_WINDOW_MS;
-  return { data, failed, online, updatedAt: data?.state?.updatedAt ?? null };
+  return { data, failed, online, updatedAt: data?.state?.updatedAt ?? null, boost };
 }
 
 export function useTick(active: boolean) {
@@ -552,10 +565,14 @@ export type PendingCmd = {
   label: string;
   detail?: string;
   danger?: boolean;
+  stateKey?: string;                 // 낙관적 표시에 사용할 상태 키
   args?: Record<string, unknown>;
 };
 
-export function useCommandSender(equipment: string) {
+export function useCommandSender(
+  equipment: string,
+  onSent?: (c: PendingCmd) => void,
+) {
   const [pending, setPending] = useState<PendingCmd | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -570,12 +587,15 @@ export function useCommandSender(equipment: string) {
       const res = await fetch("/api/ops/command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          equipment, command: pending.command, args: pending.args ?? {},
-        }),
+        body: JSON.stringify({ equipment, command: pending.command, args: pending.args ?? {} }),
       });
       const j = await res.json().catch(() => ({}));
-      setMsg(res.ok ? `${pending.label} 명령을 전송했습니다.` : (j?.error ?? "전송 실패"));
+      if (res.ok) {
+        setMsg(`${pending.label} 명령을 전송했습니다.`);
+        onSent?.(pending);
+      } else {
+        setMsg(j?.error ?? "전송에 실패했습니다.");
+      }
     } catch {
       setMsg("전송에 실패했습니다.");
     } finally {
