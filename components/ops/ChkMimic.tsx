@@ -11,81 +11,14 @@ type Props = {
   onRequest: (c: PendingCmd) => void;
 };
 
-// 장비 프로그램과 동일한 색 규칙
 const GREEN = "#22c55e";
 const GREEN_D = "#16a34a";
 const RED = "#ef4444";
 const RED_D = "#dc2626";
-const GRAY = "#d4d4d8";
+const GRAY = "#e4e4e7";
 const GRAY_D = "#a1a1aa";
 const PIPE = "#d4d4d8";
 const PIPE_ON = "#86efac";
-
-function nodeFill(on: boolean, alert?: boolean) {
-  if (!on) return { fill: GRAY, stroke: GRAY_D, text: "#3f3f46" };
-  return alert
-    ? { fill: RED, stroke: RED_D, text: "#ffffff" }
-    : { fill: GREEN, stroke: GREEN_D, text: "#052e16" };
-}
-
-// 조작 가능한 노드
-function Node({
-  x, y, w, h, label, btn, alert, fontSize = 13, on, clickable, onClick,
-}: {
-  x: number; y: number; w: number; h: number; label: string;
-  btn?: string; alert?: boolean; fontSize?: number;
-  on: boolean; clickable: boolean; onClick: (btn: string) => void;
-}) {
-  const c = nodeFill(on, alert);
-  return (
-    <g
-      onClick={() => btn && onClick(btn)}
-      style={{ cursor: clickable ? "pointer" : "default" }}
-      className={clickable ? "opacity-100 hover:opacity-80" : ""}
-    >
-      <rect
-        x={x} y={y} width={w} height={h} rx={8}
-        fill={c.fill} stroke={c.stroke} strokeWidth={1.5}
-      />
-      <text
-        x={x + w / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="central"
-        fontSize={fontSize} fontWeight={700} fill={c.text}
-      >
-        {label}
-      </text>
-    </g>
-  );
-}
-
-function Static({ x, y, w, h, label }: { x: number; y: number; w: number; h: number; label: string }) {
-  return (
-    <g>
-      <rect x={x} y={y} width={w} height={h} rx={8} fill={GRAY} stroke={GRAY_D} strokeWidth={1.5} />
-      <text x={x + w / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="central"
-        fontSize={13} fontWeight={700} fill="#3f3f46">{label}</text>
-    </g>
-  );
-}
-
-function Pipe({ d, on }: { d: string; on: boolean }) {
-  return (
-    <path d={d} fill="none" stroke={on ? PIPE_ON : PIPE} strokeWidth={7} strokeLinecap="round" strokeLinejoin="round" />
-  );
-}
-
-function Lamp({ x, label, on, alert }: { x: number; label: string; on: boolean; alert?: boolean }) {
-  return (
-    <g>
-      <circle
-        cx={x} cy={26} r={13}
-        fill={on ? (alert ? RED : GREEN) : GRAY}
-        stroke={on ? (alert ? RED_D : GREEN_D) : GRAY_D}
-        strokeWidth={1.5}
-      />
-      <text x={x} y={52} textAnchor="middle" fontSize={11} fontWeight={600} fill="#52525b">{label}</text>
-    </g>
-  );
-}
 
 export default function ChkMimic({ valves, indicators, heater, online, onRequest }: Props) {
   const v = (k: string) => Boolean(valves?.[k]);
@@ -104,81 +37,154 @@ export default function ChkMimic({ valves, indicators, heater, online, onRequest
     });
   };
 
+  const isOn = (btn: string) => v(CHK_NODE_COMMANDS[btn]?.stateKey ?? "");
+
+  // 조작 가능한 배관 노드
+  const Node = ({
+    x, y, w, h, label, btn, fs = 13,
+  }: { x: number; y: number; w: number; h: number; label: string; btn: string; fs?: number }) => {
+    const on = isOn(btn);
+    const can = online;
+    return (
+      <g onClick={() => click(btn)} style={{ cursor: can ? "pointer" : "default" }}>
+        <rect
+          x={x} y={y} width={w} height={h} rx={8}
+          fill={on ? GREEN : "#ffffff"}
+          stroke={on ? GREEN_D : GRAY_D}
+          strokeWidth={on ? 2 : 1.5}
+        />
+        <text x={x + w / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="central"
+          fontSize={fs} fontWeight={700} fill={on ? "#052e16" : "#52525b"}>{label}</text>
+        {can && (
+          <rect x={x} y={y} width={w} height={h} rx={8} fill="transparent"
+            className="transition-colors hover:fill-black/5" />
+        )}
+      </g>
+    );
+  };
+
+  // 조작 불가 표시 전용 노드
+  const Static = ({ x, y, w, h, label }: { x: number; y: number; w: number; h: number; label: string }) => (
+    <g>
+      <rect x={x} y={y} width={w} height={h} rx={8} fill="#fafafa" stroke={GRAY} strokeWidth={1.5} />
+      <text x={x + w / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="central"
+        fontSize={13} fontWeight={600} fill="#71717a">{label}</text>
+    </g>
+  );
+
+  const Pipe = ({ d, on }: { d: string; on: boolean }) => (
+    <path d={d} fill="none" stroke={on ? PIPE_ON : PIPE} strokeWidth={8}
+      strokeLinecap="round" strokeLinejoin="round" />
+  );
+
   const heaterOn = (heater?.status ?? "").includes("운전");
+
+  const lamps: { key: string; label: string; alert?: boolean }[] = [
+    { key: "Air", label: "Air" },
+    { key: "G1", label: "G1" },
+    { key: "G2", label: "G2" },
+    { key: "ATM", label: "ATM", alert: true },
+    { key: "Water", label: "Water" },
+  ];
 
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-3">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-gray-900">챔버 계통도</h3>
         <span className="text-[11px] text-gray-400">
           {online ? "노드를 눌러 조작" : "장비 미연결"}
         </span>
       </div>
-      <svg viewBox="0 0 700 470" className="w-full select-none" role="img" aria-label="CHK 챔버 계통도">
-        {/* 상태 램프 (ATM만 빨강) */}
-        <Lamp x={40} label="Air" on={ind("Air")} />
-        <Lamp x={120} label="G1" on={ind("G1")} />
-        <Lamp x={200} label="G2" on={ind("G2")} />
-        <Lamp x={280} label="ATM" on={ind("ATM")} alert />
-        <Lamp x={360} label="Water" on={ind("Water")} />
 
-        {/* 가스 라인 */}
-        <Pipe d="M 112 128 H 150" on={v("Ar")} />
-        <Pipe d="M 226 128 H 300" on={v("Ar")} />
-        <Pipe d="M 112 190 H 150" on={v("O2")} />
-        <Pipe d="M 226 190 H 300" on={v("O2")} />
-        <Static x={26} y={104} w={86} h={48} label="MFC" />
-        <Node x={150} y={104} w={76} h={48} label="Ar" btn="Ar_Button"  on={v(CHK_NODE_COMMANDS["Ar_Button"]?.stateKey ?? "")} clickable={online} onClick={click} />
-        <Static x={26} y={166} w={86} h={48} label="MFC" />
-        <Node x={150} y={166} w={76} h={48} label="O₂" btn="O2_Button"  on={v(CHK_NODE_COMMANDS["O2_Button"]?.stateKey ?? "")} clickable={online} onClick={click} />
+      {/* 상태 램프 — SVG 밖에 두어 라벨 겹침을 원천 차단 */}
+      <div className="mb-3 flex flex-wrap gap-x-5 gap-y-2 rounded-xl bg-gray-50 px-3 py-2">
+        {lamps.map((l) => {
+          const on = ind(l.key);
+          return (
+            <span key={l.key} className="flex items-center gap-1.5 text-xs font-medium text-gray-600">
+              <span
+                className="h-3.5 w-3.5 rounded-full border"
+                style={{
+                  backgroundColor: on ? (l.alert ? RED : GREEN) : "#ffffff",
+                  borderColor: on ? (l.alert ? RED_D : GREEN_D) : GRAY_D,
+                }}
+              />
+              {l.label}
+            </span>
+          );
+        })}
+      </div>
 
-        {/* 도어 */}
-        <Pipe d="M 400 96 V 116" on={v("Door")} />
-        <Node x={330} y={48} w={140} h={48} label="Door" btn="Door_Button"  on={v(CHK_NODE_COMMANDS["Door_Button"]?.stateKey ?? "")} clickable={online} onClick={click} />
+      <svg viewBox="0 0 720 400" className="w-full select-none" role="img" aria-label="CHK 챔버 계통도">
+        {/* 가스 라인 (좌 → 우) */}
+        <Pipe d="M 100 82 H 130" on={isOn("Ar_Button")} />
+        <Pipe d="M 200 82 H 272" on={isOn("Ar_Button")} />
+        <Pipe d="M 100 152 H 130" on={isOn("O2_Button")} />
+        <Pipe d="M 200 152 H 272" on={isOn("O2_Button")} />
+        <Static x={20} y={62} w={80} h={40} label="MFC" />
+        <Node x={130} y={62} w={70} h={40} label="Ar" btn="Ar_Button" />
+        <Static x={20} y={132} w={80} h={40} label="MFC" />
+        <Node x={130} y={132} w={70} h={40} label="O₂" btn="O2_Button" />
 
-        {/* 챔버 */}
-        <rect x={300} y={116} width={200} height={150} rx={12}
+        {/* 도어 (챔버 상단) */}
+        <Pipe d="M 370 38 V 52" on={isOn("Door_Button")} />
+        <Node x={310} y={2} w={120} h={36} label="Door" btn="Door_Button" />
+
+        {/* 벤트 (챔버 우측) */}
+        <Pipe d="M 468 82 H 542" on={isOn("Vent_button")} />
+        <Node x={542} y={62} w={90} h={40} label="Vent" btn="Vent_button" />
+
+        {/* 챔버 본체 */}
+        <rect x={270} y={50} width={200} height={172} rx={12}
           fill="#fafafa" stroke="#a1a1aa" strokeWidth={2} />
-        <text x={400} y={136} textAnchor="middle" fontSize={14} fontWeight={700} fill="#52525b">
+        <text x={370} y={68} textAnchor="middle" fontSize={13} fontWeight={700} fill="#52525b">
           Chamber
         </text>
-        <Node x={312} y={150} w={80} h={30} label="S1" btn="S1_button" fontSize={12}  on={v(CHK_NODE_COMMANDS["S1_button"]?.stateKey ?? "")} clickable={online} onClick={click} />
-        <Node x={408} y={150} w={80} h={30} label="S2" btn="S2_button" fontSize={12}  on={v(CHK_NODE_COMMANDS["S2_button"]?.stateKey ?? "")} clickable={online} onClick={click} />
-        <Node x={330} y={190} w={140} h={30} label="M.S." btn="MS_button" fontSize={12}  on={v(CHK_NODE_COMMANDS["MS_button"]?.stateKey ?? "")} clickable={online} onClick={click} />
+        <Node x={284} y={82} w={82} h={30} label="S1" btn="S1_button" fs={12} />
+        <Node x={374} y={82} w={82} h={30} label="S2" btn="S2_button" fs={12} />
+        <Node x={300} y={122} w={140} h={30} label="M.S." btn="MS_button" fs={12} />
         <g>
-          <rect x={330} y={228} width={140} height={28} rx={6}
-            fill={heaterOn ? GREEN : GRAY} stroke={heaterOn ? GREEN_D : GRAY_D} strokeWidth={1.5} />
-          <text x={400} y={242} textAnchor="middle" dominantBaseline="central"
-            fontSize={12} fontWeight={700} fill={heaterOn ? "#052e16" : "#3f3f46"}>
-            Heater {heater?.pv ? `${heater.pv}℃` : ""}
+          <rect x={300} y={162} width={140} height={30} rx={8}
+            fill={heaterOn ? GREEN : "#ffffff"} stroke={heaterOn ? GREEN_D : GRAY_D}
+            strokeWidth={heaterOn ? 2 : 1.5} />
+          <text x={370} y={177} textAnchor="middle" dominantBaseline="central"
+            fontSize={12} fontWeight={700} fill={heaterOn ? "#052e16" : "#52525b"}>
+            Heater{heater?.pv ? ` ${heater.pv}℃` : ""}
           </text>
         </g>
 
-        {/* 벤트 */}
-        <Pipe d="M 500 160 H 560" on={v("Vent")} />
-        <Node x={560} y={136} w={100} h={48} label="Vent" btn="Vent_button"  on={v(CHK_NODE_COMMANDS["Vent_button"]?.stateKey ?? "")} clickable={online} onClick={click} />
+        {/* 터보 배기 라인: 챔버 → M.V. → Turbo → F.V. → Rotary */}
+        <Pipe d="M 340 222 V 252" on={isOn("MV_button")} />
+        <Node x={290} y={252} w={100} h={42} label="M.V." btn="MV_button" />
+        <Pipe d="M 340 294 V 322" on={isOn("Turbo_button")} />
+        <Node x={282} y={322} w={116} h={46} label="Turbo" btn="Turbo_button" />
+        <Pipe d="M 398 345 H 452" on={isOn("FV_button")} />
+        <Node x={452} y={324} w={90} h={42} label="F.V." btn="FV_button" />
+        <Pipe d="M 542 345 H 594" on={isOn("Rotary_button")} />
+        <Node x={594} y={324} w={106} h={42} label="Rotary" btn="Rotary_button" />
 
-        {/* 터보 배기 라인 */}
-        <Pipe d="M 360 266 V 300" on={v("MV")} />
-        <Node x={310} y={300} w={100} h={44} label="M.V." btn="MV_button"  on={v(CHK_NODE_COMMANDS["MV_button"]?.stateKey ?? "")} clickable={online} onClick={click} />
-        <Pipe d="M 360 344 V 376" on={v("Turbo")} />
-        <Node x={302} y={376} w={116} h={50} label="Turbo" btn="Turbo_button"  on={v(CHK_NODE_COMMANDS["Turbo_button"]?.stateKey ?? "")} clickable={online} onClick={click} />
-        <Pipe d="M 418 400 H 452" on={v("FV")} />
-        <Node x={452} y={376} w={96} h={50} label="F.V." btn="FV_button"  on={v(CHK_NODE_COMMANDS["FV_button"]?.stateKey ?? "")} clickable={online} onClick={click} />
-        <Pipe d="M 548 400 H 578" on={v("Rotary")} />
-        <Node x={578} y={376} w={110} h={50} label="Rotary" btn="Rotary_button"  on={v(CHK_NODE_COMMANDS["Rotary_button"]?.stateKey ?? "")} clickable={online} onClick={click} />
-
-        {/* 러핑 라인 */}
-        <Pipe d="M 500 236 H 622 V 300" on={v("RV")} />
-        <Node x={572} y={300} w={100} h={44} label="R.V." btn="RV_button"  on={v(CHK_NODE_COMMANDS["RV_button"]?.stateKey ?? "")} clickable={online} onClick={click} />
-        <Pipe d="M 622 344 V 376" on={v("RV")} />
-
-        {/* 부저 */}
-        <Node x={26} y={376} w={130} h={50} label="Buzz Stop" btn="BuzzStop_Button" fontSize={12}  on={v(CHK_NODE_COMMANDS["BuzzStop_Button"]?.stateKey ?? "")} clickable={online} onClick={click} />
+        {/* 러핑 라인: 챔버 하단 → R.V. → Rotary (챔버 밖에서 분기) */}
+        <Pipe d="M 420 222 V 238 H 632 V 252" on={isOn("RV_button")} />
+        <Node x={582} y={252} w={100} h={42} label="R.V." btn="RV_button" />
+        <Pipe d="M 632 294 V 324" on={isOn("RV_button")} />
       </svg>
-      <p className="mt-1 text-[10px] text-gray-400">
-        초록 = ON / 열림 · 회색 = OFF / 닫힘 · 빨강 = ATM
-      </p>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-2">
+        <button
+          onClick={() => click("BuzzStop_Button")}
+          disabled={!online}
+          className={`rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40 ${
+            isOn("BuzzStop_Button")
+              ? "border-green-600 bg-green-500 text-green-950"
+              : "border-gray-200 text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          부저 정지
+        </button>
+        <span className="ml-auto text-[10px] text-gray-400">
+          초록 = ON / 열림 · 흰색 = OFF / 닫힘 · 빨강 = ATM
+        </span>
+      </div>
     </section>
   );
 }

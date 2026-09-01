@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import {
   CMD_STATUS_LABEL, ONLINE_WINDOW_MS, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
@@ -335,25 +335,36 @@ export function StateChips({
 // ── 이벤트 ───────────────────────────────────────────────────
 const EVENT_PAGE = 8;
 
+// 콘솔처럼 위=과거, 아래=최신. 접힌 상태에서는 최신 8건만 보인다.
 export function EventFeed({ events }: { events?: OpsEvent[] }) {
   const [onlyIssue, setOnlyIssue] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const boxRef = useRef<HTMLDivElement | null>(null);
 
   const all = events ?? [];
   const filtered = onlyIssue ? all.filter((e) => e.level !== "info") : all;
-  const shown = expanded ? filtered : filtered.slice(0, EVENT_PAGE);
+  // API는 최신순으로 주므로 뒤집어 오래된 순으로 만든다
+  const asc = filtered.slice().reverse();
+  const shown = expanded ? asc : asc.slice(-EVENT_PAGE);
+  const hidden = asc.length - shown.length;
   const issueCount = all.filter((e) => e.level !== "info").length;
+  const newestId = all[0]?.id;
+
+  // 새 이벤트가 들어오면 항상 최신(맨 아래)이 보이도록 스크롤
+  useEffect(() => {
+    const el = boxRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [newestId, expanded, onlyIssue]);
 
   return (
     <Collapsible
       title="최근 이벤트"
       right={
         <span className="flex items-center gap-2">
-          {events?.[0] && (
-            <span className="text-[10px] text-gray-300">최근 {fmtAgo(events[0].ts)}</span>
-          )}
+          {all[0] && <span className="text-[10px] text-gray-300">최근 {fmtAgo(all[0].ts)}</span>}
           <span
-            role="button" tabIndex={0}
+            role="button"
+            tabIndex={0}
             onClick={(e) => { e.stopPropagation(); setOnlyIssue((v) => !v); }}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); setOnlyIssue((v) => !v); }
@@ -373,17 +384,25 @@ export function EventFeed({ events }: { events?: OpsEvent[] }) {
         </p>
       ) : (
         <>
-          <div className="space-y-1">
+          {hidden > 0 && (
+            <button
+              onClick={() => setExpanded(true)}
+              className="mb-1 w-full rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
+            >
+              이전 {hidden}건 더 보기 ↑
+            </button>
+          )}
+          <div
+            ref={boxRef}
+            className={expanded ? "max-h-72 space-y-1 overflow-y-auto" : "space-y-1"}
+          >
             {shown.map((e) => (
               <p key={e.id} className="flex gap-2 text-[11px] leading-snug">
                 <span className="shrink-0 font-mono text-gray-300">{fmtTime(e.ts)}</span>
                 <span
                   className={
-                    e.level === "error"
-                      ? "text-rose-600"
-                      : e.level === "warn"
-                        ? "text-amber-600"
-                        : "text-gray-600"
+                    e.level === "error" ? "text-rose-600"
+                    : e.level === "warn" ? "text-amber-600" : "text-gray-600"
                   }
                 >
                   {e.message}
@@ -391,12 +410,12 @@ export function EventFeed({ events }: { events?: OpsEvent[] }) {
               </p>
             ))}
           </div>
-          {filtered.length > EVENT_PAGE && (
+          {expanded && (
             <button
-              onClick={() => setExpanded((v) => !v)}
-              className="mt-2 w-full rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
+              onClick={() => setExpanded(false)}
+              className="mt-1 w-full rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
             >
-              {expanded ? "접기" : `${filtered.length - EVENT_PAGE}개 더 보기`}
+              접기
             </button>
           )}
         </>

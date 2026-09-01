@@ -37,21 +37,21 @@ export default function ChkPage() {
         lastRun={lastRun}
       />
 
+      <ChkMimic
+        indicators={p.indicators}
+        valves={p.valves}
+        heater={p.heater}
+        online={online}
+        onRequest={request}
+      />
+
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <ChkMimic
-          indicators={p.indicators}
-          valves={p.valves}
-          heater={p.heater}
-          online={online}
-          onRequest={request}
-        />
         <div className="space-y-3">
           <HeaterCard heater={p.heater} />
           <MetricSections groups={p.groups} />
         </div>
+        <ChkProcessForm online={online} running={running} onRequest={request} />
       </div>
-
-      <ChkProcessForm online={online} running={running} onRequest={request} />
 
       <EventFeed events={data?.events} />
       <RunHistory runs={data?.runs} />
