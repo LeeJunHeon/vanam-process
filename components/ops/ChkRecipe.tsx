@@ -36,12 +36,18 @@ export default function ChkRecipe({
   const hset = (i: number, p: Partial<HeatRow>) =>
     setHeats((s) => s.map((r, k) => (k === i ? { ...r, ...p } : r)));
 
-  const runProcess = () =>
+  const startProcess = () =>
+    onRequest({
+      command: "RECIPE_PROCESS_START",
+      label: "레시피 공정 시작",
+      danger: true,
+    });
+
+  const loadProcess = () =>
     onRequest({
       command: "RECIPE_PROCESS_RUN",
-      label: "공정 레시피 실행",
+      label: "레시피 적재",
       detail: `(${procs.length}스텝)`,
-      danger: true,
       args: {
         rows: procs.map((r) => ({
           Process_name: r.Process_name,
@@ -145,12 +151,19 @@ export default function ChkRecipe({
             <Plus size={12} /> 스텝 추가
           </button>
           <div className="mt-3 border-t border-gray-50 pt-2.5">
-            <button onClick={runProcess} disabled={!online}
-              className="rounded-xl bg-gray-800 px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
-              공정 레시피 실행 ({procs.length}스텝)
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={loadProcess} disabled={!online}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-semibold text-gray-700 disabled:opacity-40">
+                1. 레시피 적재 ({procs.length}스텝)
+              </button>
+              <button onClick={startProcess} disabled={!online}
+                className="rounded-xl bg-gray-800 px-4 py-2 text-xs font-semibold text-white disabled:opacity-40">
+                2. 공정 시작
+              </button>
+            </div>
             <p className="mt-1.5 text-[10px] text-gray-400">
-              스텝이 순서대로 연속 실행됩니다. 각 항목은 장비 CSV 형식 그대로 전달됩니다.
+              적재하면 장비에 레시피가 올라가고 첫 스텝 값이 입력란에 채워집니다.
+              값을 확인한 뒤 공정 시작을 누르면 스텝이 순서대로 연속 실행됩니다.
             </p>
           </div>
         </>

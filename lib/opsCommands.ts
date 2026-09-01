@@ -33,7 +33,8 @@ export const CHK_ACTION_COMMANDS: Record<string, CmdDef> = {
   ALL_STOP:      { key: "ALL_STOP", label: "비상 정지(ALL STOP)", danger: true },
   HEATER_SV:     { key: "HEATER_SV", label: "히터 목표온도 설정" },
   HEATER_ONOFF:  { key: "HEATER_ONOFF", label: "히터 운전" },
-  RECIPE_PROCESS_RUN: { key: "RECIPE_PROCESS_RUN", label: "공정 레시피 실행", danger: true },
+  RECIPE_PROCESS_RUN: { key: "RECIPE_PROCESS_RUN", label: "레시피 적재" },
+  RECIPE_PROCESS_START: { key: "RECIPE_PROCESS_START", label: "레시피 공정 시작", danger: true },
   RECIPE_HEATER_RUN:  { key: "RECIPE_HEATER_RUN", label: "히터 레시피 실행" },
   RECIPE_HEATER_STOP: { key: "RECIPE_HEATER_STOP", label: "히터 레시피 중단" },
 };
