@@ -20,7 +20,8 @@ export type OpsPayload = {
   metrics?: Record<string, string | number>; // 구버전 호환(평면 구조)
   indicators?: Record<string, boolean>;
   valves?: Record<string, boolean>;
-  heater?: { pv?: string; sv?: string; status?: string; output?: string };
+  heater?: { pv?: string; sv?: string; status?: string; output?: string;
+             on?: boolean; recipeRunning?: boolean };
   ion?: { run?: boolean; lamp?: boolean; overtime?: boolean };
 };
 

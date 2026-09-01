@@ -113,56 +113,56 @@ export default function ChkMimic({
         })}
       </div>
 
-      <svg viewBox="0 0 660 352" className="mx-auto w-full max-w-[560px] select-none"
+      <svg viewBox="0 0 640 344" className="w-full select-none"
         role="img" aria-label="CHK 챔버 계통도">
-        {/* ── 1층: 배관 (항상 노드 아래) ── */}
+        {/* 1층: 배관 */}
         <g>
-          <Pipe d="M 86 72 H 112" on={isOn("Ar_Button")} />
-          <Pipe d="M 174 72 H 238" on={isOn("Ar_Button")} />
-          <Pipe d="M 86 142 H 112" on={isOn("O2_Button")} />
-          <Pipe d="M 174 142 H 238" on={isOn("O2_Button")} />
-          <Pipe d="M 328 34 V 44" on={isOn("Door_Button")} />
-          <Pipe d="M 418 72 H 486" on={isOn("Vent_button")} />
-          <Pipe d="M 300 200 V 228" on={isOn("MV_button")} />
-          <Pipe d="M 300 266 V 294" on={isOn("Turbo_button")} />
-          <Pipe d="M 352 315 H 404" on={isOn("FV_button")} />
-          <Pipe d="M 486 315 H 538" on={isOn("Rotary_button")} />
-          <Pipe d="M 400 200 V 214 H 576 V 228" on={isOn("RV_button")} />
-          <Pipe d="M 576 266 V 294" on={isOn("RV_button")} />
+          <Pipe d="M 92 76 H 118" on={isOn("Ar_Button")} />
+          <Pipe d="M 190 76 H 232" on={isOn("Ar_Button")} />
+          <Pipe d="M 92 152 H 118" on={isOn("O2_Button")} />
+          <Pipe d="M 190 152 H 232" on={isOn("O2_Button")} />
+          <Pipe d="M 320 40 V 52" on={isOn("Door_Button")} />
+          <Pipe d="M 408 76 H 448" on={isOn("Vent_button")} />
+          <Pipe d="M 290 208 V 236" on={isOn("MV_button")} />
+          <Pipe d="M 290 282 V 300" on={isOn("Turbo_button")} />
+          <Pipe d="M 352 322 H 400" on={isOn("FV_button")} />
+          <Pipe d="M 492 322 H 528" on={isOn("Rotary_button")} />
+          <Pipe d="M 386 208 V 222 H 576 V 236" on={isOn("RV_button")} />
+          <Pipe d="M 576 282 V 300" on={isOn("RV_button")} />
         </g>
 
-        {/* ── 2층: 챔버 본체 ── */}
-        <rect x={238} y={44} width={180} height={156} rx={10}
-          fill="#fafafa" stroke="#a1a1aa" strokeWidth={1.75} />
-        <text x={328} y={60} textAnchor="middle" fontSize={12} fontWeight={700} fill="#52525b">
+        {/* 2층: 챔버 본체 */}
+        <rect x={232} y={52} width={176} height={156} rx={12}
+          fill="#fafafa" stroke="#a1a1aa" strokeWidth={2} />
+        <text x={320} y={70} textAnchor="middle" fontSize={13} fontWeight={700} fill="#52525b">
           Chamber
         </text>
 
-        {/* ── 3층: 노드 ── */}
+        {/* 3층: 노드 */}
         <g>
-          <Static x={14} y={54} w={72} h={36} label="MFC" />
-          <Node x={112} y={54} w={62} h={36} label="Ar" btn="Ar_Button" />
-          <Static x={14} y={124} w={72} h={36} label="MFC" />
-          <Node x={112} y={124} w={62} h={36} label="O₂" btn="O2_Button" />
-          <Node x={280} y={2} w={96} h={32} label="Door" btn="Door_Button" />
-          <Node x={486} y={54} w={80} h={36} label="Vent" btn="Vent_button" />
-          <Node x={250} y={72} w={76} h={26} label="S1" btn="S1_button" fs={11} />
-          <Node x={332} y={72} w={76} h={26} label="S2" btn="S2_button" fs={11} />
-          <Node x={264} y={108} w={128} h={26} label="M.S." btn="MS_button" fs={11} />
+          <Static x={16} y={54} w={76} h={44} label="MFC" />
+          <Node x={118} y={54} w={72} h={44} label="Ar" btn="Ar_Button" fs={13} />
+          <Static x={16} y={130} w={76} h={44} label="MFC" />
+          <Node x={118} y={130} w={72} h={44} label="O₂" btn="O2_Button" fs={13} />
+          <Node x={262} y={2} w={116} h={38} label="Door" btn="Door_Button" fs={13} />
+          <Node x={448} y={54} w={96} h={44} label="Vent" btn="Vent_button" fs={13} />
+          <Node x={244} y={80} w={78} h={30} label="S1" btn="S1_button" fs={12} />
+          <Node x={318} y={80} w={78} h={30} label="S2" btn="S2_button" fs={12} />
+          <Node x={252} y={120} w={136} h={30} label="M.S." btn="MS_button" fs={12} />
           <g>
-            <rect x={264} y={144} width={128} height={26} rx={7}
+            <rect x={252} y={160} width={136} height={32} rx={8}
               fill={heaterOn ? GREEN : "#ffffff"} stroke={heaterOn ? GREEN_D : GRAY_D}
               strokeWidth={heaterOn ? 2 : 1.25} />
-            <text x={328} y={157} textAnchor="middle" dominantBaseline="central"
-              fontSize={11} fontWeight={700} fill={heaterOn ? "#052e16" : "#52525b"}>
+            <text x={320} y={176} textAnchor="middle" dominantBaseline="central"
+              fontSize={12} fontWeight={700} fill={heaterOn ? "#052e16" : "#52525b"}>
               Heater{heater?.pv ? ` ${heater.pv}℃` : ""}
             </text>
           </g>
-          <Node x={254} y={228} w={92} h={38} label="M.V." btn="MV_button" />
-          <Node x={248} y={294} w={104} h={42} label="Turbo" btn="Turbo_button" />
-          <Node x={404} y={294} w={82} h={42} label="F.V." btn="FV_button" />
-          <Node x={538} y={294} w={98} h={42} label="Rotary" btn="Rotary_button" />
-          <Node x={530} y={228} w={92} h={38} label="R.V." btn="RV_button" />
+          <Node x={238} y={236} w={104} h={46} label="M.V." btn="MV_button" fs={13} />
+          <Node x={232} y={300} w={120} h={44} label="Turbo" btn="Turbo_button" fs={13} />
+          <Node x={400} y={300} w={92} h={44} label="F.V." btn="FV_button" fs={13} />
+          <Node x={528} y={300} w={96} h={44} label="Rotary" btn="Rotary_button" fs={13} />
+          <Node x={524} y={236} w={104} h={46} label="R.V." btn="RV_button" fs={13} />
         </g>
       </svg>
 

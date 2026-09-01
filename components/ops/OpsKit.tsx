@@ -184,7 +184,8 @@ const HEATER_FAULT = ["과온 트립", "센서 이상", "통신 두절", "이상
 export function HeaterCard({
   heater, online, running, onRequest,
 }: {
-  heater?: { pv?: string; sv?: string; status?: string; output?: string };
+  heater?: { pv?: string; sv?: string; status?: string; output?: string;
+             on?: boolean; recipeRunning?: boolean };
   online: boolean;
   running: boolean;
   onRequest: (c: PendingCmd) => void;
@@ -232,24 +233,37 @@ export function HeaterCard({
         >
           설정
         </button>
-        <button
-          disabled={!online}
-          onClick={() =>
-            onRequest({ command: "HEATER_ONOFF", label: "히터 운전", detail: "→ ON", args: { on: true } })
-          }
-          className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 disabled:opacity-40"
-        >
-          운전 ON
-        </button>
-        <button
-          disabled={!online}
-          onClick={() =>
-            onRequest({ command: "HEATER_ONOFF", label: "히터 운전", detail: "→ OFF", args: { on: false } })
-          }
-          className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 disabled:opacity-40"
-        >
-          운전 OFF
-        </button>
+        <span className="flex gap-1.5">
+          {([true, false] as const).map((want) => {
+            const active = Boolean(heater?.on) === want;
+            return (
+              <button
+                key={String(want)}
+                disabled={!online}
+                onClick={() =>
+                  onRequest({
+                    command: "HEATER_ONOFF",
+                    label: "히터 운전",
+                    detail: want ? "→ ON" : "→ OFF",
+                    args: { on: want },
+                  })
+                }
+                className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40 ${
+                  active
+                    ? want
+                      ? "border-green-600 bg-green-500 text-green-950"
+                      : "border-gray-400 bg-gray-200 text-gray-700"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                운전 {want ? "ON" : "OFF"}
+              </button>
+            );
+          })}
+        </span>
+        {heater?.recipeRunning && (
+          <span className="text-[10px] font-semibold text-blue-600">히터 레시피 실행 중</span>
+        )}
         {running && <span className="text-[10px] text-amber-600">공정 중 변경 주의</span>}
       </div>
     </OpsCard>
@@ -282,23 +296,35 @@ export function IonizerCard({
         <span className={`flex items-center gap-1.5 text-xs ${ion?.overtime ? "font-semibold text-rose-600" : "text-gray-600"}`}>
           <span className={dot(ion?.overtime, true)} /> 램프 수명 초과
         </span>
-        <button
-          disabled={!online}
-          onClick={() =>
-            onRequest({
-              command: "ION_button",
-              label: "이오나이저",
-              detail: on ? "→ OFF" : "→ ON",
-              stateKey: "ION",
-              args: { on: !on },
-            })
-          }
-          className={`ml-auto rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40 ${
-            on ? "border-green-600 bg-green-500 text-green-950" : "border-gray-200 text-gray-700 hover:bg-gray-50"
-          }`}
-        >
-          {on ? "운전 중 · 끄기" : "켜기"}
-        </button>
+        <span className="ml-auto flex gap-1.5">
+          {([true, false] as const).map((want) => {
+            const active = on === want;
+            return (
+              <button
+                key={String(want)}
+                disabled={!online}
+                onClick={() =>
+                  onRequest({
+                    command: "ION_button",
+                    label: "이오나이저",
+                    detail: want ? "→ ON" : "→ OFF",
+                    stateKey: "ION",
+                    args: { on: want },
+                  })
+                }
+                className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40 ${
+                  active
+                    ? want
+                      ? "border-green-600 bg-green-500 text-green-950"
+                      : "border-gray-400 bg-gray-200 text-gray-700"
+                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                }`}
+              >
+                운전 {want ? "ON" : "OFF"}
+              </button>
+            );
+          })}
+        </span>
       </div>
     </OpsCard>
   );

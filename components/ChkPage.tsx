@@ -7,6 +7,7 @@ import {
 } from "@/components/ops/OpsKit";
 import ChkMimic from "@/components/ops/ChkMimic";
 import ChkProcessForm from "@/components/ops/ChkProcessForm";
+import ChkRecipe from "@/components/ops/ChkRecipe";
 
 const PENDING_TTL = 20_000;
 
@@ -96,9 +97,14 @@ export default function ChkPage() {
 
       <ChkProcessForm online={online} running={running} onRequest={request} />
 
-      <EventFeed events={data?.events} />
-      <RunHistory runs={data?.runs} />
-      <CommandLog commands={data?.commands} />
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        <div className="space-y-3">
+          <EventFeed events={data?.events} />
+          <RunHistory runs={data?.runs} />
+          <CommandLog commands={data?.commands} />
+        </div>
+        <ChkRecipe online={online} onRequest={request} />
+      </div>
 
       {dialog}
     </div>
