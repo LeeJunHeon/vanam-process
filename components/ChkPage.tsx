@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   CommandLog, ConnBadge, EventFeed, HeaterCard, MetricSections,
-  RunHistory, StatusHero, useCommandSender, useOpsStatus, type PendingCmd,
+  IonizerCard, RunHistory, StatusHero, useCommandSender, useOpsStatus, type PendingCmd,
 } from "@/components/ops/OpsKit";
 import ChkMimic from "@/components/ops/ChkMimic";
 import ChkProcessForm from "@/components/ops/ChkProcessForm";
@@ -83,7 +83,13 @@ export default function ChkPage() {
           onRequest={request}
         />
         <div className="space-y-3">
-          <HeaterCard heater={p.heater} />
+          <HeaterCard heater={p.heater} online={online} running={running} onRequest={request} />
+          <IonizerCard
+            ion={p.ion}
+            on={Boolean(p.valves?.ION)}
+            online={online}
+            onRequest={request}
+          />
           <MetricSections groups={p.groups} />
         </div>
       </div>

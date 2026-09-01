@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { AlertTriangle, ChevronDown } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import {
   CMD_STATUS_LABEL, ONLINE_WINDOW_MS, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
-  fmtTime, secBetween,
+  fmtLogTime, fmtTime, secBetween,
   type MetricGroup, type MetricItem, type OpsCommand, type OpsEvent, type OpsRun,
   type OpsStatus,
 } from "@/lib/ops";
@@ -90,30 +90,6 @@ export function OpsCard({
 }
 
 // 모바일 스크롤 길이를 줄이기 위한 접이식 섹션
-export function Collapsible({
-  title, right, defaultOpen = true, children,
-}: { title: string; right?: ReactNode; defaultOpen?: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <section className="rounded-2xl border border-gray-100 bg-white">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left"
-      >
-        <span className="text-sm font-bold text-gray-900">{title}</span>
-        <span className="flex items-center gap-2">
-          {right}
-          <ChevronDown
-            size={15}
-            className={`shrink-0 text-gray-300 transition-transform ${open ? "rotate-180" : ""}`}
-          />
-        </span>
-      </button>
-      {open && <div className="px-3 pb-3">{children}</div>}
-    </section>
-  );
-}
-
 export function ConnBadge({ online, updatedAt }: { online: boolean; updatedAt: string | null }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-gray-400 sm:text-xs">
@@ -206,32 +182,123 @@ export function StatusHero({
 const HEATER_FAULT = ["과온 트립", "센서 이상", "통신 두절", "이상 발생"];
 
 export function HeaterCard({
-  heater,
-}: { heater?: { pv?: string; sv?: string; status?: string; output?: string } }) {
-  if (!heater) return null;
-  const pv = norm(heater.pv);
-  const sv = norm(heater.sv);
-  const st = norm(heater.status);
-  const tone = HEATER_FAULT.includes(st)
-    ? "text-rose-600"
-    : st === "인터락"
-      ? "text-amber-600"
-      : "text-gray-500";
+  heater, online, running, onRequest,
+}: {
+  heater?: { pv?: string; sv?: string; status?: string; output?: string };
+  online: boolean;
+  running: boolean;
+  onRequest: (c: PendingCmd) => void;
+}) {
+  const [target, setTarget] = useState("");
+  const pv = norm(heater?.pv);
+  const sv = norm(heater?.sv);
+  const st = norm(heater?.status);
+  const tone = HEATER_FAULT.includes(st) ? "text-rose-600"
+    : st === "인터락" ? "text-amber-600" : "text-gray-500";
 
   return (
     <OpsCard title="기판 히터">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         <p className={`text-xl font-bold tabular-nums ${pv ? "text-gray-900" : "text-gray-300"}`}>
-          {pv || "—"}
+          {pv || "-"}
           {pv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
         </p>
         <p className="text-[11px] text-gray-400">
-          목표 <span className={sv ? "text-gray-600" : "text-gray-300"}>{sv ? `${sv} ℃` : "—"}</span>
+          목표 <span className={sv ? "text-gray-600" : "text-gray-300"}>{sv ? `${sv} ℃` : "-"}</span>
         </p>
         {st && <p className={`text-[11px] font-semibold ${tone}`}>{st}</p>}
-        {norm(heater.output) && (
-          <p className="text-[10px] text-gray-400">{heater.output}</p>
-        )}
+        {norm(heater?.output) && <p className="text-[10px] text-gray-400">{heater?.output}</p>}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-2.5">
+        <input
+          value={target}
+          onChange={(e) => setTarget(e.target.value)}
+          inputMode="decimal"
+          placeholder="목표 ℃"
+          className="w-24 rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
+        />
+        <button
+          disabled={!online || !target.trim()}
+          onClick={() =>
+            onRequest({
+              command: "HEATER_SV",
+              label: "히터 목표온도",
+              detail: `${target}℃`,
+              args: { value: target },
+            })
+          }
+          className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 disabled:opacity-40"
+        >
+          설정
+        </button>
+        <button
+          disabled={!online}
+          onClick={() =>
+            onRequest({ command: "HEATER_ONOFF", label: "히터 운전", detail: "→ ON", args: { on: true } })
+          }
+          className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 disabled:opacity-40"
+        >
+          운전 ON
+        </button>
+        <button
+          disabled={!online}
+          onClick={() =>
+            onRequest({ command: "HEATER_ONOFF", label: "히터 운전", detail: "→ OFF", args: { on: false } })
+          }
+          className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 disabled:opacity-40"
+        >
+          운전 OFF
+        </button>
+        {running && <span className="text-[10px] text-amber-600">공정 중 변경 주의</span>}
+      </div>
+    </OpsCard>
+  );
+}
+
+// ── 이오나이저 ───────────────────────────────────────────────
+export function IonizerCard({
+  ion, on, online, onRequest,
+}: {
+  ion?: { run?: boolean; lamp?: boolean; overtime?: boolean };
+  on: boolean;
+  online: boolean;
+  onRequest: (c: PendingCmd) => void;
+}) {
+  const dot = (v?: boolean, alert?: boolean) =>
+    `h-3 w-3 rounded-full border ${
+      v ? (alert ? "border-rose-600 bg-rose-500" : "border-green-600 bg-green-500") : "border-gray-300 bg-white"
+    }`;
+
+  return (
+    <OpsCard title="이오나이저">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <span className="flex items-center gap-1.5 text-xs text-gray-600">
+          <span className={dot(ion?.run)} /> 구동
+        </span>
+        <span className="flex items-center gap-1.5 text-xs text-gray-600">
+          <span className={dot(ion?.lamp)} /> 점등
+        </span>
+        <span className={`flex items-center gap-1.5 text-xs ${ion?.overtime ? "font-semibold text-rose-600" : "text-gray-600"}`}>
+          <span className={dot(ion?.overtime, true)} /> 램프 수명 초과
+        </span>
+        <button
+          disabled={!online}
+          onClick={() =>
+            onRequest({
+              command: "ION_button",
+              label: "이오나이저",
+              detail: on ? "→ OFF" : "→ ON",
+              stateKey: "ION",
+              args: { on: !on },
+            })
+          }
+          className={`ml-auto rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40 ${
+            on ? "border-green-600 bg-green-500 text-green-950" : "border-gray-200 text-gray-700 hover:bg-gray-50"
+          }`}
+        >
+          {on ? "운전 중 · 끄기" : "켜기"}
+        </button>
       </div>
     </OpsCard>
   );
@@ -254,16 +321,10 @@ function MetricRow({ item }: { item: MetricItem }) {
 }
 
 export function MetricSections({ groups }: { groups?: MetricGroup[] }) {
-  // 계측값(PV)이 있는 항목만 남긴다. 설정값 전용 항목은 공정 폼에서 확인한다.
-  const shown = (groups ?? [])
-    .map((g) => ({ ...g, items: g.items.filter((it) => norm(it.value) !== "" || it.value === 0) }))
-    .filter((g) => g.items.length > 0);
-  if (!shown.length) {
+  if (!groups?.length) {
     return (
       <OpsCard title="현재 값">
-        <p className="py-4 text-center text-xs text-gray-300">
-          공정이 시작되면 계측값이 표시됩니다
-        </p>
+        <p className="py-4 text-center text-xs text-gray-300">수신된 값이 없습니다</p>
       </OpsCard>
     );
   }
@@ -271,7 +332,7 @@ export function MetricSections({ groups }: { groups?: MetricGroup[] }) {
     <OpsCard title="현재 값">
       <div className="@container">
         <div className="grid grid-cols-1 gap-x-6 gap-y-3 @md:grid-cols-2">
-          {shown.map((g) => (
+          {groups.map((g) => (
             <div key={g.label}>
               <p className="mb-1 border-b border-gray-100 pb-1 text-[11px] font-semibold text-gray-400">
                 {g.label}
@@ -298,96 +359,41 @@ export function FlatMetrics({ metrics }: { metrics?: Record<string, string | num
   );
 }
 
-// ── 장비 상태(램프 + 밸브) ───────────────────────────────────
-// 램프의 on/off 의미는 장비마다 다르므로 색으로 정상/이상을 단정하지 않는다.
-// 채움 = ON, 빈 원 = OFF 로만 표현한다.
-export function StateChips({
-  indicators, valves,
-}: { indicators?: Record<string, boolean>; valves?: Record<string, boolean> }) {
-  const ind = Object.entries(indicators ?? {});
-  const val = Object.entries(valves ?? {});
-  if (!ind.length && !val.length) return null;
-
-  const onCount = [...ind, ...val].filter(([, v]) => v).length;
-
-  return (
-    <Collapsible
-      title="장비 상태"
-      right={<span className="text-[11px] text-gray-400">{onCount}개 ON</span>}
-    >
-      {ind.length > 0 && (
-        <div className="mb-3 flex flex-wrap gap-x-4 gap-y-2">
-          {ind.map(([k, on]) => (
-            <span key={k} className="flex items-center gap-1.5 text-xs text-gray-600">
-              <span
-                className={`h-2.5 w-2.5 rounded-full ${on ? "bg-gray-700" : "border border-gray-300"}`}
-              />
-              {k}
-            </span>
-          ))}
-        </div>
-      )}
-      {val.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {val.map(([k, on]) => (
-            <span
-              key={k}
-              className={`rounded-lg px-2 py-1 text-[11px] font-medium ${
-                on ? "bg-gray-800 text-white" : "border border-gray-200 text-gray-400"
-              }`}
-            >
-              {k}
-            </span>
-          ))}
-        </div>
-      )}
-    </Collapsible>
-  );
-}
-
 // ── 이벤트 ───────────────────────────────────────────────────
-const EVENT_PAGE = 8;
+const EVENT_PAGE = 10;
 
-// 콘솔처럼 위=과거, 아래=최신. 접힌 상태에서는 최신 8건만 보인다.
 export function EventFeed({ events }: { events?: OpsEvent[] }) {
   const [onlyIssue, setOnlyIssue] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [showAll, setShowAll] = useState(false);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
   const all = events ?? [];
   const filtered = onlyIssue ? all.filter((e) => e.level !== "info") : all;
-  // API는 최신순으로 주므로 뒤집어 오래된 순으로 만든다
-  const asc = filtered.slice().reverse();
-  const shown = expanded ? asc : asc.slice(-EVENT_PAGE);
+  const asc = filtered.slice().reverse(); // 위=과거, 아래=최신
+  const shown = showAll ? asc : asc.slice(-EVENT_PAGE);
   const hidden = asc.length - shown.length;
   const issueCount = all.filter((e) => e.level !== "info").length;
   const newestId = all[0]?.id;
 
-  // 새 이벤트가 들어오면 항상 최신(맨 아래)이 보이도록 스크롤
   useEffect(() => {
     const el = boxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [newestId, expanded, onlyIssue]);
+  }, [newestId, showAll, onlyIssue]);
 
   return (
-    <Collapsible
+    <OpsCard
       title="최근 이벤트"
       right={
         <span className="flex items-center gap-2">
           {all[0] && <span className="text-[10px] text-gray-300">최근 {fmtAgo(all[0].ts)}</span>}
-          <span
-            role="button"
-            tabIndex={0}
-            onClick={(e) => { e.stopPropagation(); setOnlyIssue((v) => !v); }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") { e.stopPropagation(); setOnlyIssue((v) => !v); }
-            }}
+          <button
+            onClick={() => setOnlyIssue((v) => !v)}
             className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${
-              onlyIssue ? "bg-rose-50 text-rose-600" : "text-gray-400"
+              onlyIssue ? "bg-rose-50 text-rose-600" : "text-gray-400 hover:bg-gray-50"
             }`}
           >
             경고·오류{issueCount > 0 && ` ${issueCount}`}
-          </span>
+          </button>
         </span>
       }
     >
@@ -397,21 +403,18 @@ export function EventFeed({ events }: { events?: OpsEvent[] }) {
         </p>
       ) : (
         <>
-          {hidden > 0 && (
+          {hidden > 0 && !showAll && (
             <button
-              onClick={() => setExpanded(true)}
+              onClick={() => setShowAll(true)}
               className="mb-1 w-full rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
             >
               이전 {hidden}건 더 보기 ↑
             </button>
           )}
-          <div
-            ref={boxRef}
-            className={expanded ? "max-h-72 space-y-1 overflow-y-auto" : "space-y-1"}
-          >
+          <div ref={boxRef} className={showAll ? "max-h-80 space-y-1 overflow-y-auto" : "space-y-1"}>
             {shown.map((e) => (
               <p key={e.id} className="flex gap-2 text-[11px] leading-snug">
-                <span className="shrink-0 font-mono text-gray-300">{fmtTime(e.ts)}</span>
+                <span className="shrink-0 font-mono text-gray-300">{fmtLogTime(e.ts)}</span>
                 <span
                   className={
                     e.level === "error" ? "text-rose-600"
@@ -423,17 +426,17 @@ export function EventFeed({ events }: { events?: OpsEvent[] }) {
               </p>
             ))}
           </div>
-          {expanded && (
+          {showAll && (
             <button
-              onClick={() => setExpanded(false)}
+              onClick={() => setShowAll(false)}
               className="mt-1 w-full rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
             >
-              접기
+              최근 {EVENT_PAGE}건만 보기
             </button>
           )}
         </>
       )}
-    </Collapsible>
+    </OpsCard>
   );
 }
 
@@ -523,6 +526,12 @@ export function ReadOnlyNote() {
 
 // ── 조작 감사 로그 ───────────────────────────────────────────
 export function CommandLog({ commands }: { commands?: OpsCommand[] }) {
+  const actionText = (c: OpsCommand) => {
+    const a = c.args as { on?: boolean; value?: unknown } | null;
+    if (a && typeof a.on === "boolean") return a.on ? "ON" : "OFF";
+    if (a && a.value !== undefined && a.value !== null) return `${a.value}`;
+    return "";
+  };
   if (!commands?.length) {
     return (
       <OpsCard title="조작 기록">
@@ -532,17 +541,21 @@ export function CommandLog({ commands }: { commands?: OpsCommand[] }) {
   }
   return (
     <OpsCard title="조작 기록">
-      <div className="divide-y divide-gray-50">
-        {commands.map((c) => (
-          <div key={c.id} className="flex items-center justify-between gap-2 py-1.5 text-xs">
-            <span className="min-w-0">
+      <div className="space-y-1">
+        {commands.slice().reverse().map((c) => {
+          const act = actionText(c);
+          return (
+            <p key={c.id} className="flex flex-wrap items-baseline gap-x-2 text-[11px] leading-snug">
+              <span className="shrink-0 font-mono text-gray-300">{fmtLogTime(c.requestedAt)}</span>
               <span className="font-medium text-gray-800">{c.label ?? c.command}</span>
-              <span className="ml-2 text-[11px] text-gray-400">{c.requestedBy}</span>
-            </span>
-            <span className="flex shrink-0 items-center gap-2">
-              <span className="text-[11px] text-gray-300">{fmtAgo(c.requestedAt)}</span>
+              {act && (
+                <span className={`font-bold ${act === "ON" ? "text-green-600" : act === "OFF" ? "text-gray-500" : "text-gray-700"}`}>
+                  {act}
+                </span>
+              )}
+              <span className="text-gray-400">{c.requestedBy}</span>
               <span
-                className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${
                   c.status === "done" ? "bg-gray-100 text-gray-500"
                   : c.status === "failed" ? "bg-rose-50 text-rose-600"
                   : c.status === "expired" ? "bg-amber-50 text-amber-600"
@@ -551,9 +564,9 @@ export function CommandLog({ commands }: { commands?: OpsCommand[] }) {
               >
                 {CMD_STATUS_LABEL[c.status] ?? c.status}
               </span>
-            </span>
-          </div>
-        ))}
+            </p>
+          );
+        })}
       </div>
     </OpsCard>
   );

@@ -21,6 +21,7 @@ export type OpsPayload = {
   indicators?: Record<string, boolean>;
   valves?: Record<string, boolean>;
   heater?: { pv?: string; sv?: string; status?: string; output?: string };
+  ion?: { run?: boolean; lamp?: boolean; overtime?: boolean };
 };
 
 export type OpsRun = {
@@ -119,4 +120,16 @@ export function fmtAgo(iso?: string | null): string {
   if (s < 3600) return `${Math.floor(s / 60)}분 전`;
   if (s < 86400) return `${Math.floor(s / 3600)}시간 전`;
   return `${Math.floor(s / 86400)}일 전`;
+}
+
+// 로그 표기용: 항상 월-일 시:분:초
+export function fmtLogTime(iso?: string | null): string {
+  if (!iso) return "-";
+  const d = new Date(iso);
+  const md = d.toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit", timeZone: KST })
+    .replace(/\.$/, "").replace(/\.\s*/g, "-").replace(/-$/, "");
+  const t = d.toLocaleTimeString("ko-KR", {
+    hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit", timeZone: KST,
+  });
+  return `${md} ${t}`;
 }

@@ -22,6 +22,7 @@ export const CHK_NODE_COMMANDS: Record<string, CmdDef> = {
   S1_button:      { key: "S1_button", label: "S1 셔터", stateKey: "S1" },
   S2_button:      { key: "S2_button", label: "S2 셔터", stateKey: "S2" },
   Door_Button:    { key: "Door_Button", label: "도어", stateKey: "Door", danger: true },
+  ION_button:     { key: "ION_button", label: "이오나이저", stateKey: "ION" },
   BuzzStop_Button:{ key: "BuzzStop_Button", label: "부저 정지", stateKey: "BuzzStop" },
 };
 
