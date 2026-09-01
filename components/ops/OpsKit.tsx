@@ -3,12 +3,13 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import {
-  CMD_STATUS_LABEL, ONLINE_WINDOW_MS, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
+  CMD_STATUS_LABEL, HEATER_STATE_LABEL, ONLINE_WINDOW_MS, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
   fmtLogTime, fmtTime, secBetween,
   type MetricGroup, type MetricItem, type OpsCommand, type OpsEvent, type OpsRun,
   type OpsStatus,
 } from "@/lib/ops";
 import RecipePicker, { type RecipeItem } from "@/components/ops/RecipePicker";
+import RecipeProgress from "@/components/ops/RecipeProgress";
 
 // ── 데이터 훅 ────────────────────────────────────────────────
 // 기본 2.5초 폴링. 명령을 보낸 직후에는 boost()로 0.6초 간격 고속 조회로 전환한다.
@@ -193,10 +194,13 @@ export function StatusHero({
 const HEATER_FAULT = ["과온 트립", "센서 이상", "통신 두절", "이상 발생"];
 
 export function HeaterCard({
-  heater, online, running, onRequest,
+  heater, progress, online, running, onRequest,
 }: {
-  heater?: { pv?: string; sv?: string; status?: string; output?: string;
-             on?: boolean; recipeRunning?: boolean };
+  heater?: { pv?: string; sv?: string; status?: string; output?: string; on?: boolean; recipeRunning?: boolean };
+  progress?: {
+    running?: boolean; state?: string; stepNo?: number; total?: number; soakRemainSec?: number;
+    steps?: { no: number; target: number; ramp: number; soak: number; cooldown?: boolean }[];
+  } | null;
   online: boolean;
   running: boolean;
   onRequest: (c: PendingCmd) => void;
@@ -291,12 +295,23 @@ export function HeaterCard({
             목표 온도를 입력해야 운전을 켤 수 있습니다
           </span>
         )}
-        {heater?.recipeRunning && (
-          <span className="text-[10px] font-semibold text-blue-600">히터 레시피 실행 중</span>
-        )}
         {running && <span className="text-[10px] text-amber-600">공정 중 변경 주의</span>}
       </div>
 
+      {progress && (progress.total ?? 0) > 0 && (
+        <div className="mt-2">
+          <RecipeProgress
+            title="히터 레시피"
+            stepNo={progress.stepNo ?? 0}
+            total={progress.total ?? 0}
+            stateText={HEATER_STATE_LABEL[progress.state ?? ""] ?? progress.state}
+            remainSec={progress.soakRemainSec}
+            labels={(progress.steps ?? []).map((s) =>
+              s.cooldown ? `${s.target}℃ 냉각` : `${s.target}℃ · ${s.soak}분`,
+            )}
+          />
+        </div>
+      )}
       {recipe && (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
           <span className="text-[11px] font-semibold text-gray-700">

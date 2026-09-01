@@ -23,6 +23,20 @@ export type OpsPayload = {
   heater?: { pv?: string; sv?: string; status?: string; output?: string;
              on?: boolean; recipeRunning?: boolean };
   ion?: { run?: boolean; lamp?: boolean; overtime?: boolean };
+  heaterRecipe?: {
+    running?: boolean;
+    state?: string;              // IDLE | RAMPING | SOAKING | DONE | ABORTED
+    stepNo?: number;
+    total?: number;
+    soakRemainSec?: number;
+    steps?: { no: number; target: number; ramp: number; soak: number; cooldown?: boolean }[];
+  } | null;
+  csvRecipe?: {
+    stepNo?: number;
+    total?: number;
+    active?: boolean;
+    steps?: string[];
+  } | null;
 };
 
 export type OpsRun = {
@@ -134,3 +148,8 @@ export function fmtLogTime(iso?: string | null): string {
   });
   return `${md} ${t}`;
 }
+
+export const HEATER_STATE_LABEL: Record<string, string> = {
+  IDLE: "대기", RAMPING: "승온 중", SOAKING: "유지 중",
+  DONE: "완료", ABORTED: "중단됨",
+};

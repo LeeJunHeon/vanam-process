@@ -83,7 +83,13 @@ export default function ChkPage() {
           onRequest={request}
         />
         <div className="flex flex-col gap-3">
-          <HeaterCard heater={p.heater} online={online} running={running} onRequest={request} />
+          <HeaterCard
+            heater={p.heater}
+            progress={p.heaterRecipe}
+            online={online}
+            running={running}
+            onRequest={request}
+          />
           <IonizerCard
             ion={p.ion}
             on={Boolean(p.valves?.ION)}
@@ -96,7 +102,12 @@ export default function ChkPage() {
         </div>
       </div>
 
-      <ChkProcessForm online={online} running={running} onRequest={request} />
+      <ChkProcessForm
+        online={online}
+        running={running}
+        csvProgress={p.csvRecipe}
+        onRequest={request}
+      />
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <div className="space-y-3">

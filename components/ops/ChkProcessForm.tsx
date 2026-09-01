@@ -3,10 +3,12 @@
 import { useState } from "react";
 import type { PendingCmd } from "@/components/ops/OpsKit";
 import RecipePicker, { type RecipeItem } from "@/components/ops/RecipePicker";
+import RecipeProgress from "@/components/ops/RecipeProgress";
 
 type Props = {
   online: boolean;
   running: boolean;
+  csvProgress?: { stepNo?: number; total?: number; active?: boolean; steps?: string[] } | null;
   onRequest: (c: PendingCmd) => void;
 };
 
@@ -23,7 +25,7 @@ function Chk({ label, on, set }: { label: string; on: boolean; set: (v: boolean)
   );
 }
 
-export default function ChkProcessForm({ online, running, onRequest }: Props) {
+export default function ChkProcessForm({ online, running, csvProgress, onRequest }: Props) {
   const [picker, setPicker] = useState(false);
   const [recipe, setRecipe] = useState<RecipeItem | null>(null);
   const [useG1, setUseG1] = useState(false);
@@ -120,6 +122,18 @@ export default function ChkProcessForm({ online, running, onRequest }: Props) {
           <input className={F} value={param} onChange={(e) => setParam(e.target.value)} inputMode="decimal" /></div>
         <div className="flex items-end pb-1"><Chk label="DC stabilize" on={dcDelay} set={setDcDelay} /></div>
       </div>
+
+      {csvProgress && (csvProgress.total ?? 0) > 0 && (
+        <div className="mt-3">
+          <RecipeProgress
+            title="적재된 공정 레시피"
+            stepNo={csvProgress.active ? (csvProgress.stepNo ?? 0) : 0}
+            total={csvProgress.total ?? 0}
+            stateText={csvProgress.active ? "실행 중" : "적재됨"}
+            labels={csvProgress.steps ?? []}
+          />
+        </div>
+      )}
 
       {recipe && (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
