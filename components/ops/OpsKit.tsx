@@ -196,7 +196,9 @@ const HEATER_FAULT = ["과온 트립", "센서 이상", "통신 두절", "이상
 export function HeaterCard({
   heater, progress, online, running, onRequest,
 }: {
-  heater?: { pv?: string; sv?: string; status?: string; output?: string; on?: boolean; recipeRunning?: boolean };
+  heater?: { pv?: string; sv?: string; status?: string; output?: string; on?: boolean; recipeRunning?: boolean;
+             curSv?: number | string; pidErr?: number | string; otLimit?: number | string;
+             run?: boolean; fault?: boolean; tcErr?: boolean; wdErr?: boolean; ot?: boolean };
   progress?: {
     running?: boolean; state?: string; stepNo?: number; total?: number; soakRemainSec?: number;
     steps?: { no: number; target: number; ramp: number; soak: number; cooldown?: boolean }[];
@@ -229,12 +231,29 @@ export function HeaterCard({
           {pv || "-"}
           {pv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
         </p>
-        <p className="text-[11px] text-gray-400">
-          목표 <span className={sv ? "text-gray-600" : "text-gray-300"}>{sv ? `${sv} ℃` : "-"}</span>
+        <p className={`text-[11px] ${heater?.run ? "text-gray-500" : "text-gray-300"}`}>
+          목표 <span className={sv ? "" : "text-gray-300"}>{sv ? `${sv} ℃` : "-"}</span>
+          {!heater?.run && sv && <span className="ml-1">(운전 정지)</span>}
         </p>
+        {heater?.run && heater?.curSv !== undefined && heater?.curSv !== null && (
+          <p className="text-[11px] text-gray-500">
+            현재 목표 <span className="tabular-nums">{heater.curSv} ℃</span>
+          </p>
+        )}
         {st && <p className={`text-[11px] font-semibold ${tone}`}>{st}</p>}
         {norm(heater?.output) && <p className="text-[10px] text-gray-400">{heater?.output}</p>}
       </div>
+
+      {(heater?.tcErr || heater?.wdErr || heater?.ot || heater?.fault) && (
+        <p className="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-600">
+          {[
+            heater?.ot && "과온 트립",
+            heater?.tcErr && "온도센서 이상",
+            heater?.wdErr && "워치독 두절",
+            heater?.fault && !heater?.ot && !heater?.tcErr && !heater?.wdErr && "히터 이상",
+          ].filter(Boolean).join(" · ")}
+        </p>
+      )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-2.5">
         <input

@@ -83,7 +83,7 @@ export default function ChkMimic({
 
   const lamps = [
     { key: "Air", label: "Air" }, { key: "G1", label: "G1" }, { key: "G2", label: "G2" },
-    { key: "ATM", label: "ATM", alert: true }, { key: "Water", label: "Water" },
+    { key: "ATM", label: "ATM" }, { key: "Water", label: "Water" },
   ];
 
   return (
@@ -102,8 +102,8 @@ export default function ChkMimic({
             <span key={l.key} className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
               <span className="h-3 w-3 rounded-full border"
                 style={{
-                  backgroundColor: on ? (l.alert ? RED : GREEN) : "#ffffff",
-                  borderColor: on ? (l.alert ? RED_D : GREEN_D) : GRAY_D,
+                  backgroundColor: on ? GREEN : RED,
+                  borderColor: on ? GREEN_D : RED_D,
                 }} />
               {l.label}
             </span>
@@ -168,7 +168,7 @@ export default function ChkMimic({
           부저 정지
         </button>
         <span className="ml-auto text-[10px] text-gray-400">
-          초록 = ON · 흰색 = OFF · 파랑 점선 = 전환 중
+          램프 초록 = 정상 · 빨강 = 미검출 · 노드 초록 = ON · 흰색 = OFF · 파랑 점선 = 전환 중
         </span>
       </div>
     </section>

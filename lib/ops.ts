@@ -21,7 +21,9 @@ export type OpsPayload = {
   indicators?: Record<string, boolean>;
   valves?: Record<string, boolean>;
   heater?: { pv?: string; sv?: string; status?: string; output?: string;
-             on?: boolean; recipeRunning?: boolean };
+             on?: boolean; recipeRunning?: boolean;
+             curSv?: number | string; pidErr?: number | string; otLimit?: number | string;
+             run?: boolean; fault?: boolean; tcErr?: boolean; wdErr?: boolean; ot?: boolean };
   ion?: { run?: boolean; lamp?: boolean; overtime?: boolean };
   heaterRecipe?: {
     running?: boolean;
