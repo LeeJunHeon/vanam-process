@@ -12,9 +12,10 @@ const newProc = (n: number): ProcRow => ({
   Process_name: `STEP${n}`, Ar: "1", Ar_flow: "5", O2: "0", O2_flow: "",
   working_pressure: "2", process_time: "10", shutter_delay: "5",
   use_rf_power: "1", rf_power: "200", use_dc_power: "0", dc_power: "",
-  use_dc_delay: "0", use_heater: "0", heater_temp: "", gun1: "1", gun2: "0",
+  use_dc_delay: "0", use_heater: "0", heater_temp: "", heater_ramp: "",
+  gun1: "1", gun2: "0", "G1 Target": "", "G2 Target": "",
 });
-const newHeat = (): HeatRow => ({ target_c: "120", ramp_c_per_min: "12", soak_min: "30" });
+const newHeat = (): HeatRow => ({ target_c: "120", ramp_c_per_min: "12", ramp_min: "", soak_min: "30" });
 
 const IN = "w-full rounded border border-gray-200 px-1.5 py-1 text-[11px]";
 const on1 = (v?: string) => v === "1";
@@ -29,6 +30,9 @@ const PROC_FIELDS: { col: string; label: string; use?: string; unit?: string }[]
   { col: "rf_power", label: "RF 파워", use: "use_rf_power", unit: "W" },
   { col: "dc_power", label: "DC 파워", use: "use_dc_power", unit: "W" },
   { col: "heater_temp", label: "히터 온도", use: "use_heater", unit: "℃" },
+  { col: "heater_ramp", label: "승온 속도(6배수)", unit: "℃/분" },
+  { col: "G1 Target", label: "G1 타겟명" },
+  { col: "G2 Target", label: "G2 타겟명" },
 ];
 const PROC_FLAGS: { col: string; label: string }[] = [
   { col: "gun1", label: "Gun 1" },
@@ -49,6 +53,7 @@ export default function ChkRecipe() {
   const [hName, setHName] = useState("");
   const [hId, setHId] = useState<number | null>(null);
   const [hMeta, setHMeta] = useState<string | null>(null);
+  const [hRepeat, setHRepeat] = useState("1");
   const [heats, setHeats] = useState<HeatRow[]>([newHeat()]);
 
   const pset = (i: number, col: string, v: string) =>
@@ -62,7 +67,13 @@ export default function ChkRecipe() {
     if (!name) { setMsg("레시피 이름을 입력하세요."); return; }
     const payload = {
       equipment: "CHK", kind, name,
-      rows: kind === "process" ? procs : heats.map((r, i) => ({ ...r, step: String(i + 1) })),
+      rows: kind === "process"
+        ? procs
+        : heats.map((r, i) => ({
+            ...r,
+            step: String(i + 1),
+            ...(i === 0 ? { repeat: hRepeat.trim() || "1" } : {}),
+          })),
       id: (kind === "process" ? pId : hId) ?? undefined,
     };
     const res = await fetch("/api/ops/recipe", {
@@ -83,6 +94,7 @@ export default function ChkRecipe() {
       setPMeta(`최종 수정 ${r.updatedBy} · ${fmtLogTime(r.updatedAt)}`);
     } else {
       setHId(r.id); setHName(r.name); setHeats(r.rows.length ? r.rows : [newHeat()]);
+      setHRepeat(String(r.rows?.[0]?.repeat ?? "1"));
       setHMeta(`최종 수정 ${r.updatedBy} · ${fmtLogTime(r.updatedAt)}`);
     }
     setPicker(null);
@@ -186,14 +198,17 @@ export default function ChkRecipe() {
       ) : (
         <>
           <div className="space-y-1.5">
-            <div className="grid grid-cols-[22px_1fr_1fr_1fr_26px] gap-2 text-[10px] text-gray-400">
-              <span /><span>목표 온도 ℃</span><span>승온 ℃/분 (6배수)</span><span>유지 시간 분</span><span />
+            <div className="grid grid-cols-[22px_1fr_1fr_1fr_1fr_26px] gap-2 text-[10px] text-gray-400">
+              <span /><span>목표 온도 ℃</span><span>승온 ℃/분 (6배수)</span>
+              <span>승온 시간 분(선택)</span><span>유지 시간 분</span><span />
             </div>
             {heats.map((r, i) => (
-              <div key={i} className="grid grid-cols-[22px_1fr_1fr_1fr_26px] items-center gap-2">
+              <div key={i} className="grid grid-cols-[22px_1fr_1fr_1fr_1fr_26px] items-center gap-2">
                 <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
                 <input className={IN} value={r.target_c ?? ""} onChange={(e) => hset(i, "target_c", e.target.value)} />
                 <input className={IN} value={r.ramp_c_per_min ?? ""} onChange={(e) => hset(i, "ramp_c_per_min", e.target.value)} />
+                <input className={IN} value={r.ramp_min ?? ""} onChange={(e) => hset(i, "ramp_min", e.target.value)}
+                  placeholder="6℃/분↓" />
                 <input className={IN} value={r.soak_min ?? ""} onChange={(e) => hset(i, "soak_min", e.target.value)} />
                 <button onClick={() => setHeats((s) => s.filter((_, k) => k !== i))}
                   disabled={heats.length === 1}
@@ -203,13 +218,23 @@ export default function ChkRecipe() {
               </div>
             ))}
           </div>
-          <button onClick={() => setHeats((s) => [...s, newHeat()])}
-            className="mt-2 inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-200">
-            <Plus size={12} /> 단계 추가
-          </button>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button onClick={() => setHeats((s) => [...s, newHeat()])}
+              className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-200">
+              <Plus size={12} /> 단계 추가
+            </button>
+            <label className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-500">
+              전체 반복
+              <input value={hRepeat} onChange={(e) => setHRepeat(e.target.value)}
+                inputMode="numeric"
+                className="w-14 rounded border border-gray-200 px-1.5 py-1 text-center text-[11px]" />
+              회
+            </label>
+          </div>
           <p className="mt-2 text-[10px] text-gray-400">
-            승온 속도는 6 ℃/분 단위로만 설정됩니다(6, 12, 18 …). 그 외 값은 장비가
-            가장 가까운 배수로 보정합니다. 저장한 레시피는 히터 카드에서 불러와 실행합니다.
+            승온은 속도(6℃/분 단위) 또는 시간(분) 중 하나로 지정합니다. 승온 시간을
+            입력하면 속도 대신 그 시간에 맞춰 올립니다(6℃/분보다 느린 승온 가능).
+            저장한 레시피는 히터 카드에서 불러와 실행합니다.
           </p>
         </>
       )}

@@ -9,15 +9,19 @@ type Props = {
   labels: string[];      // 각 단계 표시 문자열
   stateText?: string;
   remainSec?: number;
+  percent?: number;      // 전체 진행률(장비 계산값). 없으면 스텝 기준으로 계산
+  footer?: string;       // 진행바 아래 보조 정보 한 줄
 };
 
 // 실행 중인 레시피의 단계 진행을 한 줄로 보여준다.
 export default function RecipeProgress({
-  title, stepNo, total, labels, stateText, remainSec,
+  title, stepNo, total, labels, stateText, remainSec, percent, footer,
 }: Props) {
   if (!total) return null;
   const cur = Math.max(0, Math.min(stepNo, total));
-  const pct = total > 0 ? Math.round((Math.max(0, cur - 1) / total) * 100) : 0;
+  const pct = typeof percent === "number"
+    ? Math.max(0, Math.min(100, Math.round(percent)))
+    : total > 0 ? Math.round((Math.max(0, cur - 1) / total) * 100) : 0;
 
   return (
     <div className="rounded-xl border border-gray-100 bg-gray-50 p-2.5">
@@ -61,6 +65,8 @@ export default function RecipeProgress({
           );
         })}
       </div>
+
+      {footer && <p className="mt-1.5 text-[10px] text-gray-400">{footer}</p>}
     </div>
   );
 }

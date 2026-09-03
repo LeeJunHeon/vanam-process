@@ -201,7 +201,10 @@ export function HeaterCard({
              run?: boolean; fault?: boolean; tcErr?: boolean; wdErr?: boolean; ot?: boolean };
   progress?: {
     running?: boolean; state?: string; stepNo?: number; total?: number; soakRemainSec?: number;
-    steps?: { no: number; target: number; ramp: number; soak: number; cooldown?: boolean }[];
+    stepRemainSec?: number; cycle?: number; repeat?: number; held?: boolean;
+    elapsedSec?: number; totalEstSec?: number; percent?: number;
+    steps?: { no: number; target: number; ramp: number; rampMin?: number | null;
+              soak: number; cooldown?: boolean }[];
   } | null;
   online: boolean;
   running: boolean;
@@ -318,19 +321,72 @@ export function HeaterCard({
       </div>
 
       {progress && (progress.total ?? 0) > 0 && (
-        <div className="mt-2">
+        <div className="mt-2 space-y-1.5">
           <RecipeProgress
-            title="히터 레시피"
+            title={
+              (progress.repeat ?? 1) > 1
+                ? `히터 레시피 · ${progress.cycle ?? 1}/${progress.repeat}회차`
+                : "히터 레시피"
+            }
             stepNo={progress.stepNo ?? 0}
             total={progress.total ?? 0}
-            stateText={HEATER_STATE_LABEL[progress.state ?? ""] ?? progress.state}
-            remainSec={progress.soakRemainSec}
+            stateText={
+              progress.held
+                ? "일시정지"
+                : (HEATER_STATE_LABEL[progress.state ?? ""] ?? progress.state)
+            }
+            remainSec={
+              (progress.stepRemainSec ?? -1) >= 0
+                ? progress.stepRemainSec
+                : undefined
+            }
+            percent={progress.percent}
+            footer={
+              progress.running
+                ? `전체 ${progress.percent ?? 0}% · 경과 ${fmtDuration(progress.elapsedSec ?? 0)} / 예상 ${fmtDuration(progress.totalEstSec ?? 0)}`
+                : undefined
+            }
             labels={(progress.steps ?? []).map((s) =>
-              s.cooldown ? `${s.target}℃ 냉각` : `${s.target}℃ · ${s.soak}분`,
+              s.cooldown
+                ? `${s.target}℃ 냉각`
+                : s.rampMin
+                  ? `${s.target}℃ · 승온 ${s.rampMin}분`
+                  : `${s.target}℃ · ${s.soak}분`,
             )}
           />
+          {progress.running && (
+            <div className="flex gap-1.5">
+              <button
+                disabled={!online}
+                onClick={() =>
+                  onRequest({
+                    command: "HEATER_RECIPE_HOLD",
+                    label: progress.held ? "히터 레시피 재개" : "히터 레시피 일시정지",
+                    args: { on: !progress.held },
+                  })
+                }
+                className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-700 disabled:opacity-40"
+              >
+                {progress.held ? "재개" : "일시정지"}
+              </button>
+              <button
+                disabled={!online}
+                onClick={() =>
+                  onRequest({
+                    command: "HEATER_RECIPE_STEP",
+                    label: "히터 레시피 스텝 건너뛰기",
+                    detail: `현재 ${progress.stepNo}/${progress.total} 단계`,
+                  })
+                }
+                className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-700 disabled:opacity-40"
+              >
+                스텝 건너뛰기
+              </button>
+            </div>
+          )}
         </div>
       )}
+
       {recipe && (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">
           <span className="text-[11px] font-semibold text-gray-700">

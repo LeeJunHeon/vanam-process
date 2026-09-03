@@ -31,7 +31,15 @@ export type OpsPayload = {
     stepNo?: number;
     total?: number;
     soakRemainSec?: number;
-    steps?: { no: number; target: number; ramp: number; soak: number; cooldown?: boolean }[];
+    stepRemainSec?: number;      // 현재 스텝 잔여(초). -1 = 계산 불가
+    cycle?: number;              // 현재 사이클 (1-based)
+    repeat?: number;             // 총 반복 횟수
+    held?: boolean;              // 일시정지 중
+    elapsedSec?: number;
+    totalEstSec?: number;
+    percent?: number;            // 전체 진행률 (HOLD 시간 보정 포함)
+    steps?: { no: number; target: number; ramp: number; rampMin?: number | null;
+              soak: number; cooldown?: boolean }[];
   } | null;
   csvRecipe?: {
     stepNo?: number;
