@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import {
   CMD_STATUS_LABEL, HEATER_STATE_LABEL, ONLINE_WINDOW_MS, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
@@ -480,30 +480,57 @@ export function FlatMetrics({ metrics }: { metrics?: Record<string, string | num
 // ── 이벤트 ───────────────────────────────────────────────────
 const EVENT_PAGE = 10;
 
-export function EventFeed({ events }: { events?: OpsEvent[] }) {
+export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipment: string }) {
   const [onlyIssue, setOnlyIssue] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [older, setOlder] = useState<OpsEvent[]>([]);
+  const [loading, setLoading] = useState(false);
   const boxRef = useRef<HTMLDivElement | null>(null);
 
-  const all = events ?? [];
-  const filtered = onlyIssue ? all.filter((e) => e.level !== "info") : all;
-  const asc = filtered.slice().reverse(); // 위=과거, 아래=최신
+  // 실시간 수신분 + 과거에서 불러온 분을 합치고 중복을 제거한다
+  const merged = useMemo(() => {
+    const map = new Map<number, OpsEvent>();
+    for (const e of [...(events ?? []), ...older]) map.set(e.id, e);
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.ts).getTime() - new Date(a.ts).getTime() || b.id - a.id,
+    );
+  }, [events, older]);
+
+  const filtered = onlyIssue ? merged.filter((e) => e.level !== "info") : merged;
+  const asc = filtered.slice().reverse();
   const shown = showAll ? asc : asc.slice(-EVENT_PAGE);
   const hidden = asc.length - shown.length;
-  const issueCount = all.filter((e) => e.level !== "info").length;
-  const newestId = all[0]?.id;
+  const issueCount = merged.filter((e) => e.level !== "info").length;
+  const newestId = merged[0]?.id;
 
   useEffect(() => {
     const el = boxRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [newestId, showAll, onlyIssue]);
 
+  const loadOlder = async () => {
+    const oldest = merged[merged.length - 1];
+    if (!oldest) return;
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `/api/ops/status?equipment=${encodeURIComponent(equipment)}&limit=200&before=${encodeURIComponent(oldest.ts)}`,
+        { cache: "no-store" },
+      );
+      const j = await res.json();
+      setOlder((s) => [...s, ...((j.events ?? []) as OpsEvent[])]);
+      setShowAll(true);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <OpsCard
-      title="최근 이벤트"
+      title="로그"
       right={
         <span className="flex items-center gap-2">
-          {all[0] && <span className="text-[10px] text-gray-300">최근 {fmtAgo(all[0].ts)}</span>}
+          {merged[0] && <span className="text-[10px] text-gray-300">최근 {fmtAgo(merged[0].ts)}</span>}
           <button
             onClick={() => setOnlyIssue((v) => !v)}
             className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${
@@ -517,19 +544,30 @@ export function EventFeed({ events }: { events?: OpsEvent[] }) {
     >
       {!shown.length ? (
         <p className="py-6 text-center text-xs text-gray-300">
-          {onlyIssue ? "경고·오류가 없습니다" : "수신된 이벤트가 없습니다"}
+          {onlyIssue ? "경고·오류가 없습니다" : "수신된 로그가 없습니다"}
         </p>
       ) : (
         <>
-          {hidden > 0 && !showAll && (
-            <button
-              onClick={() => setShowAll(true)}
-              className="mb-1 w-full rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
-            >
-              이전 {hidden}건 더 보기 ↑
-            </button>
-          )}
-          <div ref={boxRef} className={showAll ? "max-h-80 space-y-1 overflow-y-auto" : "space-y-1"}>
+          <div className="mb-1 flex gap-1">
+            {hidden > 0 && !showAll && (
+              <button
+                onClick={() => setShowAll(true)}
+                className="flex-1 rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
+              >
+                이전 {hidden}건 더 보기 ↑
+              </button>
+            )}
+            {showAll && (
+              <button
+                onClick={loadOlder}
+                disabled={loading}
+                className="flex-1 rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50 disabled:opacity-40"
+              >
+                {loading ? "불러오는 중…" : "더 과거 로그 불러오기 ↑"}
+              </button>
+            )}
+          </div>
+          <div ref={boxRef} className={showAll ? "max-h-96 space-y-1 overflow-y-auto" : "space-y-1"}>
             {shown.map((e) => (
               <p key={e.id} className="flex gap-2 text-[11px] leading-snug">
                 <span className="shrink-0 font-mono text-gray-300">{fmtLogTime(e.ts)}</span>
@@ -546,7 +584,7 @@ export function EventFeed({ events }: { events?: OpsEvent[] }) {
           </div>
           {showAll && (
             <button
-              onClick={() => setShowAll(false)}
+              onClick={() => { setShowAll(false); setOlder([]); }}
               className="mt-1 w-full rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
             >
               최근 {EVENT_PAGE}건만 보기

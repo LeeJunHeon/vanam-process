@@ -111,7 +111,7 @@ export default function ChkPage() {
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <div className="space-y-3">
-          <EventFeed events={data?.events} />
+          <EventFeed events={data?.events} equipment="CHK" />
           <RunHistory runs={data?.runs} />
           <CommandLog commands={data?.commands} />
         </div>

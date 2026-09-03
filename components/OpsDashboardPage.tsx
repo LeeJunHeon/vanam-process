@@ -168,7 +168,7 @@ export default function OpsDashboardPage({
       </div>
 
       {/* 최근 이벤트 — 연동된 장비의 실데이터 */}
-      <EventFeed events={chk.data?.events} />
+      <EventFeed events={chk.data?.events} equipment="CHK" />
     </div>
   );
 }

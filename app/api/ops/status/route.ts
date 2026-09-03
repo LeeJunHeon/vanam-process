@@ -11,6 +11,8 @@ export async function GET(req: NextRequest) {
   if (!_auth.ok) return _auth.response;
 
   const equipment = req.nextUrl.searchParams.get("equipment") ?? "CHK";
+  const limit = req.nextUrl.searchParams.get("limit");
+  const before = req.nextUrl.searchParams.get("before");
 
   const [state, run, events, runs, commands] = await Promise.all([
     prisma.opsState.findUnique({ where: { equipment } }),
@@ -19,10 +21,13 @@ export async function GET(req: NextRequest) {
       orderBy: { startedAt: "desc" },
     }),
     prisma.opsEvent.findMany({
-      where: { equipment },
+      where: {
+        equipment,
+        ...(before ? { ts: { lt: new Date(before) } } : {}),
+      },
       // 같은 초에 여러 이벤트가 들어오면 ts만으로는 순서가 흔들리므로 id를 보조 정렬로 쓴다
       orderBy: [{ ts: "desc" }, { id: "desc" }],
-      take: 50,
+      take: Math.min(Math.max(Number(limit) || 50, 1), 500),
     }),
     prisma.opsRun.findMany({
       where: { equipment },
