@@ -11,11 +11,12 @@ type Props = {
   remainSec?: number;
   percent?: number;      // 전체 진행률(장비 계산값). 없으면 스텝 기준으로 계산
   footer?: string;       // 진행바 아래 보조 정보 한 줄
+  done?: boolean;        // 완료/중단된 레시피 (회색 처리, "종료" 표기)
 };
 
 // 실행 중인 레시피의 단계 진행을 한 줄로 보여준다.
 export default function RecipeProgress({
-  title, stepNo, total, labels, stateText, remainSec, percent, footer,
+  title, stepNo, total, labels, stateText, remainSec, percent, footer, done,
 }: Props) {
   if (!total) return null;
   const cur = Math.max(0, Math.min(stepNo, total));
@@ -24,14 +25,16 @@ export default function RecipeProgress({
     : total > 0 ? Math.round((Math.max(0, cur - 1) / total) * 100) : 0;
 
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50 p-2.5">
+    <div className={`rounded-xl border border-gray-100 bg-gray-50 p-2.5 ${done ? "opacity-80" : ""}`}>
       <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2">
         <span className="text-[11px] font-bold text-gray-700">{title}</span>
         <span className="text-[11px] text-gray-500">
-          {cur > 0 ? `${cur} / ${total} 단계` : `${total} 단계 대기`}
+          {cur > 0 ? `${cur} / ${total} 단계` : done ? `${total}단계 종료` : `${total} 단계 대기`}
         </span>
         {stateText && (
-          <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+            done ? "bg-gray-200 text-gray-500" : "bg-gray-800 text-white"
+          }`}>
             {stateText}
           </span>
         )}
@@ -43,20 +46,23 @@ export default function RecipeProgress({
       </div>
 
       <div className="mb-1.5 h-1.5 overflow-hidden rounded-full bg-gray-200">
-        <div className="h-full rounded-full bg-gray-700 transition-all" style={{ width: `${pct}%` }} />
+        <div
+          className={`h-full rounded-full transition-all ${done ? "bg-gray-300" : "bg-gray-700"}`}
+          style={{ width: `${done ? 100 : pct}%` }}
+        />
       </div>
 
       <div className="flex flex-wrap gap-1">
         {labels.map((l, i) => {
           const no = i + 1;
-          const done = cur > 0 && no < cur;
-          const now = no === cur;
+          const past = done || (cur > 0 && no < cur);
+          const now = !done && no === cur;
           return (
             <span
               key={no}
               className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                 now ? "bg-gray-800 text-white"
-                : done ? "bg-gray-200 text-gray-500"
+                : past ? "bg-gray-200 text-gray-500"
                 : "border border-gray-200 text-gray-400"
               }`}
             >

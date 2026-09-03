@@ -320,9 +320,13 @@ export function HeaterCard({
         {running && <span className="text-[10px] text-amber-600">공정 중 변경 주의</span>}
       </div>
 
-      {progress && (progress.total ?? 0) > 0 && (
+      {progress && (progress.total ?? 0) > 0 && (() => {
+        const fin = !progress.running &&
+          (progress.state === "DONE" || progress.state === "ABORTED");
+        return (
         <div className="mt-2 space-y-1.5">
           <RecipeProgress
+            done={fin}
             title={
               (progress.repeat ?? 1) > 1
                 ? `히터 레시피 · ${progress.cycle ?? 1}/${progress.repeat}회차`
@@ -385,7 +389,8 @@ export function HeaterCard({
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
 
       {recipe && (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 px-3 py-2">

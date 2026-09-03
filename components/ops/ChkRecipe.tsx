@@ -166,25 +166,48 @@ export default function ChkRecipe() {
           <div className="space-y-2">
             {procs.map((r, i) => (
               <div key={i} className="rounded-xl border border-gray-100 p-2.5">
-                {isDelayRow(r) ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
-                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
-                      대기
-                    </span>
-                    <input
-                      className={`${IN} flex-1`}
-                      value={r.Process_name ?? ""}
-                      onChange={(e) => pset(i, "Process_name", e.target.value)}
-                      placeholder="delay 10m (s=초, m=분, h=시간, d=일)"
-                    />
-                    <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
-                      disabled={procs.length === 1}
-                      className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                ) : (
+                {isDelayRow(r) ? (() => {
+                  const m = (r.Process_name ?? "").match(DELAY_RE);
+                  const num = m?.[1] ?? "10";
+                  const unit = (m?.[2] || "m").toLowerCase();
+                  const put = (n: string, u: string) => {
+                    // 입력 중 형식이 깨져 일반 스텝으로 바뀌지 않도록 숫자만 남긴다
+                    const clean = n.replace(/[^0-9.]/g, "").replace(/\.$/, "");
+                    pset(i, "Process_name", `delay ${clean === "" ? "0" : clean}${u}`);
+                  };
+                  return (
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
+                      <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
+                        대기
+                      </span>
+                      <input
+                        className={`${IN} w-20 flex-none text-right`}
+                        inputMode="decimal"
+                        value={num}
+                        onChange={(e) => put(e.target.value, unit)}
+                      />
+                      <select
+                        value={unit}
+                        onChange={(e) => put(num, e.target.value)}
+                        className="rounded border border-gray-200 px-1.5 py-1 text-[11px] text-gray-700"
+                      >
+                        <option value="s">초</option>
+                        <option value="m">분</option>
+                        <option value="h">시간</option>
+                        <option value="d">일</option>
+                      </select>
+                      <span className="min-w-0 flex-1 truncate text-[10px] text-gray-400">
+                        앞 스텝 종료 후 대기
+                      </span>
+                      <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
+                        disabled={procs.length === 1}
+                        className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                  );
+                })() : (
                   <>
                     <div className="mb-2 flex items-center gap-2">
                       <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
@@ -234,7 +257,7 @@ export default function ChkRecipe() {
           </div>
           <p className="mt-2 text-[10px] text-gray-400">
             대기 스텝은 앞 스텝이 끝난 뒤 지정 시간만큼 기다렸다가 다음 스텝을
-            시작합니다(예: delay 30s, delay 10m, delay 1h). 저장한 레시피는 공정 설정
+            시작합니다. 저장한 레시피는 공정 설정
             카드에서 불러와 실행합니다.
           </p>
         </>
