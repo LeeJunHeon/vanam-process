@@ -15,6 +15,19 @@ const newProc = (n: number): ProcRow => ({
   use_dc_delay: "0", use_heater: "0", heater_temp: "", heater_ramp: "",
   gun1: "1", gun2: "0", "G1 Target": "", "G2 Target": "",
 });
+// 대기 스텝: Process_name 의 "delay Xm" 문법만으로 동작한다(장비 파서 규칙).
+// 다른 컬럼은 장비가 무시하므로 빈 값으로 둔다.
+const newDelay = (min = 10): ProcRow => ({
+  Process_name: `delay ${min}m`, Ar: "0", Ar_flow: "", O2: "0", O2_flow: "",
+  working_pressure: "", process_time: "", shutter_delay: "",
+  use_rf_power: "0", rf_power: "", use_dc_power: "0", dc_power: "",
+  use_dc_delay: "0", use_heater: "0", heater_temp: "", heater_ramp: "",
+  gun1: "0", gun2: "0", "G1 Target": "", "G2 Target": "",
+});
+
+const DELAY_RE = /^\s*delay\s+(\d+(?:\.\d+)?)\s*([smhd]?)\s*$/i;
+const isDelayRow = (r: ProcRow) => DELAY_RE.test(r.Process_name ?? "");
+
 const newHeat = (): HeatRow => ({ target_c: "120", ramp_c_per_min: "12", ramp_min: "", soak_min: "30" });
 
 const IN = "w-full rounded border border-gray-200 px-1.5 py-1 text-[11px]";
@@ -153,46 +166,76 @@ export default function ChkRecipe() {
           <div className="space-y-2">
             {procs.map((r, i) => (
               <div key={i} className="rounded-xl border border-gray-100 p-2.5">
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
-                  <input className={`${IN} flex-1`} value={r.Process_name ?? ""}
-                    onChange={(e) => pset(i, "Process_name", e.target.value)}
-                    placeholder="공정 이름 (Process_name)" />
-                  <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
-                    disabled={procs.length === 1}
-                    className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
-                  {PROC_FIELDS.map((f) => (
-                    <div key={f.col}>
-                      <label className="mb-0.5 flex items-center gap-1 text-[10px] text-gray-500">
-                        {f.use && (
-                          <input type="checkbox" checked={on1(r[f.use])}
-                            onChange={(e) => pset(i, f.use!, e.target.checked ? "1" : "0")}
-                            className="h-3 w-3 rounded border-gray-300" />
-                        )}
-                        <span className="truncate">{f.label}</span>
-                        {f.unit && <span className="text-gray-300">{f.unit}</span>}
-                      </label>
-                      <input className={IN} value={r[f.col] ?? ""}
-                        onChange={(e) => pset(i, f.col, e.target.value)} />
+                {isDelayRow(r) ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
+                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
+                      대기
+                    </span>
+                    <input
+                      className={`${IN} flex-1`}
+                      value={r.Process_name ?? ""}
+                      onChange={(e) => pset(i, "Process_name", e.target.value)}
+                      placeholder="delay 10m (s=초, m=분, h=시간, d=일)"
+                    />
+                    <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
+                      disabled={procs.length === 1}
+                      className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
+                      <input className={`${IN} flex-1`} value={r.Process_name ?? ""}
+                        onChange={(e) => pset(i, "Process_name", e.target.value)}
+                        placeholder="공정 이름 (Process_name)" />
+                      <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
+                        disabled={procs.length === 1}
+                        className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
+                        <Trash2 size={13} />
+                      </button>
                     </div>
-                  ))}
-                </div>
-                <div className="mt-2 flex flex-wrap gap-3">
-                  {PROC_FLAGS.map((f) => <Flag key={f.col} i={i} col={f.col} label={f.label} />)}
-                </div>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
+                      {PROC_FIELDS.map((f) => (
+                        <div key={f.col}>
+                          <label className="mb-0.5 flex items-center gap-1 text-[10px] text-gray-500">
+                            {f.use && (
+                              <input type="checkbox" checked={on1(r[f.use])}
+                                onChange={(e) => pset(i, f.use!, e.target.checked ? "1" : "0")}
+                                className="h-3 w-3 rounded border-gray-300" />
+                            )}
+                            <span className="truncate">{f.label}</span>
+                            {f.unit && <span className="text-gray-300">{f.unit}</span>}
+                          </label>
+                          <input className={IN} value={r[f.col] ?? ""}
+                            onChange={(e) => pset(i, f.col, e.target.value)} />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 flex flex-wrap gap-3">
+                      {PROC_FLAGS.map((f) => <Flag key={f.col} i={i} col={f.col} label={f.label} />)}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>
-          <button onClick={() => setProcs((s) => [...s, newProc(s.length + 1)])}
-            className="mt-2 inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-200">
-            <Plus size={12} /> 공정 스텝 추가
-          </button>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button onClick={() => setProcs((s) => [...s, newProc(s.length + 1)])}
+              className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-200">
+              <Plus size={12} /> 공정 스텝 추가
+            </button>
+            <button onClick={() => setProcs((s) => [...s, newDelay()])}
+              className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-600 hover:bg-amber-100">
+              <Plus size={12} /> 대기 스텝 추가
+            </button>
+          </div>
           <p className="mt-2 text-[10px] text-gray-400">
-            저장한 레시피는 공정 설정 카드에서 불러와 실행합니다.
+            대기 스텝은 앞 스텝이 끝난 뒤 지정 시간만큼 기다렸다가 다음 스텝을
+            시작합니다(예: delay 30s, delay 10m, delay 1h). 저장한 레시피는 공정 설정
+            카드에서 불러와 실행합니다.
           </p>
         </>
       ) : (
