@@ -13,6 +13,8 @@ export async function GET(req: NextRequest) {
   const equipment = req.nextUrl.searchParams.get("equipment") ?? "CHK";
   const limit = req.nextUrl.searchParams.get("limit");
   const before = req.nextUrl.searchParams.get("before");
+  const full = req.nextUrl.searchParams.get("full") !== "0";
+  const afterEventId = Number(req.nextUrl.searchParams.get("afterEventId") || "") || null;
 
   const [state, run, events, runs, commands] = await Promise.all([
     prisma.opsState.findUnique({ where: { equipment } }),
@@ -23,23 +25,35 @@ export async function GET(req: NextRequest) {
     prisma.opsEvent.findMany({
       where: {
         equipment,
+        // 증분 조회: 마지막으로 받은 id 이후만 (평소 0건이라 매우 가볍다)
+        ...(afterEventId ? { id: { gt: afterEventId } } : {}),
         ...(before ? { ts: { lt: new Date(before) } } : {}),
       },
       // 같은 초에 여러 이벤트가 들어오면 ts만으로는 순서가 흔들리므로 id를 보조 정렬로 쓴다
       orderBy: [{ ts: "desc" }, { id: "desc" }],
-      take: Math.min(Math.max(Number(limit) || 50, 1), 500),
+      take: afterEventId ? 100 : Math.min(Math.max(Number(limit) || 50, 1), 500),
     }),
-    prisma.opsRun.findMany({
-      where: { equipment },
-      orderBy: { startedAt: "desc" },
-      take: 10,
-    }),
-    prisma.opsCommand.findMany({
-      where: { equipment },
-      orderBy: { requestedAt: "desc" },
-      take: 10,
-    }),
+    full
+      ? prisma.opsRun.findMany({
+          where: { equipment },
+          orderBy: { startedAt: "desc" },
+          take: 10,
+        })
+      : Promise.resolve(undefined),
+    full
+      ? prisma.opsCommand.findMany({
+          where: { equipment },
+          orderBy: { requestedAt: "desc" },
+          take: 10,
+        })
+      : Promise.resolve(undefined),
   ]);
 
-  return NextResponse.json({ state, run, events, runs, commands });
+  return NextResponse.json({
+    state,
+    run,
+    events,
+    ...(runs !== undefined ? { runs } : {}),
+    ...(commands !== undefined ? { commands } : {}),
+  });
 }

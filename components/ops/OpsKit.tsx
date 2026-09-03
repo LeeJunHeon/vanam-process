@@ -12,22 +12,57 @@ import RecipePicker, { type RecipeItem } from "@/components/ops/RecipePicker";
 import RecipeProgress from "@/components/ops/RecipeProgress";
 
 // ── 데이터 훅 ────────────────────────────────────────────────
-// 기본 2.5초 폴링. 명령을 보낸 직후에는 boost()로 0.6초 간격 고속 조회로 전환한다.
+const EVENT_KEEP = 300;   // 메모리에 유지할 최대 이벤트 수
+
 export function useOpsStatus(equipment: string) {
   const [data, setData] = useState<OpsStatus | null>(null);
   const [failed, setFailed] = useState(false);
   const [nowMs, setNowMs] = useState(0);
   const [fastUntil, setFastUntil] = useState(0);
   const alive = useRef(true);
+  const pollNo = useRef(0);
+  const lastEventId = useRef<number | null>(null);
+  const forceFull = useRef(true);
 
   const load = useCallback(async () => {
+    // 런 이력·조작 기록은 자주 바뀌지 않으므로 5회에 1회만 전체 조회한다
+    const wantFull = forceFull.current || pollNo.current % 5 === 0;
+    const after = lastEventId.current;
+
+    const qs = new URLSearchParams({ equipment });
+    if (!wantFull) qs.set("full", "0");
+    if (after !== null) qs.set("afterEventId", String(after));
+
     try {
-      const res = await fetch(`/api/ops/status?equipment=${encodeURIComponent(equipment)}`, {
-        cache: "no-store",
-      });
+      const res = await fetch(`/api/ops/status?${qs.toString()}`, { cache: "no-store" });
       if (!res.ok) throw new Error(String(res.status));
       const j = (await res.json()) as OpsStatus;
-      if (alive.current) { setData(j); setFailed(false); }
+      if (!alive.current) return;
+
+      forceFull.current = false;
+      pollNo.current += 1;
+
+      setData((prev) => {
+        const incoming = j.events ?? [];
+        if (incoming.length) {
+          lastEventId.current = Math.max(
+            lastEventId.current ?? 0,
+            ...incoming.map((e) => e.id),
+          );
+        }
+        const events =
+          after === null
+            ? incoming
+            : [...incoming, ...(prev?.events ?? [])].slice(0, EVENT_KEEP);
+        return {
+          ...(prev ?? {}),
+          ...j,
+          events,
+          runs: j.runs ?? prev?.runs,
+          commands: j.commands ?? prev?.commands,
+        } as OpsStatus;
+      });
+      setFailed(false);
     } catch {
       if (alive.current) setFailed(true);
     } finally {
@@ -37,12 +72,12 @@ export function useOpsStatus(equipment: string) {
 
   useEffect(() => {
     alive.current = true;
+    forceFull.current = true;
+    lastEventId.current = null;
     load();
     return () => { alive.current = false; };
   }, [load]);
 
-  // 응답을 받을 때마다 다음 조회를 예약한다.
-  // 명령 직후(고속) > 장비가 움직이는 중(1초) > 대기 중(3초) 순으로 주기를 정한다.
   const payload = data?.state?.payload as
     | { status?: string; heater?: { on?: boolean; recipeRunning?: boolean } }
     | undefined;
@@ -52,14 +87,41 @@ export function useOpsStatus(equipment: string) {
     Boolean(payload?.heater?.recipeRunning) ||
     Boolean(data?.run);
 
+  // 다음 조회 예약.
+  // 중요: 숨긴 탭에서도 반드시 재예약해야 한다. 예전에는 여기서 load() 를 건너뛰어
+  // nowMs 가 갱신되지 않았고, 그 결과 폴링 체인이 영구히 끊겼다.
   useEffect(() => {
-    const wait = Date.now() < fastUntil ? 600 : active ? 1000 : 3000;
-    const t = setTimeout(() => { if (!document.hidden) load(); }, wait);
+    const hidden = typeof document !== "undefined" && document.hidden;
+    const wait = hidden ? 15_000 : Date.now() < fastUntil ? 600 : active ? 1_000 : 4_000;
+    const t = setTimeout(() => {
+      if (!alive.current) return;
+      if (typeof document !== "undefined" && document.hidden) {
+        setNowMs(Date.now());   // 조회는 건너뛰되 체인은 살려 둔다
+      } else {
+        load();
+      }
+    }, wait);
     return () => clearTimeout(t);
   }, [load, nowMs, fastUntil, active]);
 
+  // 탭으로 돌아오면 즉시 최신 상태를 받아온다
+  useEffect(() => {
+    const onVisible = () => {
+      if (typeof document !== "undefined" && document.hidden) return;
+      forceFull.current = true;
+      load();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [load]);
+
   const boost = useCallback(() => {
     setFastUntil(Date.now() + 12_000);
+    forceFull.current = true;   // 조작 기록을 바로 갱신
     load();
   }, [load]);
 
