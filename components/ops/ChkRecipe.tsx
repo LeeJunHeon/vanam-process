@@ -18,14 +18,17 @@ const newProc = (n: number): ProcRow => ({
 // 대기 스텝: Process_name 의 "delay Xm" 문법만으로 동작한다(장비 파서 규칙).
 // 다른 컬럼은 장비가 무시하므로 빈 값으로 둔다.
 const newDelay = (min = 10): ProcRow => ({
-  Process_name: `delay ${min}m`, Ar: "0", Ar_flow: "", O2: "0", O2_flow: "",
+  Process_name: `delay ${min.toFixed(1)}m`, Ar: "0", Ar_flow: "", O2: "0", O2_flow: "",
   working_pressure: "", process_time: "", shutter_delay: "",
   use_rf_power: "0", rf_power: "", use_dc_power: "0", dc_power: "",
   use_dc_delay: "0", use_heater: "0", heater_temp: "", heater_ramp: "",
   gun1: "0", gun2: "0", "G1 Target": "", "G2 Target": "",
 });
 
-const DELAY_RE = /^\s*delay\s+(\d+(?:\.\d+)?)\s*([smhd]?)\s*$/i;
+// 장비 파서는 (\d+(?:\.\d+)?) 이지만, 입력 도중 "10." 상태에서 일반 스텝으로
+// 오인되지 않도록 웹에서는 트레일링 점을 허용한다. 저장 시 정규화한다.
+const DELAY_RE = /^\s*delay\s+(\d+(?:\.\d*)?)\s*([smhd]?)\s*$/i;
+const DELAY_UNIT_LABEL: Record<string, string> = { s: "초", m: "분", h: "시간", d: "일" };
 const isDelayRow = (r: ProcRow) => DELAY_RE.test(r.Process_name ?? "");
 
 const newHeat = (): HeatRow => ({ target_c: "120", ramp_c_per_min: "12", ramp_min: "", soak_min: "30" });
@@ -81,7 +84,12 @@ export default function ChkRecipe() {
     const payload = {
       equipment: "CHK", kind, name,
       rows: kind === "process"
-        ? procs
+        ? procs.map((r) => {
+            const m = (r.Process_name ?? "").match(DELAY_RE);
+            if (!m) return r;
+            const n = (m[1] ?? "0").replace(/\.$/, "");
+            return { ...r, Process_name: `delay ${n === "" ? "0" : n}${(m[2] || "m").toLowerCase()}` };
+          })
         : heats.map((r, i) => ({
             ...r,
             step: String(i + 1),
@@ -168,21 +176,25 @@ export default function ChkRecipe() {
               <div key={i} className="rounded-xl border border-gray-100 p-2.5">
                 {isDelayRow(r) ? (() => {
                   const m = (r.Process_name ?? "").match(DELAY_RE);
-                  const num = m?.[1] ?? "10";
+                  const num = m?.[1] ?? "10.0";
                   const unit = (m?.[2] || "m").toLowerCase();
                   const put = (n: string, u: string) => {
-                    // 입력 중 형식이 깨져 일반 스텝으로 바뀌지 않도록 숫자만 남긴다
-                    const clean = n.replace(/[^0-9.]/g, "").replace(/\.$/, "");
-                    pset(i, "Process_name", `delay ${clean === "" ? "0" : clean}${u}`);
+                    // 숫자와 점만 남기고, 점은 첫 번째 하나만 허용한다
+                    const cleaned = n.replace(/[^0-9.]/g, "");
+                    const firstDot = cleaned.indexOf(".");
+                    const safe = firstDot === -1
+                      ? cleaned
+                      : cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, "");
+                    pset(i, "Process_name", `delay ${safe === "" ? "0" : safe}${u}`);
                   };
                   return (
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
-                      <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
+                      <span className="shrink-0 text-[10px] font-bold text-gray-400">{i + 1}</span>
+                      <span className="shrink-0 whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
                         대기
                       </span>
                       <input
-                        className={`${IN} w-20 flex-none text-right`}
+                        className="w-24 shrink-0 rounded border border-gray-200 px-1.5 py-1 text-right text-[11px]"
                         inputMode="decimal"
                         value={num}
                         onChange={(e) => put(e.target.value, unit)}
@@ -190,19 +202,19 @@ export default function ChkRecipe() {
                       <select
                         value={unit}
                         onChange={(e) => put(num, e.target.value)}
-                        className="rounded border border-gray-200 px-1.5 py-1 text-[11px] text-gray-700"
+                        className="shrink-0 rounded border border-gray-200 px-1.5 py-1 text-[11px] text-gray-700"
                       >
                         <option value="s">초</option>
                         <option value="m">분</option>
                         <option value="h">시간</option>
                         <option value="d">일</option>
                       </select>
-                      <span className="min-w-0 flex-1 truncate text-[10px] text-gray-400">
-                        앞 스텝 종료 후 대기
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-gray-500">
+                        {num || "0"}{DELAY_UNIT_LABEL[unit] ?? "분"} 대기 후 다음 스텝 진행
                       </span>
                       <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
                         disabled={procs.length === 1}
-                        className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
+                        className="shrink-0 rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
                         <Trash2 size={13} />
                       </button>
                     </div>
