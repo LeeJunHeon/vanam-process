@@ -12,7 +12,8 @@ import ChkRecipe from "@/components/ops/ChkRecipe";
 const PENDING_TTL = 20_000;
 
 export default function ChkPage() {
-  const { data, failed, online, updatedAt, boost } = useOpsStatus("CHK");
+  const { data, failed, online, updatedAt, boost, refresh, paused, setPaused, lastFetchMs } =
+    useOpsStatus("CHK");
   const [pendingStates, setPendingStates] = useState<Record<string, { want: boolean; at: number }>>({});
 
   const p = data?.state?.payload ?? {};
@@ -55,7 +56,14 @@ export default function ChkPage() {
     <div className="space-y-3 p-3 sm:p-6">
       <div className="flex items-center justify-between gap-2">
         <h2 className="text-base font-bold text-gray-900">CHK</h2>
-        <ConnBadge online={online} updatedAt={updatedAt} />
+        <ConnBadge
+          online={online}
+          updatedAt={updatedAt}
+          lastFetchMs={lastFetchMs}
+          paused={paused}
+          onToggle={setPaused}
+          onRefresh={refresh}
+        />
       </div>
 
       {(failed || msg) && (

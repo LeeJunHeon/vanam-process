@@ -19,6 +19,7 @@ export function useOpsStatus(equipment: string) {
   const [failed, setFailed] = useState(false);
   const [nowMs, setNowMs] = useState(0);
   const [fastUntil, setFastUntil] = useState(0);
+  const [paused, setPaused] = useState(false);
   const alive = useRef(true);
   const pollNo = useRef(0);
   const lastEventId = useRef<number | null>(null);
@@ -91,6 +92,7 @@ export function useOpsStatus(equipment: string) {
   // 중요: 숨긴 탭에서도 반드시 재예약해야 한다. 예전에는 여기서 load() 를 건너뛰어
   // nowMs 가 갱신되지 않았고, 그 결과 폴링 체인이 영구히 끊겼다.
   useEffect(() => {
+    if (paused) return;
     const hidden = typeof document !== "undefined" && document.hidden;
     const wait = hidden ? 15_000 : Date.now() < fastUntil ? 600 : active ? 1_000 : 4_000;
     const t = setTimeout(() => {
@@ -102,11 +104,12 @@ export function useOpsStatus(equipment: string) {
       }
     }, wait);
     return () => clearTimeout(t);
-  }, [load, nowMs, fastUntil, active]);
+  }, [load, nowMs, fastUntil, active, paused]);
 
   // 탭으로 돌아오면 즉시 최신 상태를 받아온다
   useEffect(() => {
     const onVisible = () => {
+      if (paused) return;
       if (typeof document !== "undefined" && document.hidden) return;
       forceFull.current = true;
       load();
@@ -117,7 +120,7 @@ export function useOpsStatus(equipment: string) {
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [load]);
+  }, [load, paused]);
 
   const boost = useCallback(() => {
     setFastUntil(Date.now() + 12_000);
@@ -125,9 +128,17 @@ export function useOpsStatus(equipment: string) {
     load();
   }, [load]);
 
+  const refresh = useCallback(() => {
+    forceFull.current = true;
+    load();
+  }, [load]);
+
   const updatedMs = data?.state?.updatedAt ? new Date(data.state.updatedAt).getTime() : 0;
   const online = updatedMs > 0 && nowMs - updatedMs < ONLINE_WINDOW_MS;
-  return { data, failed, online, updatedAt: data?.state?.updatedAt ?? null, boost };
+  return {
+    data, failed, online, updatedAt: data?.state?.updatedAt ?? null,
+    boost, refresh, paused, setPaused, lastFetchMs: nowMs,
+  };
 }
 
 export function useTick(active: boolean) {
@@ -164,12 +175,64 @@ export function OpsCard({
 }
 
 // 모바일 스크롤 길이를 줄이기 위한 접이식 섹션
-export function ConnBadge({ online, updatedAt }: { online: boolean; updatedAt: string | null }) {
+export function ConnBadge({
+  online, updatedAt, lastFetchMs, paused, onToggle, onRefresh,
+}: {
+  online: boolean;
+  updatedAt?: string | null;
+  lastFetchMs?: number;
+  paused?: boolean;
+  onToggle?: (v: boolean) => void;
+  onRefresh?: () => void;
+}) {
+  const [, tick] = useState(0);
+  // 마지막 갱신 경과를 초 단위로 갱신한다(값 자체는 nowMs 기준)
+  useEffect(() => {
+    const t = setInterval(() => tick((v) => v + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const staleSec = lastFetchMs ? Math.floor((Date.now() - lastFetchMs) / 1000) : null;
+  const stale = !paused && staleSec !== null && staleSec > 15;
+
   return (
-    <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-gray-400 sm:text-xs">
-      <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-gray-300"}`} />
-      {online ? "온라인" : "미연결"}
-      {updatedAt && <span className="hidden text-gray-300 sm:inline">· {fmtTime(updatedAt)}</span>}
+    <span className="flex items-center gap-2 text-[11px]">
+      <span className="flex items-center gap-1.5 text-gray-400">
+        <span className={`h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-gray-300"}`} />
+        {online ? "온라인" : "미연결"}
+        {updatedAt && <span className="text-gray-300">· {fmtTime(updatedAt)}</span>}
+      </span>
+
+      <span
+        className={`rounded px-1.5 py-0.5 font-semibold ${
+          paused ? "bg-amber-50 text-amber-600"
+          : stale ? "bg-rose-50 text-rose-600" : "text-gray-300"
+        }`}
+      >
+        {paused ? "자동 갱신 꺼짐" : staleSec !== null ? `${staleSec}초 전 갱신` : "연결 중"}
+      </span>
+
+      {onRefresh && (
+        <button
+          onClick={onRefresh}
+          title="지금 새로고침"
+          className="rounded-lg border border-gray-200 px-2 py-1 font-semibold text-gray-600 hover:bg-gray-50"
+        >
+          새로고침
+        </button>
+      )}
+      {onToggle && (
+        <button
+          onClick={() => onToggle(!paused)}
+          className={`rounded-lg border px-2 py-1 font-semibold ${
+            paused
+              ? "border-gray-800 bg-gray-800 text-white"
+              : "border-gray-200 text-gray-600 hover:bg-gray-50"
+          }`}
+        >
+          {paused ? "자동 갱신 켜기" : "자동 갱신 끄기"}
+        </button>
+      )}
     </span>
   );
 }
