@@ -361,22 +361,29 @@ export function HeaterCard({
         </button>
       }
     >
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-        <p className={`text-xl font-bold tabular-nums ${pv ? "text-gray-900" : "text-gray-300"}`}>
-          {pv || "-"}
-          {pv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
-        </p>
-        <p className={`text-[11px] ${heater?.run ? "text-gray-500" : "text-gray-300"}`}>
-          목표 <span className={sv ? "" : "text-gray-300"}>{sv ? `${sv} ℃` : "-"}</span>
-          {!heater?.run && sv && <span className="ml-1">(운전 정지)</span>}
-        </p>
-        {heater?.run && heater?.curSv !== undefined && heater?.curSv !== null && (
-          <p className="text-[11px] text-gray-500">
-            현재 목표 <span className="tabular-nums">{heater.curSv} ℃</span>
+      <div className="grid grid-cols-3 divide-x divide-gray-100 rounded-xl border border-gray-100">
+        <div className="px-3 py-2">
+          <p className="text-[10px] text-gray-400">현재 온도</p>
+          <p className={`text-2xl font-bold leading-tight tabular-nums ${pv ? "text-gray-900" : "text-gray-300"}`}>
+            {pv || "-"}
+            {pv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
           </p>
-        )}
-        {st && <p className={`text-[11px] font-semibold ${tone}`}>{st}</p>}
-        {norm(heater?.output) && <p className="text-[10px] text-gray-400">{heater?.output}</p>}
+        </div>
+        <div className="px-3 py-2">
+          <p className="text-[10px] text-gray-400">목표{!heater?.run && sv ? " · 운전 정지" : ""}</p>
+          <p className={`text-2xl font-bold leading-tight tabular-nums ${heater?.run && sv ? "text-gray-900" : "text-gray-300"}`}>
+            {sv || "-"}
+            {sv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
+          </p>
+          {heater?.run && heater?.curSv != null && (
+            <p className="text-[10px] text-gray-400">현재 목표 {heater.curSv}℃</p>
+          )}
+        </div>
+        <div className="px-3 py-2">
+          <p className="text-[10px] text-gray-400">상태</p>
+          <p className={`text-sm font-semibold leading-tight ${tone}`}>{st || "-"}</p>
+          {norm(heater?.output) && <p className="mt-0.5 text-[10px] text-gray-400">{heater?.output}</p>}
+        </div>
       </div>
 
       {(heater?.tcErr || heater?.wdErr || heater?.ot || heater?.fault) && (
@@ -426,51 +433,57 @@ export function HeaterCard({
         </div>
       )}
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-2.5">
-        <input
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-          inputMode="decimal"
-          placeholder="목표 ℃"
-          className="w-24 rounded-lg border border-gray-200 px-2 py-1.5 text-xs"
-        />
-        <button
-          disabled={!online || !target.trim()}
-          onClick={() =>
-            onRequest({
-              command: "HEATER_SV",
-              label: "히터 목표온도",
-              detail: `${target}℃`,
-              args: { value: target },
-            })
-          }
-          className="rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 disabled:opacity-40"
-        >
-          설정
-        </button>
-        <div className="mt-2 flex w-full flex-wrap items-center gap-2 text-[11px] text-gray-600">
-          <span className="text-gray-400">가스(선택)</span>
-          <label className="flex items-center gap-1">
-            <input type="checkbox" checked={gasAr} onChange={(e) => setGasAr(e.target.checked)} className="h-3 w-3" /> Ar
-          </label>
-          <input value={gasArFlow} onChange={(e) => setGasArFlow(e.target.value)} disabled={!gasAr}
-            placeholder="sccm" inputMode="decimal" className="w-16 rounded border border-gray-200 px-1.5 py-1 disabled:bg-gray-50" />
-          <label className="flex items-center gap-1">
-            <input type="checkbox" checked={gasO2} onChange={(e) => setGasO2(e.target.checked)} className="h-3 w-3" /> O₂
-          </label>
-          <input value={gasO2Flow} onChange={(e) => setGasO2Flow(e.target.value)} disabled={!gasO2}
-            placeholder="sccm" inputMode="decimal" className="w-16 rounded border border-gray-200 px-1.5 py-1 disabled:bg-gray-50" />
-          <span className="text-gray-400">WP</span>
-          <input value={gasWp} onChange={(e) => setGasWp(e.target.value)} disabled={!gasAr && !gasO2}
-            placeholder="mTorr" inputMode="decimal" className="w-16 rounded border border-gray-200 px-1.5 py-1 disabled:bg-gray-50" />
+      <div className="mt-2 rounded-xl bg-gray-50 p-3">
+        <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-[11px]">
+          <span className="text-gray-500">목표 온도</span>
+          <span className="flex items-center gap-1.5">
+            <input
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              inputMode="decimal"
+              placeholder="℃"
+              className="w-24 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs"
+            />
+            <button
+              disabled={!online || !target.trim()}
+              onClick={() =>
+                onRequest({ command: "HEATER_SV", label: "히터 목표온도", detail: `${target}℃`, args: { value: target } })
+              }
+              className="rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold text-gray-700 disabled:opacity-40"
+            >
+              적용
+            </button>
+          </span>
+
+          <span className="text-gray-500">가스 (선택)</span>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-gray-600">
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={gasAr} onChange={(e) => setGasAr(e.target.checked)} className="h-3 w-3" /> Ar
+            </label>
+            <input value={gasArFlow} onChange={(e) => setGasArFlow(e.target.value)} disabled={!gasAr}
+              placeholder="sccm" inputMode="decimal"
+              className="w-16 rounded-lg border border-gray-200 bg-white px-1.5 py-1 disabled:bg-gray-100 disabled:text-gray-400" />
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={gasO2} onChange={(e) => setGasO2(e.target.checked)} className="h-3 w-3" /> O₂
+            </label>
+            <input value={gasO2Flow} onChange={(e) => setGasO2Flow(e.target.value)} disabled={!gasO2}
+              placeholder="sccm" inputMode="decimal"
+              className="w-16 rounded-lg border border-gray-200 bg-white px-1.5 py-1 disabled:bg-gray-100 disabled:text-gray-400" />
+            <span className="text-gray-400">압력</span>
+            <input value={gasWp} onChange={(e) => setGasWp(e.target.value)} disabled={!gasAr && !gasO2}
+              placeholder="mTorr" inputMode="decimal"
+              className="w-16 rounded-lg border border-gray-200 bg-white px-1.5 py-1 disabled:bg-gray-100 disabled:text-gray-400" />
+          </span>
         </div>
-        <span className="flex gap-1.5">
+
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-200/70 pt-3">
           {([true, false] as const).map((want) => {
             const active = Boolean(heater?.on) === want;
+            const canOn = !want || !!target.trim() || !!sv;
             return (
               <button
                 key={String(want)}
-                disabled={!online || (want && !target.trim() && !sv)}
+                disabled={!online || !canOn}
                 onClick={() =>
                   onRequest({
                     command: "HEATER_ONOFF",
@@ -480,8 +493,7 @@ export function HeaterCard({
                       : "→ OFF",
                     args: want
                       ? {
-                          on: true,
-                          value: target.trim() || sv || "",
+                          on: true, value: target.trim() || sv || "",
                           useAr: gasAr, arFlow: gasArFlow.trim(),
                           useO2: gasO2, o2Flow: gasO2Flow.trim(),
                           wp: gasWp.trim(),
@@ -489,25 +501,24 @@ export function HeaterCard({
                       : { on: false },
                   })
                 }
-                className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold disabled:opacity-40 ${
+                className={`rounded-lg border px-4 py-1.5 text-xs font-semibold disabled:opacity-40 ${
                   active
                     ? want
                       ? "border-green-600 bg-green-500 text-green-950"
                       : "border-gray-400 bg-gray-200 text-gray-700"
-                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                    : "border-gray-200 bg-white text-gray-700 hover:bg-gray-100"
                 }`}
               >
                 운전 {want ? "ON" : "OFF"}
               </button>
             );
           })}
-        </span>
-        {!sv && !target.trim() && (
-          <span className="w-full text-[10px] text-gray-400">
-            목표 온도를 입력해야 운전을 켤 수 있습니다
+          <span className="ml-auto text-[10px] text-gray-400">
+            {!sv && !target.trim()
+              ? "목표 온도를 입력해야 운전을 켤 수 있습니다"
+              : running ? "공정 중 변경 주의" : ""}
           </span>
-        )}
-        {running && <span className="text-[10px] text-amber-600">공정 중 변경 주의</span>}
+        </div>
       </div>
 
       {progress && (progress.total ?? 0) > 0 && (() => {

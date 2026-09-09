@@ -201,101 +201,103 @@ export default function ChkRecipe() {
 
       {tab === "process" ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
-            {procs.map((r, i) => (
-              <div key={i} className="rounded-xl border border-gray-100 p-2.5">
-                {isDelayRow(r) ? (() => {
-                  const m = (r.Process_name ?? "").match(DELAY_RE);
-                  const num = m?.[1] ?? "10.0";
-                  const unit = (m?.[2] || "m").toLowerCase();
-                  const put = (n: string, u: string) => {
-                    // 숫자와 점만 남기고, 점은 첫 번째 하나만 허용한다
-                    const cleaned = n.replace(/[^0-9.]/g, "");
-                    const firstDot = cleaned.indexOf(".");
-                    const safe = firstDot === -1
-                      ? cleaned
-                      : cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, "");
-                    pset(i, "Process_name", `delay ${safe === "" ? "0" : safe}${u}`);
-                  };
-                  return (
-                    <div className="flex items-center gap-2">
-                      <span className="shrink-0 text-[10px] font-bold text-gray-400">{i + 1}</span>
-                      <span className="shrink-0 whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
-                        대기
-                      </span>
-                      <input
-                        className="w-24 shrink-0 rounded border border-gray-200 px-1.5 py-1 text-right text-[11px]"
-                        inputMode="decimal"
-                        value={num}
-                        onChange={(e) => put(e.target.value, unit)}
-                      />
-                      <select
-                        value={unit}
-                        onChange={(e) => put(num, e.target.value)}
-                        className="shrink-0 rounded border border-gray-200 px-1.5 py-1 text-[11px] text-gray-700"
-                      >
-                        <option value="s">초</option>
-                        <option value="m">분</option>
-                        <option value="h">시간</option>
-                        <option value="d">일</option>
-                      </select>
-                      <span className="min-w-0 flex-1 truncate text-[11px] text-gray-500">
-                        {num || "0"}{DELAY_UNIT_LABEL[unit] ?? "분"} 대기 후 다음 스텝 진행
-                      </span>
-                      <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
-                        disabled={procs.length === 1}
-                        className="shrink-0 rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  );
-                })() : (
-                  <>
-                    <div className="mb-2 flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
-                      <input className={`${IN} flex-1`} value={r.Process_name ?? ""}
-                        onChange={(e) => pset(i, "Process_name", e.target.value)}
-                        placeholder="공정 이름 (Process_name)" />
-                      <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
-                        disabled={procs.length === 1}
-                        className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
-                      {PROC_FIELDS.map((f) => (
-                        <div key={f.col}>
-                          <label className="mb-0.5 flex items-center gap-1 text-[10px] text-gray-500">
-                            {f.use && (
-                              <input type="checkbox" checked={on1(r[f.use])}
-                                onChange={(e) => pset(i, f.use!, e.target.checked ? "1" : "0")}
-                                className="h-3 w-3 rounded border-gray-300" />
-                            )}
-                            <span className="truncate">{f.label}</span>
-                            {f.unit && <span className="text-gray-300">{f.unit}</span>}
-                          </label>
-                          <input className={IN} value={r[f.col] ?? ""}
-                            onChange={(e) => pset(i, f.col, e.target.value)} />
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-3">
-                      {PROC_FLAGS.map((f) => <Flag key={f.col} i={i} col={f.col} label={f.label} />)}
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            <button onClick={() => setProcs((s) => [...s, newProc(s.length + 1)])}
-              className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-200">
-              <Plus size={12} /> 공정 스텝 추가
-            </button>
-            <button onClick={() => setProcs((s) => [...s, newDelay()])}
-              className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-600 hover:bg-amber-100">
-              <Plus size={12} /> 대기 스텝 추가
-            </button>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="space-y-2">
+              {procs.map((r, i) => (
+                <div key={i} className="rounded-xl border border-gray-100 p-2.5">
+                  {isDelayRow(r) ? (() => {
+                    const m = (r.Process_name ?? "").match(DELAY_RE);
+                    const num = m?.[1] ?? "10.0";
+                    const unit = (m?.[2] || "m").toLowerCase();
+                    const put = (n: string, u: string) => {
+                      // 숫자와 점만 남기고, 점은 첫 번째 하나만 허용한다
+                      const cleaned = n.replace(/[^0-9.]/g, "");
+                      const firstDot = cleaned.indexOf(".");
+                      const safe = firstDot === -1
+                        ? cleaned
+                        : cleaned.slice(0, firstDot + 1) + cleaned.slice(firstDot + 1).replace(/\./g, "");
+                      pset(i, "Process_name", `delay ${safe === "" ? "0" : safe}${u}`);
+                    };
+                    return (
+                      <div className="flex items-center gap-2">
+                        <span className="shrink-0 text-[10px] font-bold text-gray-400">{i + 1}</span>
+                        <span className="shrink-0 whitespace-nowrap rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-600">
+                          대기
+                        </span>
+                        <input
+                          className="w-24 shrink-0 rounded border border-gray-200 px-1.5 py-1 text-right text-[11px]"
+                          inputMode="decimal"
+                          value={num}
+                          onChange={(e) => put(e.target.value, unit)}
+                        />
+                        <select
+                          value={unit}
+                          onChange={(e) => put(num, e.target.value)}
+                          className="shrink-0 rounded border border-gray-200 px-1.5 py-1 text-[11px] text-gray-700"
+                        >
+                          <option value="s">초</option>
+                          <option value="m">분</option>
+                          <option value="h">시간</option>
+                          <option value="d">일</option>
+                        </select>
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-gray-500">
+                          {num || "0"}{DELAY_UNIT_LABEL[unit] ?? "분"} 대기 후 다음 스텝 진행
+                        </span>
+                        <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
+                          disabled={procs.length === 1}
+                          className="shrink-0 rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    );
+                  })() : (
+                    <>
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
+                        <input className={`${IN} flex-1`} value={r.Process_name ?? ""}
+                          onChange={(e) => pset(i, "Process_name", e.target.value)}
+                          placeholder="공정 이름 (Process_name)" />
+                        <button onClick={() => setProcs((s) => s.filter((_, k) => k !== i))}
+                          disabled={procs.length === 1}
+                          className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-4">
+                        {PROC_FIELDS.map((f) => (
+                          <div key={f.col}>
+                            <label className="mb-0.5 flex items-center gap-1 text-[10px] text-gray-500">
+                              {f.use && (
+                                <input type="checkbox" checked={on1(r[f.use])}
+                                  onChange={(e) => pset(i, f.use!, e.target.checked ? "1" : "0")}
+                                  className="h-3 w-3 rounded border-gray-300" />
+                              )}
+                              <span className="truncate">{f.label}</span>
+                              {f.unit && <span className="text-gray-300">{f.unit}</span>}
+                            </label>
+                            <input className={IN} value={r[f.col] ?? ""}
+                              onChange={(e) => pset(i, f.col, e.target.value)} />
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-3">
+                        {PROC_FLAGS.map((f) => <Flag key={f.col} i={i} col={f.col} label={f.label} />)}
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button onClick={() => setProcs((s) => [...s, newProc(s.length + 1)])}
+                className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-200">
+                <Plus size={12} /> 공정 스텝 추가
+              </button>
+              <button onClick={() => setProcs((s) => [...s, newDelay()])}
+                className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[11px] font-semibold text-amber-600 hover:bg-amber-100">
+                <Plus size={12} /> 대기 스텝 추가
+              </button>
+            </div>
           </div>
           <p className="mt-2 text-[10px] text-gray-400">
             대기 스텝은 앞 스텝이 끝난 뒤 지정 시간만큼 기다렸다가 다음 스텝을
@@ -327,35 +329,37 @@ export default function ChkRecipe() {
             <span /><span>목표 온도 ℃</span><span>승온 ℃/분 (6배수)</span>
             <span>승온 시간 분(선택)</span><span>유지 시간 분</span><span />
           </div>
-          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
-            {heats.map((r, i) => (
-              <div key={i} className="grid grid-cols-[22px_1fr_1fr_1fr_1fr_26px] items-center gap-2">
-                <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
-                <input className={IN} value={r.target_c ?? ""} onChange={(e) => hset(i, "target_c", e.target.value)} />
-                <input className={IN} value={r.ramp_c_per_min ?? ""} onChange={(e) => hset(i, "ramp_c_per_min", e.target.value)} />
-                <input className={IN} value={r.ramp_min ?? ""} onChange={(e) => hset(i, "ramp_min", e.target.value)}
-                  placeholder="6℃/분↓" />
-                <input className={IN} value={r.soak_min ?? ""} onChange={(e) => hset(i, "soak_min", e.target.value)} />
-                <button onClick={() => setHeats((s) => s.filter((_, k) => k !== i))}
-                  disabled={heats.length === 1}
-                  className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <button onClick={() => setHeats((s) => [...s, newHeat()])}
-              className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-200">
-              <Plus size={12} /> 단계 추가
-            </button>
-            <label className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-500">
-              전체 반복
-              <input value={hRepeat} onChange={(e) => setHRepeat(e.target.value)}
-                inputMode="numeric"
-                className="w-14 rounded border border-gray-200 px-1.5 py-1 text-center text-[11px]" />
-              회
-            </label>
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            <div className="space-y-1.5">
+              {heats.map((r, i) => (
+                <div key={i} className="grid grid-cols-[22px_1fr_1fr_1fr_1fr_26px] items-center gap-2">
+                  <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
+                  <input className={IN} value={r.target_c ?? ""} onChange={(e) => hset(i, "target_c", e.target.value)} />
+                  <input className={IN} value={r.ramp_c_per_min ?? ""} onChange={(e) => hset(i, "ramp_c_per_min", e.target.value)} />
+                  <input className={IN} value={r.ramp_min ?? ""} onChange={(e) => hset(i, "ramp_min", e.target.value)}
+                    placeholder="6℃/분↓" />
+                  <input className={IN} value={r.soak_min ?? ""} onChange={(e) => hset(i, "soak_min", e.target.value)} />
+                  <button onClick={() => setHeats((s) => s.filter((_, k) => k !== i))}
+                    disabled={heats.length === 1}
+                    className="rounded p-1 text-gray-300 hover:text-gray-500 disabled:opacity-30">
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button onClick={() => setHeats((s) => [...s, newHeat()])}
+                className="inline-flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-200">
+                <Plus size={12} /> 단계 추가
+              </button>
+              <label className="ml-auto flex items-center gap-1.5 text-[11px] text-gray-500">
+                전체 반복
+                <input value={hRepeat} onChange={(e) => setHRepeat(e.target.value)}
+                  inputMode="numeric"
+                  className="w-14 rounded border border-gray-200 px-1.5 py-1 text-center text-[11px]" />
+                회
+              </label>
+            </div>
           </div>
           <p className="mt-2 text-[10px] text-gray-400">
             승온은 속도(6℃/분 단위) 또는 시간(분) 중 하나로 지정합니다. 승온 시간을
