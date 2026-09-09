@@ -23,7 +23,9 @@ export type OpsPayload = {
   heater?: { pv?: string; sv?: string; status?: string; output?: string;
              on?: boolean; recipeRunning?: boolean;
              curSv?: number | string; pidErr?: number | string; otLimit?: number | string;
-             run?: boolean; fault?: boolean; tcErr?: boolean; wdErr?: boolean; ot?: boolean };
+             run?: boolean; fault?: boolean; tcErr?: boolean; wdErr?: boolean; ot?: boolean;
+             atmosphere?: { state?: string; sp1?: number | string | null;
+                            arFlow?: number | string | null; o2Flow?: number | string | null } };
   ion?: { run?: boolean; lamp?: boolean; overtime?: boolean };
   heaterRecipe?: {
     running?: boolean;
@@ -38,6 +40,8 @@ export type OpsPayload = {
     elapsedSec?: number;
     totalEstSec?: number;
     percent?: number;            // 전체 진행률 (HOLD 시간 보정 포함)
+    phase?: string;              // ramp | soak | cool | ""
+    remainSec?: number;          // 전체 잔여(초)
     steps?: { no: number; target: number; ramp: number; rampMin?: number | null;
               soak: number; cooldown?: boolean }[];
   } | null;
@@ -163,3 +167,8 @@ export const HEATER_STATE_LABEL: Record<string, string> = {
   IDLE: "대기", RAMPING: "승온 중", SOAKING: "유지 중",
   DONE: "완료", ABORTED: "중단됨",
 };
+
+export const ATMO_STATE_LABEL: Record<string, string> = {
+  IDLE: "", PREPARING: "가스·압력 준비 중", READY: "가스·압력 유지 중", RELEASING: "가스 해제 중",
+};
+export const PHASE_LABEL: Record<string, string> = { ramp: "승온", soak: "유지", cool: "냉각" };

@@ -39,6 +39,8 @@ export const CHK_ACTION_COMMANDS: Record<string, CmdDef> = {
   RECIPE_HEATER_STOP: { key: "RECIPE_HEATER_STOP", label: "히터 레시피 중단" },
   HEATER_RECIPE_HOLD: { key: "HEATER_RECIPE_HOLD", label: "히터 레시피 일시정지" },
   HEATER_RECIPE_STEP: { key: "HEATER_RECIPE_STEP", label: "히터 레시피 스텝 건너뛰기" },
+  HEATER_RESET:       { key: "HEATER_RESET", label: "히터 이상 리셋", danger: true },
+  HEATER_GAS_RELEASE: { key: "HEATER_GAS_RELEASE", label: "히터 가스·압력 해제" },
 };
 
 export const CHK_COMMANDS: CmdDef[] = [

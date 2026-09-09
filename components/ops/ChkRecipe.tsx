@@ -35,6 +35,8 @@ const newHeat = (): HeatRow => ({ target_c: "120", ramp_c_per_min: "12", ramp_mi
 
 const IN = "w-full rounded border border-gray-200 px-1.5 py-1 text-[11px]";
 const on1 = (v?: string) => v === "1";
+// IN 에는 w-full 이 있어 폭 지정과 충돌한다. 좁은 입력은 이 클래스를 쓴다.
+const GAS_IN = "w-16 flex-none rounded border border-gray-200 px-1.5 py-1 text-[11px] disabled:bg-gray-100";
 
 // 공정 레시피 입력 항목 정의 (CSV 컬럼명과 1:1)
 const PROC_FIELDS: { col: string; label: string; use?: string; unit?: string }[] = [
@@ -70,6 +72,7 @@ export default function ChkRecipe() {
   const [hId, setHId] = useState<number | null>(null);
   const [hMeta, setHMeta] = useState<string | null>(null);
   const [hRepeat, setHRepeat] = useState("1");
+  const [hGas, setHGas] = useState({ useAr: false, arFlow: "", useO2: false, o2Flow: "", wp: "" });
   const [heats, setHeats] = useState<HeatRow[]>([newHeat()]);
 
   const pset = (i: number, col: string, v: string) =>
@@ -81,6 +84,19 @@ export default function ChkRecipe() {
     const kind = tab;
     const name = (kind === "process" ? pName : hName).trim();
     if (!name) { setMsg("레시피 이름을 입력하세요."); return; }
+    if (kind === "heater") {
+      for (let i = 0; i < heats.length; i++) {
+        const r = heats[i];
+        const hasRate = (r.ramp_c_per_min ?? "").trim() !== "";
+        const hasMin = (r.ramp_min ?? "").trim() !== "";
+        if (hasRate && hasMin) { setMsg(`${i + 1}단계: 승온 속도와 승온 시간은 함께 쓸 수 없습니다.`); return; }
+        if (!hasRate && !hasMin) { setMsg(`${i + 1}단계: 승온 속도 또는 승온 시간 중 하나는 입력해야 합니다.`); return; }
+        if ((r.target_c ?? "").trim() === "") { setMsg(`${i + 1}단계: 목표 온도를 입력하세요.`); return; }
+      }
+      if (hGas.useAr && !(Number(hGas.arFlow) > 0)) { setMsg("Ar 을 쓰면 유량은 0보다 커야 합니다."); return; }
+      if (hGas.useO2 && !(Number(hGas.o2Flow) > 0)) { setMsg("O₂ 를 쓰면 유량은 0보다 커야 합니다."); return; }
+      if ((hGas.useAr || hGas.useO2) && !(Number(hGas.wp) > 0)) { setMsg("가스를 쓰면 공정 압력(WP)은 0보다 커야 합니다."); return; }
+    }
     const payload = {
       equipment: "CHK", kind, name,
       rows: kind === "process"
@@ -93,7 +109,14 @@ export default function ChkRecipe() {
         : heats.map((r, i) => ({
             ...r,
             step: String(i + 1),
-            ...(i === 0 ? { repeat: hRepeat.trim() || "1" } : {}),
+            ...(i === 0
+              ? {
+                  repeat: hRepeat.trim() || "1",
+                  use_ar: hGas.useAr ? "T" : "F", ar_flow: hGas.useAr ? hGas.arFlow.trim() : "",
+                  use_o2: hGas.useO2 ? "T" : "F", o2_flow: hGas.useO2 ? hGas.o2Flow.trim() : "",
+                  wp_mtorr: (hGas.useAr || hGas.useO2) ? hGas.wp.trim() : "",
+                }
+              : {}),
           })),
       id: (kind === "process" ? pId : hId) ?? undefined,
     };
@@ -116,6 +139,13 @@ export default function ChkRecipe() {
     } else {
       setHId(r.id); setHName(r.name); setHeats(r.rows.length ? r.rows : [newHeat()]);
       setHRepeat(String(r.rows?.[0]?.repeat ?? "1"));
+      const f = r.rows?.[0] ?? {};
+      const T = (v?: string) => ["t", "true", "1", "y", "yes", "on"].includes(String(v ?? "").trim().toLowerCase());
+      setHGas({
+        useAr: T(f.use_ar), arFlow: f.ar_flow ?? "",
+        useO2: T(f.use_o2), o2Flow: f.o2_flow ?? "",
+        wp: f.wp_mtorr ?? "",
+      });
       setHMeta(`최종 수정 ${r.updatedBy} · ${fmtLogTime(r.updatedAt)}`);
     }
     setPicker(null);
@@ -276,6 +306,24 @@ export default function ChkRecipe() {
       ) : (
         <>
           <div className="space-y-1.5">
+          <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 px-2.5 py-2 text-[11px] text-gray-600">
+            <span className="font-semibold text-gray-500">가스·압력 (선택)</span>
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={hGas.useAr}
+                onChange={(e) => setHGas((g) => ({ ...g, useAr: e.target.checked }))} className="h-3 w-3" /> Ar
+            </label>
+            <input className={GAS_IN} value={hGas.arFlow} disabled={!hGas.useAr}
+              onChange={(e) => setHGas((g) => ({ ...g, arFlow: e.target.value }))} placeholder="sccm" />
+            <label className="flex items-center gap-1">
+              <input type="checkbox" checked={hGas.useO2}
+                onChange={(e) => setHGas((g) => ({ ...g, useO2: e.target.checked }))} className="h-3 w-3" /> O₂
+            </label>
+            <input className={GAS_IN} value={hGas.o2Flow} disabled={!hGas.useO2}
+              onChange={(e) => setHGas((g) => ({ ...g, o2Flow: e.target.value }))} placeholder="sccm" />
+            <span className="text-gray-400">WP</span>
+            <input className={GAS_IN} value={hGas.wp} disabled={!hGas.useAr && !hGas.useO2}
+              onChange={(e) => setHGas((g) => ({ ...g, wp: e.target.value }))} placeholder="mTorr" />
+          </div>
             <div className="grid grid-cols-[22px_1fr_1fr_1fr_1fr_26px] gap-2 text-[10px] text-gray-400">
               <span /><span>목표 온도 ℃</span><span>승온 ℃/분 (6배수)</span>
               <span>승온 시간 분(선택)</span><span>유지 시간 분</span><span />
@@ -313,6 +361,8 @@ export default function ChkRecipe() {
             승온은 속도(6℃/분 단위) 또는 시간(분) 중 하나로 지정합니다. 승온 시간을
             입력하면 속도 대신 그 시간에 맞춰 올립니다(6℃/분보다 느린 승온 가능).
             저장한 레시피는 히터 카드에서 불러와 실행합니다.
+            가스를 지정하면 히터를 켜기 전에 가스를 흘려 압력을 잡고, 히터 OFF 후에도 100℃ 아래로
+            식을 때까지 유지한 뒤 자동으로 해제합니다.
           </p>
         </>
       )}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import {
-  CMD_STATUS_LABEL, HEATER_STATE_LABEL, ONLINE_WINDOW_MS, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
+  ATMO_STATE_LABEL, CMD_STATUS_LABEL, HEATER_STATE_LABEL, ONLINE_WINDOW_MS, PHASE_LABEL, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
   fmtLogTime, fmtTime, secBetween,
   type MetricGroup, type MetricItem, type OpsCommand, type OpsEvent, type OpsRun,
   type OpsStatus,
@@ -323,11 +323,13 @@ export function HeaterCard({
 }: {
   heater?: { pv?: string; sv?: string; status?: string; output?: string; on?: boolean; recipeRunning?: boolean;
              curSv?: number | string; pidErr?: number | string; otLimit?: number | string;
-             run?: boolean; fault?: boolean; tcErr?: boolean; wdErr?: boolean; ot?: boolean };
+             run?: boolean; fault?: boolean; tcErr?: boolean; wdErr?: boolean; ot?: boolean;
+             atmosphere?: { state?: string; sp1?: number | string | null;
+                            arFlow?: number | string | null; o2Flow?: number | string | null } };
   progress?: {
     running?: boolean; state?: string; stepNo?: number; total?: number; soakRemainSec?: number;
     stepRemainSec?: number; cycle?: number; repeat?: number; held?: boolean;
-    elapsedSec?: number; totalEstSec?: number; percent?: number;
+    elapsedSec?: number; totalEstSec?: number; percent?: number; phase?: string; remainSec?: number;
     steps?: { no: number; target: number; ramp: number; rampMin?: number | null;
               soak: number; cooldown?: boolean }[];
   } | null;
@@ -338,6 +340,11 @@ export function HeaterCard({
   const [target, setTarget] = useState("");
   const [picker, setPicker] = useState(false);
   const [recipe, setRecipe] = useState<RecipeItem | null>(null);
+  const [gasAr, setGasAr] = useState(false);
+  const [gasArFlow, setGasArFlow] = useState("");
+  const [gasO2, setGasO2] = useState(false);
+  const [gasO2Flow, setGasO2Flow] = useState("");
+  const [gasWp, setGasWp] = useState("");
   const pv = norm(heater?.pv);
   const sv = norm(heater?.sv);
   const st = norm(heater?.status);
@@ -373,14 +380,50 @@ export function HeaterCard({
       </div>
 
       {(heater?.tcErr || heater?.wdErr || heater?.ot || heater?.fault) && (
-        <p className="mt-1.5 rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-600">
-          {[
-            heater?.ot && "과온 트립",
-            heater?.tcErr && "온도센서 이상",
-            heater?.wdErr && "워치독 두절",
-            heater?.fault && !heater?.ot && !heater?.tcErr && !heater?.wdErr && "히터 이상",
-          ].filter(Boolean).join(" · ")}
-        </p>
+        <div className="mt-1.5 flex items-center gap-2 rounded-lg bg-rose-50 px-2 py-1">
+          <p className="flex-1 text-[11px] font-semibold text-rose-600">
+            {[
+              heater?.ot && "과온 트립",
+              heater?.tcErr && "온도센서 이상",
+              heater?.wdErr && "워치독 두절",
+              heater?.fault && !heater?.ot && !heater?.tcErr && !heater?.wdErr && "히터 이상",
+            ].filter(Boolean).join(" · ")}
+          </p>
+          {heater?.fault && (
+            <button
+              disabled={!online}
+              onClick={() =>
+                onRequest({
+                  command: "HEATER_RESET",
+                  label: "히터 이상 리셋",
+                  detail: "(원인을 먼저 확인했는지 확인)",
+                  danger: true,
+                })
+              }
+              className="shrink-0 rounded-lg border border-rose-300 bg-white px-2 py-0.5 text-[11px] font-semibold text-rose-600 disabled:opacity-40"
+            >
+              이상 리셋
+            </button>
+          )}
+        </div>
+      )}
+
+      {heater?.atmosphere?.state && heater.atmosphere.state !== "IDLE" && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-blue-50 px-2 py-1 text-[11px] text-blue-700">
+          <span className="font-semibold">{ATMO_STATE_LABEL[heater.atmosphere.state] ?? heater.atmosphere.state}</span>
+          {heater.atmosphere.arFlow != null && <span>Ar {heater.atmosphere.arFlow} sccm</span>}
+          {heater.atmosphere.o2Flow != null && <span>O₂ {heater.atmosphere.o2Flow} sccm</span>}
+          {heater.atmosphere.sp1 != null && <span>WP {heater.atmosphere.sp1} mTorr</span>}
+          {heater.atmosphere.state === "READY" && !heater.on && (
+            <button
+              disabled={!online}
+              onClick={() => onRequest({ command: "HEATER_GAS_RELEASE", label: "히터 가스·압력 해제" })}
+              className="ml-auto rounded border border-blue-300 bg-white px-2 py-0.5 font-semibold disabled:opacity-40"
+            >
+              지금 해제
+            </button>
+          )}
+        </div>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-2.5">
@@ -405,6 +448,22 @@ export function HeaterCard({
         >
           설정
         </button>
+        <div className="mt-2 flex w-full flex-wrap items-center gap-2 text-[11px] text-gray-600">
+          <span className="text-gray-400">가스(선택)</span>
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={gasAr} onChange={(e) => setGasAr(e.target.checked)} className="h-3 w-3" /> Ar
+          </label>
+          <input value={gasArFlow} onChange={(e) => setGasArFlow(e.target.value)} disabled={!gasAr}
+            placeholder="sccm" inputMode="decimal" className="w-16 rounded border border-gray-200 px-1.5 py-1 disabled:bg-gray-50" />
+          <label className="flex items-center gap-1">
+            <input type="checkbox" checked={gasO2} onChange={(e) => setGasO2(e.target.checked)} className="h-3 w-3" /> O₂
+          </label>
+          <input value={gasO2Flow} onChange={(e) => setGasO2Flow(e.target.value)} disabled={!gasO2}
+            placeholder="sccm" inputMode="decimal" className="w-16 rounded border border-gray-200 px-1.5 py-1 disabled:bg-gray-50" />
+          <span className="text-gray-400">WP</span>
+          <input value={gasWp} onChange={(e) => setGasWp(e.target.value)} disabled={!gasAr && !gasO2}
+            placeholder="mTorr" inputMode="decimal" className="w-16 rounded border border-gray-200 px-1.5 py-1 disabled:bg-gray-50" />
+        </div>
         <span className="flex gap-1.5">
           {([true, false] as const).map((want) => {
             const active = Boolean(heater?.on) === want;
@@ -420,7 +479,13 @@ export function HeaterCard({
                       ? `→ ON${(target.trim() || sv) ? ` (${target.trim() || sv}℃)` : ""}`
                       : "→ OFF",
                     args: want
-                      ? { on: true, value: target.trim() || sv || "" }
+                      ? {
+                          on: true,
+                          value: target.trim() || sv || "",
+                          useAr: gasAr, arFlow: gasArFlow.trim(),
+                          useO2: gasO2, o2Flow: gasO2Flow.trim(),
+                          wp: gasWp.trim(),
+                        }
                       : { on: false },
                   })
                 }
@@ -462,7 +527,9 @@ export function HeaterCard({
             stateText={
               progress.held
                 ? "일시정지"
-                : (HEATER_STATE_LABEL[progress.state ?? ""] ?? progress.state)
+                : progress.running && progress.phase && PHASE_LABEL[progress.phase]
+                  ? `${PHASE_LABEL[progress.phase]} 중`
+                  : (HEATER_STATE_LABEL[progress.state ?? ""] ?? progress.state)
             }
             remainSec={
               (progress.stepRemainSec ?? -1) >= 0
@@ -472,7 +539,8 @@ export function HeaterCard({
             percent={progress.percent}
             footer={
               progress.running
-                ? `전체 ${progress.percent ?? 0}% · 경과 ${fmtDuration(progress.elapsedSec ?? 0)} / 예상 ${fmtDuration(progress.totalEstSec ?? 0)}`
+                ? `전체 ${progress.percent ?? 0}% · 경과 ${fmtDuration(progress.elapsedSec ?? 0)}`
+                  + ((progress.remainSec ?? -1) >= 0 ? ` · 잔여 ${fmtDuration(progress.remainSec ?? 0)}` : "")
                 : undefined
             }
             labels={(progress.steps ?? []).map((s) =>
