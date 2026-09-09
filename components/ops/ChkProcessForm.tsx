@@ -128,76 +128,97 @@ export default function ChkProcessForm({ online, running, csvProgress, equipTarg
       </div>
 
       {csvProgress && (csvProgress.total ?? 0) > 0 && (
-        <div className="mt-3">
-          <RecipeProgress
-            title="적재된 공정 레시피"
-            stepNo={csvProgress.active ? (csvProgress.stepNo ?? 0) : 0}
-            total={csvProgress.total ?? 0}
-            stateText={csvProgress.active ? "실행 중" : "적재됨"}
-            labels={csvProgress.steps ?? []}
-          />
-        </div>
-      )}
-
-      {csvProgress?.rows && csvProgress.rows.length > 0 && (
-        <div className="mt-2 overflow-x-auto rounded-xl border border-gray-100">
-          <div className="flex items-center justify-between bg-gray-50 px-3 py-1.5 text-[11px]">
-            <span className="font-semibold text-gray-700">
-              {csvProgress.name ?? "적재된 레시피"}
-            </span>
-            <span className="text-gray-400">{csvProgress.rows.length}스텝</span>
-          </div>
-          <table className="w-full text-[11px]">
-            <thead className="text-gray-400">
-              <tr className="border-b border-gray-100">
-                <th className="px-2 py-1 text-left font-medium">#</th>
-                <th className="px-2 py-1 text-left font-medium">스텝</th>
-                <th className="px-2 py-1 text-right font-medium">Ar</th>
-                <th className="px-2 py-1 text-right font-medium">O₂</th>
-                <th className="px-2 py-1 text-right font-medium">WP</th>
-                <th className="px-2 py-1 text-right font-medium">RF</th>
-                <th className="px-2 py-1 text-right font-medium">DC</th>
-                <th className="px-2 py-1 text-right font-medium">시간</th>
-                <th className="px-2 py-1 text-right font-medium">히터</th>
-                <th className="px-2 py-1 text-left font-medium">타겟</th>
-              </tr>
-            </thead>
-            <tbody>
-              {csvProgress.rows.map((r, i) => {
-                const no = i + 1;
-                const cur = csvProgress.active && no === (csvProgress.stepNo ?? 0);
-                const done = csvProgress.active && no < (csvProgress.stepNo ?? 0);
-                const isDelay = /^\s*delay\s+/i.test(r.Process_name ?? "");
-                const on = (v?: string) => ["1", "t", "true", "y", "yes", "on"].includes((v ?? "").trim().toLowerCase());
-                const tgt = [on(r.gun1) && (r["G1 Target"] || "G1"), on(r.gun2) && (r["G2 Target"] || "G2")]
-                  .filter(Boolean).join(" · ");
-                const cls = cur ? "bg-gray-800 text-white" : done ? "text-gray-400" : "text-gray-700";
-                return (
-                  <tr key={no} className={`border-b border-gray-50 ${cls}`}>
-                    <td className="px-2 py-1 tabular-nums">{no}</td>
-                    <td className="px-2 py-1 font-medium">{r.Process_name}</td>
-                    {isDelay ? (
-                      <td colSpan={8} className="px-2 py-1 text-gray-400">대기 스텝</td>
-                    ) : (
-                      <>
-                        <td className="px-2 py-1 text-right tabular-nums">{on(r.Ar) ? r.Ar_flow : "—"}</td>
-                        <td className="px-2 py-1 text-right tabular-nums">{on(r.O2) ? r.O2_flow : "—"}</td>
-                        <td className="px-2 py-1 text-right tabular-nums">{r.working_pressure || "—"}</td>
-                        <td className="px-2 py-1 text-right tabular-nums">{on(r.use_rf_power) ? r.rf_power : "—"}</td>
-                        <td className="px-2 py-1 text-right tabular-nums">{on(r.use_dc_power) ? r.dc_power : "—"}</td>
-                        <td className="px-2 py-1 text-right tabular-nums">{r.process_time ? `${r.process_time}분` : "—"}</td>
-                        <td className="px-2 py-1 text-right tabular-nums">
-                          {on(r.use_heater) ? `${r.heater_temp}℃${r.heater_ramp ? ` / ${r.heater_ramp}` : ""}` : "—"}
-                        </td>
-                        <td className="px-2 py-1">{tgt || "—"}</td>
-                      </>
-                    )}
+        csvProgress.rows && csvProgress.rows.length > 0 ? (
+          <div className="mt-3 overflow-hidden rounded-xl border border-gray-100">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-100 bg-gray-50 px-3 py-2">
+              <span className="text-xs font-bold text-gray-800">{csvProgress.name ?? "적재된 레시피"}</span>
+              <span className="text-[11px] text-gray-500">{csvProgress.rows.length}스텝</span>
+              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                csvProgress.active ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600"
+              }`}>
+                {csvProgress.active ? `실행 중 · ${csvProgress.stepNo}/${csvProgress.total}` : "적재됨"}
+              </span>
+              {csvProgress.active && (
+                <span className="ml-auto h-1.5 w-32 overflow-hidden rounded-full bg-gray-200">
+                  <span
+                    className="block h-full rounded-full bg-blue-500 transition-all"
+                    style={{ width: `${Math.round((Math.max(0, (csvProgress.stepNo ?? 0) - 1) / (csvProgress.total ?? 1)) * 100)}%` }}
+                  />
+                </span>
+              )}
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="text-gray-400">
+                    <th className="px-3 py-1.5 text-left font-medium">#</th>
+                    <th className="px-2 py-1.5 text-left font-medium">스텝</th>
+                    <th className="px-2 py-1.5 text-right font-medium">Ar</th>
+                    <th className="px-2 py-1.5 text-right font-medium">O₂</th>
+                    <th className="px-2 py-1.5 text-right font-medium">WP</th>
+                    <th className="px-2 py-1.5 text-right font-medium">RF</th>
+                    <th className="px-2 py-1.5 text-right font-medium">DC</th>
+                    <th className="px-2 py-1.5 text-right font-medium">시간</th>
+                    <th className="px-2 py-1.5 text-right font-medium">히터</th>
+                    <th className="px-3 py-1.5 text-left font-medium">타겟</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {csvProgress.rows.map((r, i) => {
+                    const no = i + 1;
+                    const cur = csvProgress.active && no === (csvProgress.stepNo ?? 0);
+                    const done = csvProgress.active && no < (csvProgress.stepNo ?? 0);
+                    const isDelay = /^\s*delay\s+/i.test(r.Process_name ?? "");
+                    const on = (v?: string) => ["1", "t", "true", "y", "yes", "on"].includes((v ?? "").trim().toLowerCase());
+                    const tgt = [on(r.gun1) && (r["G1 Target"] || "G1"), on(r.gun2) && (r["G2 Target"] || "G2")]
+                      .filter(Boolean).join(" · ");
+                    const rowCls = cur
+                      ? "bg-blue-50 text-blue-900 font-semibold"
+                      : done ? "text-gray-400" : "text-gray-700";
+                    const dash = <span className="text-gray-300">—</span>;
+                    return (
+                      <tr key={no} className={`border-t border-gray-50 ${rowCls}`}>
+                        <td className="px-3 py-1.5 tabular-nums">
+                          <span className="inline-flex items-center gap-1">
+                            {cur && <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
+                            {done ? "✓" : no}
+                          </span>
+                        </td>
+                        <td className="px-2 py-1.5">{r.Process_name}</td>
+                        {isDelay ? (
+                          <td colSpan={8} className="px-2 py-1.5 text-gray-400">대기 스텝</td>
+                        ) : (
+                          <>
+                            <td className="px-2 py-1.5 text-right tabular-nums">{on(r.Ar) ? r.Ar_flow : dash}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">{on(r.O2) ? r.O2_flow : dash}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">{r.working_pressure || dash}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">{on(r.use_rf_power) ? r.rf_power : dash}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">{on(r.use_dc_power) ? r.dc_power : dash}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">{r.process_time ? `${r.process_time}분` : dash}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">
+                              {on(r.use_heater) ? `${r.heater_temp}℃${r.heater_ramp ? ` · ${r.heater_ramp}℃/분` : ""}` : dash}
+                            </td>
+                            <td className="px-3 py-1.5">{tgt || dash}</td>
+                          </>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-3">
+            <RecipeProgress
+              title="적재된 공정 레시피"
+              stepNo={csvProgress.active ? (csvProgress.stepNo ?? 0) : 0}
+              total={csvProgress.total ?? 0}
+              stateText={csvProgress.active ? "실행 중" : "적재됨"}
+              labels={csvProgress.steps ?? []}
+            />
+          </div>
+        )
       )}
 
       {(equipTargets?.g1 || equipTargets?.g2) && (

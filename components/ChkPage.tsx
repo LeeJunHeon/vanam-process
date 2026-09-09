@@ -124,13 +124,18 @@ export default function ChkPage() {
         onRequest={request}
       />
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2 xl:items-stretch">
         <div className="space-y-3">
           <EventFeed events={data?.events} equipment="CHK" />
           <RunHistory runs={data?.runs} />
           <CommandLog commands={data?.commands} />
         </div>
-        <ChkRecipe />
+        {/* xl 이상: 절대 배치로 행 높이에 기여하지 않게 하고 좌측 높이를 그대로 채운다 */}
+        <div className="relative xl:min-h-[640px]">
+          <div className="xl:absolute xl:inset-0">
+            <ChkRecipe />
+          </div>
+        </div>
       </div>
 
       {dialog}

@@ -167,7 +167,7 @@ export default function ChkRecipe() {
   const isEdit = (tab === "process" ? pId : hId) !== null;
 
   return (
-    <section className="rounded-2xl border border-gray-100 bg-white p-3">
+    <section className="flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-3">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-gray-900">레시피</h3>
         <div className="flex gap-1 rounded-lg bg-gray-100 p-0.5 text-[11px]">
@@ -200,8 +200,8 @@ export default function ChkRecipe() {
       {msg && <p className="mb-2 text-[11px] text-gray-600">{msg}</p>}
 
       {tab === "process" ? (
-        <>
-          <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1">
             {procs.map((r, i) => (
               <div key={i} className="rounded-xl border border-gray-100 p-2.5">
                 {isDelayRow(r) ? (() => {
@@ -302,9 +302,9 @@ export default function ChkRecipe() {
             시작합니다. 저장한 레시피는 공정 설정
             카드에서 불러와 실행합니다.
           </p>
-        </>
+        </div>
       ) : (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col">
           <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 px-2.5 py-2 text-[11px] text-gray-600">
             <span className="font-semibold text-gray-500">가스·압력 (선택)</span>
             <label className="flex items-center gap-1">
@@ -327,7 +327,7 @@ export default function ChkRecipe() {
             <span /><span>목표 온도 ℃</span><span>승온 ℃/분 (6배수)</span>
             <span>승온 시간 분(선택)</span><span>유지 시간 분</span><span />
           </div>
-          <div className="max-h-[320px] space-y-1.5 overflow-y-auto pr-1">
+          <div className="min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
             {heats.map((r, i) => (
               <div key={i} className="grid grid-cols-[22px_1fr_1fr_1fr_1fr_26px] items-center gap-2">
                 <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>
@@ -364,7 +364,7 @@ export default function ChkRecipe() {
             가스를 지정하면 히터를 켜기 전에 가스를 흘려 압력을 잡고, 히터 OFF 후에도 100℃ 아래로
             식을 때까지 유지한 뒤 자동으로 해제합니다.
           </p>
-        </>
+        </div>
       )}
 
       {picker && (

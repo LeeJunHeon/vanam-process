@@ -793,6 +793,7 @@ export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipmen
   return (
     <OpsCard
       title="로그"
+      className="[overflow-anchor:none]"
       right={
         <span className="flex items-center gap-2">
           {merged[0] && <span className="text-[10px] text-gray-300">최근 {fmtAgo(merged[0].ts)}</span>}
@@ -823,7 +824,7 @@ export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipmen
           <div
             ref={boxRef}
             onScroll={onScroll}
-            className="h-64 space-y-1 overflow-y-auto rounded-lg bg-gray-50/60 p-2 font-mono"
+            className="h-64 space-y-1 overflow-y-auto rounded-lg bg-gray-50/60 p-2 font-mono [overflow-anchor:none]"
           >
             {asc.map((e) => (
               <p key={e.id} className="flex gap-2 text-[11px] leading-snug">
@@ -839,7 +840,7 @@ export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipmen
               </p>
             ))}
           </div>
-          {!stuck && (
+          <div className="mt-1 h-7">
             <button
               onClick={() => {
                 stickRef.current = true;
@@ -847,11 +848,13 @@ export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipmen
                 const el = boxRef.current;
                 if (el) el.scrollTop = el.scrollHeight;
               }}
-              className="mt-1 w-full rounded-lg py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50"
+              className={`w-full rounded-lg py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50 ${
+                stuck ? "invisible" : ""
+              }`}
             >
               최신으로 이동 ↓
             </button>
-          )}
+          </div>
         </>
       )}
     </OpsCard>
