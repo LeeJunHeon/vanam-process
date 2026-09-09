@@ -201,7 +201,7 @@ export default function ChkRecipe() {
 
       {tab === "process" ? (
         <>
-          <div className="space-y-2">
+          <div className="max-h-[520px] space-y-2 overflow-y-auto pr-1">
             {procs.map((r, i) => (
               <div key={i} className="rounded-xl border border-gray-100 p-2.5">
                 {isDelayRow(r) ? (() => {
@@ -305,7 +305,6 @@ export default function ChkRecipe() {
         </>
       ) : (
         <>
-          <div className="space-y-1.5">
           <div className="mb-2 flex flex-wrap items-center gap-2 rounded-xl bg-gray-50 px-2.5 py-2 text-[11px] text-gray-600">
             <span className="font-semibold text-gray-500">가스·압력 (선택)</span>
             <label className="flex items-center gap-1">
@@ -324,10 +323,11 @@ export default function ChkRecipe() {
             <input className={GAS_IN} value={hGas.wp} disabled={!hGas.useAr && !hGas.useO2}
               onChange={(e) => setHGas((g) => ({ ...g, wp: e.target.value }))} placeholder="mTorr" />
           </div>
-            <div className="grid grid-cols-[22px_1fr_1fr_1fr_1fr_26px] gap-2 text-[10px] text-gray-400">
-              <span /><span>목표 온도 ℃</span><span>승온 ℃/분 (6배수)</span>
-              <span>승온 시간 분(선택)</span><span>유지 시간 분</span><span />
-            </div>
+          <div className="mb-1.5 grid grid-cols-[22px_1fr_1fr_1fr_1fr_26px] gap-2 text-[10px] text-gray-400">
+            <span /><span>목표 온도 ℃</span><span>승온 ℃/분 (6배수)</span>
+            <span>승온 시간 분(선택)</span><span>유지 시간 분</span><span />
+          </div>
+          <div className="max-h-[320px] space-y-1.5 overflow-y-auto pr-1">
             {heats.map((r, i) => (
               <div key={i} className="grid grid-cols-[22px_1fr_1fr_1fr_1fr_26px] items-center gap-2">
                 <span className="text-[10px] font-bold text-gray-400">{i + 1}</span>

@@ -693,7 +693,13 @@ function MetricRow({ item }: { item: MetricItem }) {
 }
 
 export function MetricSections({ groups }: { groups?: MetricGroup[] }) {
-  if (!groups?.length) {
+  // 계측값(value 키)이 있는 항목만. 설정값 전용 항목은 영원히 '—' 라 뺀다.
+  // 타겟은 계측값이 아니라 공정 설정 카드에서 보여준다.
+  const shown = (groups ?? [])
+    .filter((g) => g.label !== "타겟")
+    .map((g) => ({ ...g, items: g.items.filter((it) => "value" in it) }))
+    .filter((g) => g.items.length > 0);
+  if (!shown.length) {
     return (
       <OpsCard title="현재 값" className="h-full">
         <p className="py-4 text-center text-xs text-gray-300">수신된 값이 없습니다</p>
@@ -704,7 +710,7 @@ export function MetricSections({ groups }: { groups?: MetricGroup[] }) {
     <OpsCard title="현재 값" className="h-full">
       <div className="@container">
         <div className="grid grid-cols-1 gap-x-6 gap-y-3 @md:grid-cols-2">
-          {groups.map((g) => (
+          {shown.map((g) => (
             <div key={g.label}>
               <p className="mb-1 border-b border-gray-100 pb-1 text-[11px] font-semibold text-gray-400">
                 {g.label}
@@ -732,14 +738,13 @@ export function FlatMetrics({ metrics }: { metrics?: Record<string, string | num
 }
 
 // ── 이벤트 ───────────────────────────────────────────────────
-const EVENT_PAGE = 10;
-
 export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipment: string }) {
   const [onlyIssue, setOnlyIssue] = useState(false);
-  const [showAll, setShowAll] = useState(false);
   const [older, setOlder] = useState<OpsEvent[]>([]);
   const [loading, setLoading] = useState(false);
+  const [stuck, setStuck] = useState(true);
   const boxRef = useRef<HTMLDivElement | null>(null);
+  const stickRef = useRef(true);   // 사용자가 맨 아래를 보고 있는가
 
   // 실시간 수신분 + 과거에서 불러온 분을 합치고 중복을 제거한다
   const merged = useMemo(() => {
@@ -751,16 +756,23 @@ export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipmen
   }, [events, older]);
 
   const filtered = onlyIssue ? merged.filter((e) => e.level !== "info") : merged;
-  const asc = filtered.slice().reverse();
-  const shown = showAll ? asc : asc.slice(-EVENT_PAGE);
-  const hidden = asc.length - shown.length;
+  const asc = filtered.slice().reverse();            // 위=과거, 아래=최신
   const issueCount = merged.filter((e) => e.level !== "info").length;
   const newestId = merged[0]?.id;
 
+  const onScroll = () => {
+    const el = boxRef.current;
+    if (!el) return;
+    stickRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24;
+    setStuck(stickRef.current);
+  };
+
+  // 새 로그가 와도 사용자가 위쪽을 보고 있으면 움직이지 않는다.
+  // 페이지(window) 스크롤은 어떤 경우에도 변경하지 않는다.
   useEffect(() => {
     const el = boxRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [newestId, showAll, onlyIssue]);
+    if (el && stickRef.current) el.scrollTop = el.scrollHeight;
+  }, [newestId, onlyIssue]);
 
   const loadOlder = async () => {
     const oldest = merged[merged.length - 1];
@@ -773,7 +785,6 @@ export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipmen
       );
       const j = await res.json();
       setOlder((s) => [...s, ...((j.events ?? []) as OpsEvent[])]);
-      setShowAll(true);
     } finally {
       setLoading(false);
     }
@@ -796,35 +807,27 @@ export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipmen
         </span>
       }
     >
-      {!shown.length ? (
+      {!asc.length ? (
         <p className="py-6 text-center text-xs text-gray-300">
           {onlyIssue ? "경고·오류가 없습니다" : "수신된 로그가 없습니다"}
         </p>
       ) : (
         <>
-          <div className="mb-1 flex gap-1">
-            {hidden > 0 && !showAll && (
-              <button
-                onClick={() => setShowAll(true)}
-                className="flex-1 rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
-              >
-                이전 {hidden}건 더 보기 ↑
-              </button>
-            )}
-            {showAll && (
-              <button
-                onClick={loadOlder}
-                disabled={loading}
-                className="flex-1 rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50 disabled:opacity-40"
-              >
-                {loading ? "불러오는 중…" : "더 과거 로그 불러오기 ↑"}
-              </button>
-            )}
-          </div>
-          <div ref={boxRef} className={showAll ? "max-h-96 space-y-1 overflow-y-auto" : "space-y-1"}>
-            {shown.map((e) => (
+          <button
+            onClick={loadOlder}
+            disabled={loading}
+            className="mb-1 w-full rounded-lg py-1 text-[11px] font-semibold text-gray-400 hover:bg-gray-50 disabled:opacity-40"
+          >
+            {loading ? "불러오는 중…" : "더 과거 로그 불러오기 ↑"}
+          </button>
+          <div
+            ref={boxRef}
+            onScroll={onScroll}
+            className="h-64 space-y-1 overflow-y-auto rounded-lg bg-gray-50/60 p-2 font-mono"
+          >
+            {asc.map((e) => (
               <p key={e.id} className="flex gap-2 text-[11px] leading-snug">
-                <span className="shrink-0 font-mono text-gray-300">{fmtLogTime(e.ts)}</span>
+                <span className="shrink-0 text-gray-300">{fmtLogTime(e.ts)}</span>
                 <span
                   className={
                     e.level === "error" ? "text-rose-600"
@@ -836,12 +839,17 @@ export function EventFeed({ events, equipment }: { events?: OpsEvent[]; equipmen
               </p>
             ))}
           </div>
-          {showAll && (
+          {!stuck && (
             <button
-              onClick={() => { setShowAll(false); setOlder([]); }}
-              className="mt-1 w-full rounded-lg py-1.5 text-[11px] font-semibold text-gray-400 hover:bg-gray-50"
+              onClick={() => {
+                stickRef.current = true;
+                setStuck(true);
+                const el = boxRef.current;
+                if (el) el.scrollTop = el.scrollHeight;
+              }}
+              className="mt-1 w-full rounded-lg py-1 text-[11px] font-semibold text-blue-600 hover:bg-blue-50"
             >
-              최근 {EVENT_PAGE}건만 보기
+              최신으로 이동 ↓
             </button>
           )}
         </>

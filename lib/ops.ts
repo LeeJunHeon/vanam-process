@@ -50,6 +50,8 @@ export type OpsPayload = {
     total?: number;
     active?: boolean;
     steps?: string[];
+    name?: string | null;
+    rows?: Record<string, string>[];
   } | null;
 };
 

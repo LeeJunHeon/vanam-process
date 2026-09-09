@@ -49,6 +49,12 @@ export default function ChkPage() {
     Object.entries(pendingStates).map(([k, val]) => [k, val.want]),
   );
 
+  const tgtGroup = p.groups?.find((g) => g.label === "타겟");
+  const equipTargets = {
+    g1: tgtGroup?.items.find((i) => i.label === "G1")?.value as string | undefined,
+    g2: tgtGroup?.items.find((i) => i.label === "G2")?.value as string | undefined,
+  };
+
   const lastRun = data?.runs?.find((r) => r.status !== "running") ?? null;
   const running = online && (p.status === "running" || !!data?.run);
 
@@ -114,6 +120,7 @@ export default function ChkPage() {
         online={online}
         running={running}
         csvProgress={p.csvRecipe}
+        equipTargets={equipTargets}
         onRequest={request}
       />
 

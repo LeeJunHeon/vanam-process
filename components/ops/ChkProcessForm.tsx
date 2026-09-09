@@ -8,7 +8,11 @@ import RecipeProgress from "@/components/ops/RecipeProgress";
 type Props = {
   online: boolean;
   running: boolean;
-  csvProgress?: { stepNo?: number; total?: number; active?: boolean; steps?: string[] } | null;
+  csvProgress?: {
+    stepNo?: number; total?: number; active?: boolean; steps?: string[];
+    name?: string | null; rows?: Record<string, string>[];
+  } | null;
+  equipTargets?: { g1?: string; g2?: string };   // 장비 입력란의 타겟명
   onRequest: (c: PendingCmd) => void;
 };
 
@@ -25,7 +29,7 @@ function Chk({ label, on, set }: { label: string; on: boolean; set: (v: boolean)
   );
 }
 
-export default function ChkProcessForm({ online, running, csvProgress, onRequest }: Props) {
+export default function ChkProcessForm({ online, running, csvProgress, equipTargets, onRequest }: Props) {
   const [picker, setPicker] = useState(false);
   const [recipe, setRecipe] = useState<RecipeItem | null>(null);
   const [useG1, setUseG1] = useState(false);
@@ -133,6 +137,74 @@ export default function ChkProcessForm({ online, running, csvProgress, onRequest
             labels={csvProgress.steps ?? []}
           />
         </div>
+      )}
+
+      {csvProgress?.rows && csvProgress.rows.length > 0 && (
+        <div className="mt-2 overflow-x-auto rounded-xl border border-gray-100">
+          <div className="flex items-center justify-between bg-gray-50 px-3 py-1.5 text-[11px]">
+            <span className="font-semibold text-gray-700">
+              {csvProgress.name ?? "적재된 레시피"}
+            </span>
+            <span className="text-gray-400">{csvProgress.rows.length}스텝</span>
+          </div>
+          <table className="w-full text-[11px]">
+            <thead className="text-gray-400">
+              <tr className="border-b border-gray-100">
+                <th className="px-2 py-1 text-left font-medium">#</th>
+                <th className="px-2 py-1 text-left font-medium">스텝</th>
+                <th className="px-2 py-1 text-right font-medium">Ar</th>
+                <th className="px-2 py-1 text-right font-medium">O₂</th>
+                <th className="px-2 py-1 text-right font-medium">WP</th>
+                <th className="px-2 py-1 text-right font-medium">RF</th>
+                <th className="px-2 py-1 text-right font-medium">DC</th>
+                <th className="px-2 py-1 text-right font-medium">시간</th>
+                <th className="px-2 py-1 text-right font-medium">히터</th>
+                <th className="px-2 py-1 text-left font-medium">타겟</th>
+              </tr>
+            </thead>
+            <tbody>
+              {csvProgress.rows.map((r, i) => {
+                const no = i + 1;
+                const cur = csvProgress.active && no === (csvProgress.stepNo ?? 0);
+                const done = csvProgress.active && no < (csvProgress.stepNo ?? 0);
+                const isDelay = /^\s*delay\s+/i.test(r.Process_name ?? "");
+                const on = (v?: string) => ["1", "t", "true", "y", "yes", "on"].includes((v ?? "").trim().toLowerCase());
+                const tgt = [on(r.gun1) && (r["G1 Target"] || "G1"), on(r.gun2) && (r["G2 Target"] || "G2")]
+                  .filter(Boolean).join(" · ");
+                const cls = cur ? "bg-gray-800 text-white" : done ? "text-gray-400" : "text-gray-700";
+                return (
+                  <tr key={no} className={`border-b border-gray-50 ${cls}`}>
+                    <td className="px-2 py-1 tabular-nums">{no}</td>
+                    <td className="px-2 py-1 font-medium">{r.Process_name}</td>
+                    {isDelay ? (
+                      <td colSpan={8} className="px-2 py-1 text-gray-400">대기 스텝</td>
+                    ) : (
+                      <>
+                        <td className="px-2 py-1 text-right tabular-nums">{on(r.Ar) ? r.Ar_flow : "—"}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{on(r.O2) ? r.O2_flow : "—"}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{r.working_pressure || "—"}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{on(r.use_rf_power) ? r.rf_power : "—"}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{on(r.use_dc_power) ? r.dc_power : "—"}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">{r.process_time ? `${r.process_time}분` : "—"}</td>
+                        <td className="px-2 py-1 text-right tabular-nums">
+                          {on(r.use_heater) ? `${r.heater_temp}℃${r.heater_ramp ? ` / ${r.heater_ramp}` : ""}` : "—"}
+                        </td>
+                        <td className="px-2 py-1">{tgt || "—"}</td>
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {(equipTargets?.g1 || equipTargets?.g2) && (
+        <p className="mt-2 text-[11px] text-gray-500">
+          장비 입력 타겟 · G1 <span className="font-semibold text-gray-800">{equipTargets.g1 || "—"}</span>
+          {" · "}G2 <span className="font-semibold text-gray-800">{equipTargets.g2 || "—"}</span>
+        </p>
       )}
 
       {recipe && (
