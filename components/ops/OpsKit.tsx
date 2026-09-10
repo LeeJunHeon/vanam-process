@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
 import {
   ATMO_STATE_LABEL, CMD_STATUS_LABEL, HEATER_STATE_LABEL, ONLINE_WINDOW_MS, PHASE_LABEL, RUN_LABEL, fmtAgo, fmtDateTime, fmtDuration,
@@ -882,7 +882,7 @@ const RUN_BADGE: Record<string, string> = {
 
 function RunBadge({ status }: { status: string }) {
   return (
-    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${RUN_BADGE[status] ?? "bg-gray-100 text-gray-500"}`}>
+    <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-semibold ${RUN_BADGE[status] ?? "bg-gray-100 text-gray-500"}`}>
       {RUN_LABEL[status] ?? status}
     </span>
   );
@@ -921,24 +921,35 @@ export function RunHistory({ runs }: { runs?: OpsRun[] }) {
       <table className="hidden w-full text-xs sm:table">
         <thead>
           <tr className="text-left text-gray-400">
-            <th className="py-1.5 font-medium">시작</th>
-            <th className="py-1.5 font-medium">공정명</th>
-            <th className="py-1.5 font-medium">결과</th>
-            <th className="py-1.5 font-medium">소요</th>
-            <th className="py-1.5 font-medium">비고</th>
+            <th className="py-1.5 pr-3 font-medium whitespace-nowrap">시작</th>
+            <th className="py-1.5 pr-3 font-medium">공정명</th>
+            <th className="py-1.5 pr-3 font-medium whitespace-nowrap">결과</th>
+            <th className="py-1.5 font-medium whitespace-nowrap text-right">소요</th>
           </tr>
         </thead>
         <tbody>
           {runs.map((r) => (
-            <tr key={r.id} className="border-t border-gray-50 text-gray-600">
-              <td className="py-2 whitespace-nowrap">{fmtDateTime(r.startedAt)}</td>
-              <td className="py-2">{r.processName ?? "-"}</td>
-              <td className="py-2"><RunBadge status={r.status} /></td>
-              <td className="py-2 tabular-nums">
-                {r.endedAt ? fmtDuration(secBetween(r.startedAt, r.endedAt)) : "진행 중"}
-              </td>
-              <td className="py-2 text-rose-600">{r.errorMsg ?? ""}</td>
-            </tr>
+            <Fragment key={r.id}>
+              <tr className="border-t border-gray-50 text-gray-600">
+                <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{fmtDateTime(r.startedAt)}</td>
+                <td className="py-2 pr-3">
+                  <span className="block max-w-[260px] truncate" title={r.processName ?? ""}>
+                    {r.processName ?? "-"}
+                  </span>
+                </td>
+                <td className="py-2 pr-3 whitespace-nowrap"><RunBadge status={r.status} /></td>
+                <td className="py-2 whitespace-nowrap text-right tabular-nums">
+                  {r.endedAt ? fmtDuration(secBetween(r.startedAt, r.endedAt)) : "진행 중"}
+                </td>
+              </tr>
+              {r.errorMsg && (
+                <tr className="text-[11px]">
+                  <td colSpan={4} className="pb-2 pl-3 leading-snug text-rose-600">
+                    {r.errorMsg}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
           ))}
         </tbody>
       </table>
