@@ -50,6 +50,26 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // ── 단일 인스턴스 보장: 먼저 붙은 쪽만 받는다 ──────────────
+    // 30초 넘게 조용하면(재시작·종료) 새 인스턴스가 인수한다.
+    const instance: string | null =
+      typeof body?.instance === "string" && body.instance ? body.instance : null;
+    if (instance) {
+      const cur = await prisma.opsState.findUnique({ where: { equipment } });
+      const holder = (cur?.payload as { _instance?: string } | null)?._instance ?? null;
+      const quietMs = cur ? Date.now() - new Date(cur.updatedAt).getTime() : Infinity;
+      if (holder && holder !== instance && quietMs < 30_000) {
+        return NextResponse.json(
+          {
+            error: "another instance is active",
+            activeInstance: holder.slice(0, 8),
+            lastSeenSec: Math.round(quietMs / 1000),
+          },
+          { status: 409 },
+        );
+      }
+    }
+
     // 열린 런은 배치당 한 번만 조회한다
     let openRunId: number | null =
       (
@@ -83,6 +103,15 @@ export async function POST(req: NextRequest) {
           where: { equipment, status: "pending" },
           data: { status: "expired", finishedAt: ts, result: "프로그램 재시작으로 취소" },
         });
+        // 첫 요청이 hello뿐이어도 인스턴스 주인을 기록해 둔다(기존 payload 보존).
+        if (instance) {
+          const cur = await prisma.opsState.findUnique({ where: { equipment } });
+          await prisma.opsState.upsert({
+            where: { equipment },
+            update: { payload: { ...((cur?.payload as object) ?? {}), _instance: instance } },
+            create: { equipment, payload: { _instance: instance } },
+          });
+        }
       } else if (m.type === "cmd_result") {
         if (typeof m.cmdId === "number") {
           await prisma.opsCommand.updateMany({
@@ -143,10 +172,13 @@ export async function POST(req: NextRequest) {
     await flush();
 
     if (latestState) {
+      const toSave = instance
+        ? { ...(latestState as object), _instance: instance }
+        : (latestState as object);
       await prisma.opsState.upsert({
         where: { equipment },
-        update: { payload: latestState as object },
-        create: { equipment, payload: latestState as object },
+        update: { payload: toSave },
+        create: { equipment, payload: toSave },
       });
     }
 
