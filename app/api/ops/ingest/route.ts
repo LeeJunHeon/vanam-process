@@ -54,7 +54,12 @@ export async function POST(req: NextRequest) {
     // 30초 넘게 조용하면(재시작·종료) 새 인스턴스가 인수한다.
     const instance: string | null =
       typeof body?.instance === "string" && body.instance ? body.instance : null;
-    if (instance) {
+    // hello 는 프로그램이 새로 시작할 때만 보내는 신호다. 이미 돌고 있는 인스턴스는
+    // 보내지 않으므로, hello 가 왔다면 정상 재시작으로 보고 무조건 인수를 허용한다.
+    // (시간 침묵만으로는 '방금 죽은 자기 자신'과 '살아있는 경쟁자'를 구분할 수 없다)
+    const hasHello = Array.isArray(body?.messages)
+      && body.messages.some((m: { type?: string }) => m?.type === "hello");
+    if (instance && !hasHello) {
       const cur = await prisma.opsState.findUnique({ where: { equipment } });
       const holder = (cur?.payload as { _instance?: string } | null)?._instance ?? null;
       const quietMs = cur ? Date.now() - new Date(cur.updatedAt).getTime() : Infinity;
