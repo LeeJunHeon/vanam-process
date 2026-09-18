@@ -239,14 +239,14 @@ export function ConnBadge({
 
 // ── 상태 히어로 ──────────────────────────────────────────────
 export function StatusHero({
-  online, status, stage, runStartedAt, runName, totalSec, lastRun,
+  online, status, stage, runStartedAt, runName, process, lastRun,
 }: {
   online: boolean;
   status?: string;
   stage?: string;
   runStartedAt?: string | null;
   runName?: string | null;
-  totalSec?: number;
+  process?: { remainSec?: number; totalSec?: number; phase?: string };
   lastRun?: OpsRun | null;
 }) {
   const running = online && (status === "running" || !!runStartedAt);
@@ -277,10 +277,13 @@ export function StatusHero({
     );
   }
 
+  // 잔여·진행률은 장비가 보내는 값만 쓴다(웹에서 계산하지 않는다).
+  // 경과 시간은 시작 시각 기준 참고값이라 그대로 둔다.
   const elapsed = secBetween(runStartedAt);
-  const total = totalSec && totalSec > 0 ? totalSec : 0;
-  const remain = total > 0 ? Math.max(0, total - elapsed) : 0;
-  const pct = total > 0 ? Math.min(100, Math.round((elapsed / total) * 100)) : 0;
+  const total = process?.totalSec ?? 0;
+  const remain = process?.remainSec ?? -1;
+  const inMain = (process?.phase ?? "") === "main" && remain >= 0 && total > 0;
+  const pct = inMain ? Math.min(100, Math.round(((total - remain) / total) * 100)) : 0;
 
   return (
     <OpsCard>
@@ -294,22 +297,30 @@ export function StatusHero({
             {runName ?? "이름 없는 공정"} · 시작 {fmtTime(runStartedAt)} · 경과 {fmtDuration(elapsed)}
           </p>
         </div>
-        {total > 0 && (
-          <div className="shrink-0">
-            <p className="text-[11px] text-gray-400">남은 시간</p>
-            <p className="text-2xl font-bold tracking-tight tabular-nums text-gray-900 sm:text-3xl">
-              {fmtDuration(remain)}
+        <div className="shrink-0 text-right">
+          {inMain ? (
+            <>
+              <p className="text-[11px] text-gray-400">남은 시간</p>
+              <p className="text-xl font-bold tabular-nums text-gray-900 sm:text-2xl">
+                {fmtDuration(remain)}
+              </p>
+            </>
+          ) : (
+            <p className="text-[11px] text-gray-400">
+              메인 공정 전<br />
+              <span className="text-gray-500">준비 단계 진행 중</span>
             </p>
-          </div>
-        )}
+          )}
+        </div>
       </div>
-      {total > 0 && (
-        <>
-          <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-gray-100">
-            <div className="h-full rounded-full bg-gray-700 transition-all" style={{ width: `${pct}%` }} />
+
+      {inMain && (
+        <div className="mt-3">
+          <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-full rounded-full bg-gray-800 transition-all" style={{ width: `${pct}%` }} />
           </div>
           <p className="mt-1 text-right text-[10px] text-gray-400">{pct}%</p>
-        </>
+        </div>
       )}
     </OpsCard>
   );

@@ -15,7 +15,12 @@ export type MetricGroup = { label: string; items: MetricItem[] };
 export type OpsPayload = {
   status?: "idle" | "running" | "error";
   stage?: string;
-  process?: { name?: string; totalSec?: number };
+  process?: {
+    name?: string;
+    remainSec?: number;   // 메인 공정 잔여 초. -1 = 아직 메인 공정 전
+    totalSec?: number;    // 메인 공정 총 초
+    phase?: string;       // "main" | "pre"
+  };
   groups?: MetricGroup[];
   metrics?: Record<string, string | number>; // 구버전 호환(평면 구조)
   indicators?: Record<string, boolean>;

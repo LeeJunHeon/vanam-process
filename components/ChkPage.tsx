@@ -84,7 +84,7 @@ export default function ChkPage() {
         stage={p.stage}
         runStartedAt={data?.run?.startedAt}
         runName={data?.run?.processName ?? p.process?.name}
-        totalSec={p.process?.totalSec}
+        process={p.process}
         lastRun={lastRun}
       />
 
