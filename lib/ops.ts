@@ -32,7 +32,16 @@ export type OpsPayload = {
              curSv?: number | string; pidErr?: number | string; otLimit?: number | string;
              run?: boolean; fault?: boolean; tcErr?: boolean; wdErr?: boolean; ot?: boolean;
              atmosphere?: { state?: string; sp1?: number | string | null;
-                            arFlow?: number | string | null; o2Flow?: number | string | null } };
+                            arFlow?: number | string | null; o2Flow?: number | string | null };
+    lcd?: {
+      sv?: string;        // 장비 LCD 목표 숫자(운전/정지/TC2추종별로 장비가 선택)
+      dev?: string;       // "Δ+1.2", 정지 중 ""
+      devOk?: boolean;    // 편차가 허용 범위 안(장비 판단)
+      tc2?: string;       // "TC2 382.3 °C" / "TC2 --.-" / "TC2 382.3 → 379.3"
+      tc2Hold?: boolean;  // TC2 추종 중(장비 판단)
+      badge?: string;     // FAULT | ITL | HOLD | RUN | STOP
+    };
+  };
   ion?: { run?: boolean; lamp?: boolean; overtime?: boolean };
   heaterRecipe?: {
     running?: boolean;

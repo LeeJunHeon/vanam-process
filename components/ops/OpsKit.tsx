@@ -336,7 +336,16 @@ export function HeaterCard({
              curSv?: number | string; pidErr?: number | string; otLimit?: number | string;
              run?: boolean; fault?: boolean; tcErr?: boolean; wdErr?: boolean; ot?: boolean;
              atmosphere?: { state?: string; sp1?: number | string | null;
-                            arFlow?: number | string | null; o2Flow?: number | string | null } };
+                            arFlow?: number | string | null; o2Flow?: number | string | null };
+    lcd?: {
+      sv?: string;        // 장비 LCD 목표 숫자(운전/정지/TC2추종별로 장비가 선택)
+      dev?: string;       // "Δ+1.2", 정지 중 ""
+      devOk?: boolean;    // 편차가 허용 범위 안(장비 판단)
+      tc2?: string;       // "TC2 382.3 °C" / "TC2 --.-" / "TC2 382.3 → 379.3"
+      tc2Hold?: boolean;  // TC2 추종 중(장비 판단)
+      badge?: string;     // FAULT | ITL | HOLD | RUN | STOP
+    };
+  };
   progress?: {
     running?: boolean; state?: string; stepNo?: number; total?: number; soakRemainSec?: number;
     stepRemainSec?: number; cycle?: number; repeat?: number; held?: boolean;
@@ -364,6 +373,17 @@ export function HeaterCard({
   const st = norm(heater?.status);
   const tone = HEATER_FAULT.includes(st) ? "text-rose-600"
     : st === "인터락" ? "text-amber-600" : "text-gray-500";
+  const lcd = heater?.lcd;
+  // 목표 숫자는 장비 LCD 가 고른 값을 쓴다. lcd 가 없는 구버전은 sv.
+  const svShown = norm(lcd?.sv) || sv;
+  // 배지 색은 장비 _update_heater_lcd 의 색을 그대로 옮긴 표시 매핑이다.
+  const BADGE: Record<string, string> = {
+    FAULT: "border-[#c62828] bg-[#c62828] text-white",
+    ITL:   "border-[#ffcc80] bg-[#fff3e0] text-[#b84c00]",
+    HOLD:  "border-[#ffe082] bg-[#fff8e1] text-[#b84c00]",
+    RUN:   "border-[#a5d6a7] bg-[#e8f5e9] text-[#2e7d32]",
+    STOP:  "border-[#c8cdd3] bg-[#eef1f4] text-[#5f6b76]",
+  };
 
   return (
     <OpsCard
@@ -382,19 +402,39 @@ export function HeaterCard({
             {pv || "-"}
             {pv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
           </p>
-        </div>
-        <div className="px-3 py-2">
-          <p className="text-[10px] text-gray-400">목표{!heater?.run && sv ? " · 운전 정지" : ""}</p>
-          <p className={`text-2xl font-bold leading-tight tabular-nums ${!plcLink ? "text-gray-300" : heater?.run && sv ? "text-gray-900" : "text-gray-300"}`}>
-            {sv || "-"}
-            {sv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
-          </p>
-          {heater?.run && heater?.curSv != null && (
-            <p className="text-[10px] text-gray-400">현재 목표 {heater.curSv}℃</p>
+          {norm(lcd?.tc2) && (
+            <p className={`mt-0.5 text-[11px] font-medium tabular-nums ${
+              !plcLink ? "text-gray-300" : lcd?.tc2Hold ? "text-[#2e7d32]" : "text-gray-500"
+            }`}>
+              {lcd?.tc2}
+            </p>
           )}
         </div>
         <div className="px-3 py-2">
-          <p className="text-[10px] text-gray-400">상태</p>
+          <p className="text-[10px] text-gray-400">목표</p>
+          <p className={`text-2xl font-bold leading-tight tabular-nums ${!plcLink ? "text-gray-300" : heater?.run && svShown ? "text-gray-900" : "text-gray-300"}`}>
+            {svShown || "-"}
+            {svShown && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
+          </p>
+          {norm(lcd?.dev) && (
+            <p className={`mt-0.5 text-[11px] font-medium tabular-nums ${
+              !plcLink ? "text-gray-300" : lcd?.devOk ? "text-[#2e7d32]" : "text-gray-500"
+            }`}>
+              {lcd?.dev}
+            </p>
+          )}
+        </div>
+        <div className="px-3 py-2">
+          <p className="flex items-center gap-1.5 text-[10px] text-gray-400">
+            상태
+            {norm(lcd?.badge) && (
+              <span className={`rounded border px-1.5 py-px text-[9px] font-bold ${
+                BADGE[lcd?.badge ?? ""] ?? BADGE.STOP
+              }`}>
+                {lcd?.badge}
+              </span>
+            )}
+          </p>
           <p className={`text-sm font-semibold leading-tight ${tone}`}>{st || "-"}</p>
           {norm(heater?.output) && <p className="mt-0.5 text-[10px] text-gray-400">{heater?.output}</p>}
         </div>
