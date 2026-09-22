@@ -21,6 +21,8 @@ export type OpsPayload = {
     totalSec?: number;    // 메인 공정 총 초
     phase?: string;       // "main" | "pre"
   };
+  plc_link?: boolean;       // false = PLC 통신 두절. indicators/valves 는 마지막 값이다
+  mvInterlock?: boolean;
   groups?: MetricGroup[];
   metrics?: Record<string, string | number>; // 구버전 호환(평면 구조)
   indicators?: Record<string, boolean>;

@@ -10,6 +10,7 @@ type Props = {
   /** stateKey → 요청한 목표 상태. 실제 상태가 도달할 때까지 "전환 중"으로 표시 */
   pendingStates?: Record<string, boolean>;
   onRequest: (c: PendingCmd) => void;
+  plcLink?: boolean;   // false 면 장비처럼 램프 회색·노드 OFF·조작 잠금
 };
 
 const GREEN = "#22c55e";
@@ -21,12 +22,16 @@ const PIPE = "#d4d4d8";
 const PIPE_ON = "#86efac";
 
 export default function ChkMimic({
-  valves, indicators, online, pendingStates, onRequest,
+  valves, indicators, online, pendingStates, onRequest, plcLink = true,
 }: Props) {
+  const canOperate = online && plcLink;
   const v = (k: string) => Boolean(valves?.[k]);
   const ind = (k: string) => Boolean(indicators?.[k]);
-  const isOn = (btn: string) => v(CHK_NODE_COMMANDS[btn]?.stateKey ?? "");
+  // 링크 다운 중 valves 는 마지막 값이다 — 장비도 이때 버튼을 전부 체크 해제한다.
+  const isOn = (btn: string) =>
+    plcLink ? v(CHK_NODE_COMMANDS[btn]?.stateKey ?? "") : false;
   const isPending = (btn: string) => {
+    if (!plcLink) return false;
     const sk = CHK_NODE_COMMANDS[btn]?.stateKey;
     if (!sk || !pendingStates) return false;
     const want = pendingStates[sk];
@@ -35,7 +40,7 @@ export default function ChkMimic({
 
   const click = (btnKey: string) => {
     const def = CHK_NODE_COMMANDS[btnKey];
-    if (!def || !online) return;
+    if (!def || !canOperate) return;
     const cur = def.stateKey ? v(def.stateKey) : false;
     onRequest({
       command: def.key,
@@ -53,7 +58,7 @@ export default function ChkMimic({
     const on = isOn(btn);
     const wait = isPending(btn);
     return (
-      <g onClick={() => click(btn)} style={{ cursor: online ? "pointer" : "default" }}
+      <g onClick={() => click(btn)} style={{ cursor: canOperate ? "pointer" : "default" }}
         className={wait ? "animate-pulse" : undefined}>
         <rect
           x={x} y={y} width={w} height={h} rx={7}
@@ -90,8 +95,8 @@ export default function ChkMimic({
     <section className="flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-gray-900">HMI</h3>
-        <span className="text-[11px] text-gray-400">
-          {online ? "노드를 눌러 조작" : "장비 미연결"}
+        <span className={`text-[11px] ${online && !plcLink ? "text-rose-600" : "text-gray-400"}`}>
+          {!online ? "장비 미연결" : !plcLink ? "PLC 연결 끊김 · 조작 잠금" : "노드를 눌러 조작"}
         </span>
       </div>
 
@@ -101,10 +106,14 @@ export default function ChkMimic({
           return (
             <span key={l.key} className="flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
               <span className="h-3 w-3 rounded-full border"
-                style={{
-                  backgroundColor: on ? GREEN : RED,
-                  borderColor: on ? GREEN_D : RED_D,
-                }} />
+                style={
+                  !plcLink
+                    ? { backgroundColor: "#e5e7eb", borderColor: "#9ca3af" }
+                    : {
+                        backgroundColor: on ? GREEN : RED,
+                        borderColor: on ? GREEN_D : RED_D,
+                      }
+                } />
               {l.label}
             </span>
           );
@@ -158,7 +167,7 @@ export default function ChkMimic({
       <div className="mt-1.5 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-1.5">
         <button
           onClick={() => click("BuzzStop_Button")}
-          disabled={!online}
+          disabled={!canOperate}
           className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-40 ${
             isOn("BuzzStop_Button")
               ? "border-green-600 bg-green-500 text-green-950"

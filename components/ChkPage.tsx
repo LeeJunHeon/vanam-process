@@ -18,6 +18,8 @@ export default function ChkPage() {
 
   const p = data?.state?.payload ?? {};
   const valves = p.valves;
+  // 장비가 보내는 PLC 링크 상태. 키가 없는 구버전은 연결로 본다.
+  const plcLink = p.plc_link !== false;
 
   const handleSent = useCallback((c: PendingCmd) => {
     if (c.stateKey && typeof c.args?.on === "boolean") {
@@ -78,6 +80,16 @@ export default function ChkPage() {
         </p>
       )}
 
+      {online && !plcLink && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
+          <p className="font-bold">PLC 연결 끊김</p>
+          <p className="mt-0.5 text-[11px] leading-relaxed">
+            밸브·펌프·램프·히터 표시는 마지막 수신값이며, PLC 조작이 잠겼습니다.
+            ALL STOP 과 공정 정지는 사용할 수 있습니다.
+          </p>
+        </div>
+      )}
+
       <StatusHero
         online={online}
         status={p.status}
@@ -95,6 +107,7 @@ export default function ChkPage() {
           online={online}
           pendingStates={pendingFlat}
           onRequest={request}
+          plcLink={plcLink}
         />
         <div className="flex flex-col gap-3">
           <HeaterCard
@@ -103,12 +116,14 @@ export default function ChkPage() {
             online={online}
             running={running}
             onRequest={request}
+            plcLink={plcLink}
           />
           <IonizerCard
             ion={p.ion}
             on={Boolean(p.valves?.ION)}
             online={online}
             onRequest={request}
+            plcLink={plcLink}
           />
           <div className="flex-1">
             <MetricSections groups={p.groups} />

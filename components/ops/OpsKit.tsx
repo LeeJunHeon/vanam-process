@@ -330,7 +330,7 @@ export function StatusHero({
 const HEATER_FAULT = ["과온 트립", "센서 이상", "통신 두절", "이상 발생"];
 
 export function HeaterCard({
-  heater, progress, online, running, onRequest,
+  heater, progress, online, running, onRequest, plcLink = true,
 }: {
   heater?: { pv?: string; sv?: string; status?: string; output?: string; on?: boolean; recipeRunning?: boolean;
              curSv?: number | string; pidErr?: number | string; otLimit?: number | string;
@@ -347,7 +347,10 @@ export function HeaterCard({
   online: boolean;
   running: boolean;
   onRequest: (c: PendingCmd) => void;
+  plcLink?: boolean;
 }) {
+  // 장비 _heater_set_stale 처럼 PLC 링크 다운 시 조작을 잠근다.
+  const locked = !online || !plcLink;
   const [target, setTarget] = useState("");
   const [picker, setPicker] = useState(false);
   const [recipe, setRecipe] = useState<RecipeItem | null>(null);
@@ -375,14 +378,14 @@ export function HeaterCard({
       <div className="grid grid-cols-3 divide-x divide-gray-100 rounded-xl border border-gray-100">
         <div className="px-3 py-2">
           <p className="text-[10px] text-gray-400">현재 온도</p>
-          <p className={`text-2xl font-bold leading-tight tabular-nums ${pv ? "text-gray-900" : "text-gray-300"}`}>
+          <p className={`text-2xl font-bold leading-tight tabular-nums ${!plcLink ? "text-gray-300" : pv ? "text-gray-900" : "text-gray-300"}`}>
             {pv || "-"}
             {pv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
           </p>
         </div>
         <div className="px-3 py-2">
           <p className="text-[10px] text-gray-400">목표{!heater?.run && sv ? " · 운전 정지" : ""}</p>
-          <p className={`text-2xl font-bold leading-tight tabular-nums ${heater?.run && sv ? "text-gray-900" : "text-gray-300"}`}>
+          <p className={`text-2xl font-bold leading-tight tabular-nums ${!plcLink ? "text-gray-300" : heater?.run && sv ? "text-gray-900" : "text-gray-300"}`}>
             {sv || "-"}
             {sv && <span className="ml-0.5 text-xs font-normal text-gray-400">℃</span>}
           </p>
@@ -409,7 +412,7 @@ export function HeaterCard({
           </p>
           {heater?.fault && (
             <button
-              disabled={!online}
+              disabled={locked}
               onClick={() =>
                 onRequest({
                   command: "HEATER_RESET",
@@ -434,7 +437,7 @@ export function HeaterCard({
           {heater.atmosphere.sp1 != null && <span>WP {heater.atmosphere.sp1} mTorr</span>}
           {heater.atmosphere.state === "READY" && !heater.on && (
             <button
-              disabled={!online}
+              disabled={locked}
               onClick={() => onRequest({ command: "HEATER_GAS_RELEASE", label: "히터 가스·압력 해제" })}
               className="ml-auto rounded border border-blue-300 bg-white px-2 py-0.5 font-semibold disabled:opacity-40"
             >
@@ -456,7 +459,7 @@ export function HeaterCard({
               className="w-24 rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs"
             />
             <button
-              disabled={!online || !target.trim()}
+              disabled={locked || !target.trim()}
               onClick={() =>
                 onRequest({ command: "HEATER_SV", label: "히터 목표온도", detail: `${target}℃`, args: { value: target } })
               }
@@ -494,7 +497,7 @@ export function HeaterCard({
             return (
               <button
                 key={String(want)}
-                disabled={!online || !canOn}
+                disabled={locked || !canOn}
                 onClick={() =>
                   onRequest({
                     command: "HEATER_ONOFF",
@@ -576,7 +579,7 @@ export function HeaterCard({
           {progress.running && (
             <div className="flex gap-1.5">
               <button
-                disabled={!online}
+                disabled={locked}
                 onClick={() =>
                   onRequest({
                     command: "HEATER_RECIPE_HOLD",
@@ -589,7 +592,7 @@ export function HeaterCard({
                 {progress.held ? "재개" : "일시정지"}
               </button>
               <button
-                disabled={!online}
+                disabled={locked}
                 onClick={() =>
                   onRequest({
                     command: "HEATER_RECIPE_STEP",
@@ -612,7 +615,7 @@ export function HeaterCard({
           <span className="text-[11px] font-semibold text-gray-700">
             레시피 · {recipe.name} ({recipe.rows.length}단계)
           </span>
-          <button disabled={!online}
+          <button disabled={locked}
             onClick={() => onRequest({
               command: "RECIPE_HEATER_RUN", label: "히터 레시피 실행",
               detail: recipe.name, args: { rows: recipe.rows },
@@ -620,7 +623,7 @@ export function HeaterCard({
             className="rounded-lg bg-gray-800 px-2.5 py-1 text-[11px] font-semibold text-white disabled:opacity-40">
             실행
           </button>
-          <button disabled={!online}
+          <button disabled={locked}
             onClick={() => onRequest({ command: "RECIPE_HEATER_STOP", label: "히터 레시피 중단" })}
             className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 disabled:opacity-40">
             중단
@@ -640,16 +643,17 @@ export function HeaterCard({
 
 // ── 이오나이저 ───────────────────────────────────────────────
 export function IonizerCard({
-  ion, on, online, onRequest,
+  ion, on, online, onRequest, plcLink = true,
 }: {
   ion?: { run?: boolean; lamp?: boolean; overtime?: boolean };
   on: boolean;
   online: boolean;
   onRequest: (c: PendingCmd) => void;
+  plcLink?: boolean;
 }) {
   const dot = (v?: boolean, alert?: boolean) =>
     `h-3 w-3 rounded-full border ${
-      v ? (alert ? "border-rose-600 bg-rose-500" : "border-green-600 bg-green-500") : "border-gray-300 bg-white"
+      !plcLink ? "border-gray-300 bg-gray-200" : v ? (alert ? "border-rose-600 bg-rose-500" : "border-green-600 bg-green-500") : "border-gray-300 bg-white"
     }`;
 
   return (
@@ -670,7 +674,7 @@ export function IonizerCard({
             return (
               <button
                 key={String(want)}
-                disabled={!online}
+                disabled={!online || !plcLink}
                 onClick={() =>
                   onRequest({
                     command: "ION_button",
