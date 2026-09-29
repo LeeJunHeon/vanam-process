@@ -15,8 +15,14 @@ export async function GET(req: NextRequest) {
   const before = req.nextUrl.searchParams.get("before");
   const full = req.nextUrl.searchParams.get("full") !== "0";
   const afterEventId = Number(req.nextUrl.searchParams.get("afterEventId") || "") || null;
+  // 결과 추적: 이 화면에서 보낸 명령 id 만 가볍게 함께 조회한다(추가 요청을 만들지 않기 위해).
+  const cmdIds = (req.nextUrl.searchParams.get("cmdIds") ?? "")
+    .split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isInteger(n) && n > 0)
+    .slice(0, 10);
 
-  const [state, run, events, runs, commands] = await Promise.all([
+  const [state, run, events, runs, commands, tracked] = await Promise.all([
     prisma.opsState.findUnique({ where: { equipment } }),
     prisma.opsRun.findFirst({
       where: { equipment, status: "running" },
@@ -47,6 +53,9 @@ export async function GET(req: NextRequest) {
           take: 10,
         })
       : Promise.resolve(undefined),
+    cmdIds.length
+      ? prisma.opsCommand.findMany({ where: { equipment, id: { in: cmdIds } } })
+      : Promise.resolve(undefined),
   ]);
 
   return NextResponse.json({
@@ -55,5 +64,6 @@ export async function GET(req: NextRequest) {
     events,
     ...(runs !== undefined ? { runs } : {}),
     ...(commands !== undefined ? { commands } : {}),
+    ...(tracked !== undefined ? { tracked } : {}),
   });
 }

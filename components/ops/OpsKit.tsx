@@ -14,7 +14,7 @@ import RecipeProgress from "@/components/ops/RecipeProgress";
 // ── 데이터 훅 ────────────────────────────────────────────────
 const EVENT_KEEP = 300;   // 메모리에 유지할 최대 이벤트 수
 
-export function useOpsStatus(equipment: string) {
+export function useOpsStatus(equipment: string, trackIds: number[] = []) {
   const [data, setData] = useState<OpsStatus | null>(null);
   const [failed, setFailed] = useState(false);
   const [nowMs, setNowMs] = useState(0);
@@ -24,6 +24,11 @@ export function useOpsStatus(equipment: string) {
   const pollNo = useRef(0);
   const lastEventId = useRef<number | null>(null);
   const forceFull = useRef(true);
+  // 추적 중인 명령 id. load 를 다시 만들지 않도록 ref 로 들고 매 조회에 붙인다.
+  const trackRef = useRef<number[]>([]);
+  const tracking = trackIds.length > 0;
+  const trackKey = trackIds.join(",");
+  useEffect(() => { trackRef.current = trackKey ? trackKey.split(",").map(Number) : []; }, [trackKey]);
 
   const load = useCallback(async () => {
     // 런 이력·조작 기록은 자주 바뀌지 않으므로 5회에 1회만 전체 조회한다
@@ -33,6 +38,8 @@ export function useOpsStatus(equipment: string) {
     const qs = new URLSearchParams({ equipment });
     if (!wantFull) qs.set("full", "0");
     if (after !== null) qs.set("afterEventId", String(after));
+    // 추적 중인 명령이 없으면 cmdIds 자체를 붙이지 않는다(불필요한 조회를 만들지 않는다).
+    if (trackRef.current.length) qs.set("cmdIds", trackRef.current.slice(0, 10).join(","));
 
     try {
       const res = await fetch(`/api/ops/status?${qs.toString()}`, { cache: "no-store" });
@@ -61,6 +68,7 @@ export function useOpsStatus(equipment: string) {
           events,
           runs: j.runs ?? prev?.runs,
           commands: j.commands ?? prev?.commands,
+          tracked: j.tracked,
         } as OpsStatus;
       });
       setFailed(false);
@@ -94,7 +102,9 @@ export function useOpsStatus(equipment: string) {
   useEffect(() => {
     if (paused) return;
     const hidden = typeof document !== "undefined" && document.hidden;
-    const wait = hidden ? 15_000 : Date.now() < fastUntil ? 600 : active ? 1_000 : 4_000;
+    const wait = hidden ? 15_000
+      : tracking || Date.now() < fastUntil ? 600
+      : active ? 1_000 : 4_000;
     const t = setTimeout(() => {
       if (!alive.current) return;
       if (typeof document !== "undefined" && document.hidden) {
@@ -104,7 +114,7 @@ export function useOpsStatus(equipment: string) {
       }
     }, wait);
     return () => clearTimeout(t);
-  }, [load, nowMs, fastUntil, active, paused]);
+  }, [load, nowMs, fastUntil, active, paused, tracking]);
 
   // 탭으로 돌아오면 즉시 최신 상태를 받아온다
   useEffect(() => {
@@ -1042,8 +1052,10 @@ export function CommandLog({ commands }: { commands?: OpsCommand[] }) {
       <div className="space-y-1">
         {commands.slice().reverse().map((c) => {
           const act = actionText(c);
+          const reason = (c.status === "failed" || c.status === "expired") && c.result ? c.result : null;
           return (
-            <p key={c.id} className="flex flex-wrap items-baseline gap-x-2 text-[11px] leading-snug">
+            <div key={c.id}>
+            <p className="flex flex-wrap items-baseline gap-x-2 text-[11px] leading-snug">
               <span className="shrink-0 font-mono text-gray-300">{fmtLogTime(c.requestedAt)}</span>
               <span className="font-medium text-gray-800">{c.label ?? c.command}</span>
               {act && (
@@ -1063,6 +1075,17 @@ export function CommandLog({ commands }: { commands?: OpsCommand[] }) {
                 {CMD_STATUS_LABEL[c.status] ?? c.status}
               </span>
             </p>
+            {reason && (
+              <p
+                title={reason}
+                className={`truncate pl-1 text-[10px] leading-snug ${
+                  c.status === "failed" ? "text-rose-500" : "text-amber-600"
+                }`}
+              >
+                {reason}
+              </p>
+            )}
+            </div>
           );
         })}
       </div>
@@ -1082,7 +1105,7 @@ export type PendingCmd = {
 
 export function useCommandSender(
   equipment: string,
-  onSent?: (c: PendingCmd) => void,
+  onSent?: (c: PendingCmd, id?: number) => void,
 ) {
   const [pending, setPending] = useState<PendingCmd | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1102,8 +1125,8 @@ export function useCommandSender(
       });
       const j = await res.json().catch(() => ({}));
       if (res.ok) {
-        setMsg(`${pending.label} 명령을 전송했습니다.`);
-        onSent?.(pending);
+        // 전송 문구는 띄우지 않는다. 결과 알림(완료/실패/만료/응답 없음)이 대신한다.
+        onSent?.(pending, typeof j?.id === "number" ? j.id : undefined);
       } else {
         setMsg(j?.error ?? "전송에 실패했습니다.");
       }

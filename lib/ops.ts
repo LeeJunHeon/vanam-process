@@ -88,6 +88,8 @@ export type OpsStatus = {
   events: OpsEvent[];
   runs: OpsRun[];
   commands?: OpsCommand[];
+  /** cmdIds 로 요청한 명령들의 현재 상태(결과 추적용) */
+  tracked?: OpsCommand[];
 };
 
 const KST = "Asia/Seoul";

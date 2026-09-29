@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CommandLog, ConnBadge, EventFeed, HeaterCard, MetricSections,
   IonizerCard, RunHistory, StatusHero, useCommandSender, useOpsStatus, type PendingCmd,
@@ -10,10 +10,23 @@ import ChkProcessForm from "@/components/ops/ChkProcessForm";
 import ChkRecipe from "@/components/ops/ChkRecipe";
 
 const PENDING_TTL = 20_000;
+const TRACK_TTL = 45_000;   // 이 시간이 지나도 결과가 없으면 "응답 없음" 으로 끝낸다
+
+/** 이 화면에서 보낸 명령. 알림은 내가 보낸 명령에 대해서만 띄운다. */
+type Tracked = { id: number; label: string; stateKey?: string; at: number };
+type Notice = {
+  id: number;
+  kind: "done" | "failed" | "expired" | "timeout";
+  text: string;
+  at: number;
+};
 
 export default function ChkPage() {
+  const [tracked, setTracked] = useState<Tracked[]>([]);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const trackIds = useMemo(() => tracked.map((t) => t.id), [tracked]);
   const { data, failed, online, updatedAt, boost, refresh, paused, setPaused, lastFetchMs } =
-    useOpsStatus("CHK");
+    useOpsStatus("CHK", trackIds);
   const [pendingStates, setPendingStates] = useState<Record<string, { want: boolean; at: number }>>({});
 
   const p = data?.state?.payload ?? {};
@@ -21,16 +34,72 @@ export default function ChkPage() {
   // 장비가 보내는 PLC 링크 상태. 키가 없는 구버전은 연결로 본다.
   const plcLink = p.plc_link !== false;
 
-  const handleSent = useCallback((c: PendingCmd) => {
+  const handleSent = useCallback((c: PendingCmd, id?: number) => {
     if (c.stateKey && typeof c.args?.on === "boolean") {
       const key = c.stateKey;
       const want = c.args.on as boolean;
       setPendingStates((s) => ({ ...s, [key]: { want, at: Date.now() } }));
     }
+    if (typeof id === "number") {
+      setTracked((s) => [{ id, label: c.label, stateKey: c.stateKey, at: Date.now() }, ...s].slice(0, 10));
+    }
     boost(); // 명령 직후 고속 조회로 전환
   }, [boost]);
 
   const { request, dialog, msg } = useCommandSender("CHK", handleSent);
+
+  // 추적 중인 명령의 결과를 알림으로 만든다. 폴링 응답(tracked)에 실려 오므로
+  // 별도 요청을 만들지 않는다. 45초가 지나도 끝나지 않으면 "응답 없음" 으로 닫는다.
+  useEffect(() => {
+    if (!tracked.length) return;
+    const rows = new Map((data?.tracked ?? []).map((c) => [c.id, c]));
+    const now = Date.now();
+    const finished: number[] = [];
+    const clearKeys: string[] = [];
+    const made: Notice[] = [];
+
+    for (const t of tracked) {
+      const row = rows.get(t.id);
+      const st = row?.status;
+      if (st === "done") {
+        finished.push(t.id);
+        made.push({ id: t.id, kind: "done", text: `${t.label} 완료`, at: now });
+      } else if (st === "failed") {
+        finished.push(t.id);
+        if (t.stateKey) clearKeys.push(t.stateKey);
+        made.push({ id: t.id, kind: "failed", text: `${t.label} 실패 — ${row?.result || "사유가 전달되지 않았습니다"}`, at: now });
+      } else if (st === "expired") {
+        finished.push(t.id);
+        if (t.stateKey) clearKeys.push(t.stateKey);
+        made.push({ id: t.id, kind: "expired", text: `${t.label} 만료 — ${row?.result || "장비가 제시간에 명령을 가져가지 않았습니다"}`, at: now });
+      } else if (now - t.at > TRACK_TTL) {
+        finished.push(t.id);
+        if (t.stateKey) clearKeys.push(t.stateKey);
+        made.push({ id: t.id, kind: "timeout", text: `${t.label} 응답 없음 — 장비 상태를 확인하세요`, at: now });
+      }
+    }
+    if (!finished.length) return;
+
+    setTracked((s) => s.filter((t) => !finished.includes(t.id)));
+    if (clearKeys.length) {
+      setPendingStates((s) => {
+        const next = { ...s };
+        for (const k of clearKeys) delete next[k];
+        return next;
+      });
+    }
+    setNotices((prev) => [...made, ...prev.filter((n) => !finished.includes(n.id))].slice(0, 3));
+    refresh(); // 조작 기록을 바로 갱신한다(다음 조회를 전체 조회로)
+  }, [data, lastFetchMs, tracked, refresh]);
+
+  // 완료 알림만 5초 뒤 자동으로 사라진다
+  useEffect(() => {
+    if (!notices.some((n) => n.kind === "done")) return;
+    const t = setTimeout(() => {
+      setNotices((prev) => prev.filter((n) => n.kind !== "done" || Date.now() - n.at < 5_000));
+    }, 5_200);
+    return () => clearTimeout(t);
+  }, [notices]);
 
   // 실제 상태가 목표에 도달했거나 시간이 지나면 "전환 중" 표시를 해제한다
   useEffect(() => {
@@ -79,6 +148,28 @@ export default function ChkPage() {
           {failed ? "상태를 불러오지 못했습니다. 로그인 상태를 확인해 주세요." : msg}
         </p>
       )}
+
+      {notices.map((n) => (
+        <div
+          key={n.id}
+          className={`flex items-start gap-2 rounded-2xl border p-3 text-xs ${
+            n.kind === "failed"
+              ? "border-rose-200 bg-rose-50 text-rose-700"
+              : n.kind === "done"
+                ? "border-gray-100 bg-white text-gray-600"
+                : "border-amber-200 bg-amber-50 text-amber-700"
+          }`}
+        >
+          <span className="min-w-0 flex-1 leading-relaxed">{n.text}</span>
+          <button
+            onClick={() => setNotices((prev) => prev.filter((x) => x.id !== n.id))}
+            aria-label="알림 닫기"
+            className="shrink-0 rounded px-1 text-sm font-bold opacity-60 hover:opacity-100"
+          >
+            ✕
+          </button>
+        </div>
+      ))}
 
       {online && !plcLink && (
         <div className="rounded-2xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-xs text-rose-700">
