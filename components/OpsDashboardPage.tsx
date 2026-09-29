@@ -15,6 +15,10 @@ type Unit = {
   state: EquipState;
   summary: string;
   page?: EquipPage;
+  /** 미확인 장비 알림 수 */
+  noticeCount?: number;
+  /** error/warn 이 하나라도 있으면 true(빨강) */
+  noticeSevere?: boolean;
 };
 
 // 연동 전 장비는 상태를 지어내지 않는다. 리포터가 붙는 대로 실데이터로 교체된다.
@@ -56,8 +60,19 @@ function UnitCard({ u, onNavigate }: { u: Unit; onNavigate?: (p: EquipPage) => v
     >
       <span className="mb-1.5 flex items-center justify-between gap-2">
         <span className="truncate text-sm font-bold text-gray-900">{u.name}</span>
-        <span className={`shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-semibold ${STATE_BADGE[u.state]}`}>
-          {u.state}
+        <span className="flex shrink-0 items-center gap-1">
+          {!!u.noticeCount && (
+            <span
+              className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold ${
+                u.noticeSevere ? "bg-rose-50 text-rose-600" : "bg-gray-100 text-gray-500"
+              }`}
+            >
+              알림 {u.noticeCount}
+            </span>
+          )}
+          <span className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold ${STATE_BADGE[u.state]}`}>
+            {u.state}
+          </span>
         </span>
       </span>
       <span
@@ -76,7 +91,12 @@ export default function OpsDashboardPage({
   const chk = useOpsStatus("CHK");
 
   const chkUnit: Unit = useMemo(() => {
-    const base = { key: "chk", name: "CHK", page: "equipChk" as EquipPage };
+    const notices = chk.data?.notices ?? [];
+    const base = {
+      key: "chk", name: "CHK", page: "equipChk" as EquipPage,
+      noticeCount: notices.length,
+      noticeSevere: notices.some((n) => n.level === "error" || n.level === "warn"),
+    };
     if (!chk.online) return { ...base, state: "미연결", summary: "리포터 미연결" };
     const p = chk.data?.state?.payload ?? {};
     const last = chk.data?.runs?.find((r) => r.status !== "running") ?? null;

@@ -289,6 +289,25 @@ model OpsCommand {
   @@schema("process")
 }
 
+model OpsNotice {
+  id        Int       @id @default(autoincrement())
+  msgId     String?   @unique @map("msg_id")
+  equipment String
+  ts        DateTime
+  level     String
+  title     String
+  message   String
+  origin    String?
+  source    String?
+  ackedBy   String?   @map("acked_by")
+  ackedAt   DateTime? @map("acked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([equipment, ackedAt])
+  @@map("ops_notice")
+  @@schema("process")
+}
+
 model OpsRecipe {
   id        Int      @id @default(autoincrement())
   equipment String

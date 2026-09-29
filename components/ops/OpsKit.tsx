@@ -69,6 +69,7 @@ export function useOpsStatus(equipment: string, trackIds: number[] = []) {
           runs: j.runs ?? prev?.runs,
           commands: j.commands ?? prev?.commands,
           tracked: j.tracked,
+          notices: j.notices ?? prev?.notices,
         } as OpsStatus;
       });
       setFailed(false);

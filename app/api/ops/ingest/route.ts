@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 type IngestMsg = {
   id?: string; // 리포터가 부여하는 메시지 고유 ID (재전송 중복 차단용)
-  type: "hello" | "state" | "event" | "run_start" | "run_end" | "cmd_result";
+  type: "hello" | "state" | "event" | "run_start" | "run_end" | "cmd_result" | "notice";
   ts?: string;
   data?: Record<string, unknown>;
   level?: string;
@@ -17,6 +17,9 @@ type IngestMsg = {
   errorMsg?: string;
   cmdId?: number;
   ok?: boolean;
+  title?: string;                // notice
+  origin?: string;               // notice: local | erp
+  source?: string;               // notice: process | heater
 };
 
 type PendingEvent = {
@@ -27,6 +30,19 @@ type PendingEvent = {
   message: string;
   msgId: string | null;
 };
+
+type PendingNotice = {
+  msgId: string | null;
+  equipment: string;
+  ts: Date;
+  level: string;
+  title: string;
+  message: string;
+  origin: string | null;
+  source: string | null;
+};
+
+const NOTICE_LEVELS = new Set(["error", "warn", "info"]);
 
 // POST /api/ops/ingest — 장비 리포터 수집 엔드포인트.
 // 세션이 아니라 Bearer 토큰(OPS_INGEST_TOKEN) 인증이다.
@@ -94,6 +110,7 @@ export async function POST(req: NextRequest) {
 
     // state는 배치 내 마지막 것만 반영하면 충분하다
     let latestState: Record<string, unknown> | null = null;
+    const notices: PendingNotice[] = [];
 
     for (const m of messages) {
       const ts = m.ts ? new Date(m.ts) : new Date();
@@ -128,6 +145,17 @@ export async function POST(req: NextRequest) {
             },
           });
         }
+      } else if (m.type === "notice") {
+        notices.push({
+          msgId: m.id ?? null,
+          equipment,
+          ts,
+          level: NOTICE_LEVELS.has(m.level ?? "") ? (m.level as string) : "info",
+          title: String(m.title ?? "").slice(0, 100),
+          message: String(m.message ?? "").slice(0, 1000),
+          origin: m.origin ?? null,
+          source: m.source ?? null,
+        });
       } else if (m.type === "event") {
         pending.push({
           equipment,
@@ -175,6 +203,15 @@ export async function POST(req: NextRequest) {
       }
     }
     await flush();
+
+    // 알림 저장이 실패해도(테이블 미생성 등) 수집 전체를 실패시키지 않는다.
+    if (notices.length) {
+      try {
+        await prisma.opsNotice.createMany({ data: notices, skipDuplicates: true });
+      } catch (e) {
+        console.error("[ops/ingest] notice 저장 실패", e);
+      }
+    }
 
     if (latestState) {
       const toSave = instance

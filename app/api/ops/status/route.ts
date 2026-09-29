@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     .filter((n) => Number.isInteger(n) && n > 0)
     .slice(0, 10);
 
-  const [state, run, events, runs, commands, tracked] = await Promise.all([
+  const [state, run, events, runs, commands, tracked, notices] = await Promise.all([
     prisma.opsState.findUnique({ where: { equipment } }),
     prisma.opsRun.findFirst({
       where: { equipment, status: "running" },
@@ -56,6 +56,18 @@ export async function GET(req: NextRequest) {
     cmdIds.length
       ? prisma.opsCommand.findMany({ where: { equipment, id: { in: cmdIds } } })
       : Promise.resolve(undefined),
+    // 미확인 장비 알림. (equipment, acked_at) 인덱스로 가볍게 조회한다.
+    // 이 조회가 실패해도 나머지 응답은 정상으로 보낸다.
+    prisma.opsNotice
+      .findMany({
+        where: { equipment, ackedAt: null },
+        orderBy: { ts: "desc" },
+        take: 10,
+      })
+      .catch((e) => {
+        console.error("[ops/status] notice 조회 실패", e);
+        return [];
+      }),
   ]);
 
   return NextResponse.json({
@@ -65,5 +77,6 @@ export async function GET(req: NextRequest) {
     ...(runs !== undefined ? { runs } : {}),
     ...(commands !== undefined ? { commands } : {}),
     ...(tracked !== undefined ? { tracked } : {}),
+    notices,
   });
 }

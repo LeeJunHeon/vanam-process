@@ -82,6 +82,19 @@ export type OpsRun = {
 
 export type OpsEvent = { id: number; ts: string; level: string; message: string };
 
+export type OpsNotice = {
+  id: number;
+  equipment: string;
+  ts: string;
+  level: string;                 // error | warn | info
+  title: string;
+  message: string;
+  origin: string | null;         // local | erp
+  source: string | null;         // process | heater
+  ackedBy: string | null;
+  ackedAt: string | null;
+};
+
 export type OpsStatus = {
   state: { equipment: string; payload: OpsPayload; updatedAt: string } | null;
   run: OpsRun | null;
@@ -90,6 +103,8 @@ export type OpsStatus = {
   commands?: OpsCommand[];
   /** cmdIds 로 요청한 명령들의 현재 상태(결과 추적용) */
   tracked?: OpsCommand[];
+  /** 이 장비의 미확인 장비 알림(최신순) */
+  notices?: OpsNotice[];
 };
 
 const KST = "Asia/Seoul";

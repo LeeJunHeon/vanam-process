@@ -8,6 +8,7 @@ import {
 import ChkMimic from "@/components/ops/ChkMimic";
 import ChkProcessForm from "@/components/ops/ChkProcessForm";
 import ChkRecipe from "@/components/ops/ChkRecipe";
+import { fmtLogTime, type OpsNotice } from "@/lib/ops";
 
 const PENDING_TTL = 20_000;
 const TRACK_TTL = 45_000;   // 이 시간이 지나도 결과가 없으면 "응답 없음" 으로 끝낸다
@@ -20,6 +21,79 @@ type Notice = {
   text: string;
   at: number;
 };
+
+const NOTICE_TONE: Record<string, string> = {
+  error: "border-rose-200 bg-rose-50 text-rose-700",
+  warn: "border-amber-200 bg-amber-50 text-amber-700",
+  info: "border-gray-100 bg-white text-gray-600",
+};
+const NOTICE_MAX = 5;
+
+/** 장비가 보낸 자동 알림. [확인] 하면 모든 사람 화면에서 사라진다. */
+function NoticeBanner({ notices, onAcked }: { notices: OpsNotice[]; onAcked: () => void }) {
+  const [hidden, setHidden] = useState<number[]>([]);
+  const list = notices.filter((n) => !hidden.includes(n.id));
+  if (!list.length) return null;
+
+  const ack = async (ids: number[]) => {
+    setHidden((s) => [...s, ...ids]);   // 먼저 숨기고
+    try {
+      await fetch("/api/ops/notice", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+    } catch {
+      /* 실패해도 다음 조회에서 다시 나타난다 */
+    }
+    onAcked();                           // 전체 조회
+  };
+
+  const shown = list.slice(0, NOTICE_MAX);
+  const rest = list.length - shown.length;
+
+  return (
+    <div className="space-y-2">
+      {list.length > 1 && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => ack(list.map((n) => n.id))}
+            title="확인하면 모든 사람 화면에서 사라지고 확인한 사람이 기록됩니다"
+            className="rounded-lg border border-gray-200 px-2.5 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
+          >
+            모두 확인 ({list.length})
+          </button>
+        </div>
+      )}
+      {shown.map((n) => (
+        <div
+          key={n.id}
+          className={`flex items-start gap-3 rounded-2xl border p-3 text-xs ${
+            NOTICE_TONE[n.level] ?? NOTICE_TONE.info
+          }`}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="flex flex-wrap items-baseline gap-x-2 text-[10px] opacity-70">
+              <span className="font-mono">{fmtLogTime(n.ts)}</span>
+              {n.origin && <span>{n.origin === "erp" ? "ERP에서 시작" : "노트북에서 시작"}</span>}
+              {n.source && <span>{n.source === "heater" ? "히터" : "공정"}</span>}
+            </p>
+            <p className="mt-0.5 font-bold">{n.title}</p>
+            <p className="mt-0.5 whitespace-pre-wrap leading-relaxed">{n.message}</p>
+          </div>
+          <button
+            onClick={() => ack([n.id])}
+            title="확인하면 모든 사람 화면에서 사라지고 확인한 사람이 기록됩니다"
+            className="shrink-0 rounded-lg border border-current/30 px-2.5 py-1 text-[11px] font-semibold opacity-80 hover:opacity-100"
+          >
+            확인
+          </button>
+        </div>
+      ))}
+      {rest > 0 && <p className="text-right text-[11px] text-gray-400">외 {rest}건</p>}
+    </div>
+  );
+}
 
 export default function ChkPage() {
   const [tracked, setTracked] = useState<Tracked[]>([]);
@@ -142,6 +216,8 @@ export default function ChkPage() {
           onRefresh={refresh}
         />
       </div>
+
+      <NoticeBanner notices={data?.notices ?? []} onAcked={refresh} />
 
       {(failed || msg) && (
         <p className="rounded-2xl border border-gray-100 bg-white p-3 text-xs text-gray-600">
