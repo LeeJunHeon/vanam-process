@@ -211,7 +211,7 @@ export default function ChkPage() {
       ? { offset: calParts[0], param: calParts[1] }
       : { offset: "", param: "" };
 
-  const lastRun =data?.runs?.find((r) => r.status !== "running") ?? null;
+  const lastRun = data?.runs?.find((r) => r.status !== "running") ?? null;
   const running = online && (p.status === "running" || !!data?.run);
 
   return (
