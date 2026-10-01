@@ -196,7 +196,16 @@ export default function ChkProcessForm({ online, running, csvProgress, equipTarg
                             <td className="px-2 py-1.5 text-right tabular-nums">{on(r.O2) ? r.O2_flow : dash}</td>
                             <td className="px-2 py-1.5 text-right tabular-nums">{r.working_pressure || dash}</td>
                             <td className="px-2 py-1.5 text-right tabular-nums">{on(r.use_rf_power) ? r.rf_power : dash}</td>
-                            <td className="px-2 py-1.5 text-right tabular-nums">{on(r.use_dc_power) ? r.dc_power : dash}</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">
+                              {on(r.use_dc_power) ? (
+                                <>
+                                  {r.dc_power}
+                                  {on(r.use_dc_delay) && (
+                                    <span className="ml-1 rounded bg-gray-100 px-1 py-0.5 text-[9px] font-semibold text-gray-500">안정화</span>
+                                  )}
+                                </>
+                              ) : dash}
+                            </td>
                             <td className="px-2 py-1.5 text-right tabular-nums">{r.process_time ? `${r.process_time}분` : dash}</td>
                             <td className="px-2 py-1.5 text-right tabular-nums">
                               {on(r.use_heater) ? `${r.heater_temp}℃${r.heater_ramp ? ` · ${r.heater_ramp}℃/분` : ""}` : dash}
