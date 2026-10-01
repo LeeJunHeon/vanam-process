@@ -200,7 +200,18 @@ export default function ChkPage() {
     g2: tgtGroup?.items.find((i) => i.label === "G2")?.value as string | undefined,
   };
 
-  const lastRun = data?.runs?.find((r) => r.status !== "running") ?? null;
+  // RF 그룹의 "offset / param" 항목("6.79 / 1.0395")을 나눈다. 형식이 다르면 빈칸.
+  const rfCal = p.groups
+    ?.find((g) => g.label === "RF")
+    ?.items.find((i) => i.label === "offset / param")?.value;
+  const calParts = typeof rfCal === "string" ? rfCal.split("/").map((s) => s.trim()) : [];
+  const isNum = (s?: string) => !!s && Number.isFinite(Number(s));
+  const equipCal =
+    calParts.length === 2 && isNum(calParts[0]) && isNum(calParts[1])
+      ? { offset: calParts[0], param: calParts[1] }
+      : { offset: "", param: "" };
+
+  const lastRun =data?.runs?.find((r) => r.status !== "running") ?? null;
   const running = online && (p.status === "running" || !!data?.run);
 
   return (
@@ -303,6 +314,7 @@ export default function ChkPage() {
         running={running}
         csvProgress={p.csvRecipe}
         equipTargets={equipTargets}
+        equipCal={equipCal}
         onRequest={request}
       />
 

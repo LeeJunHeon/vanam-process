@@ -13,6 +13,7 @@ type Props = {
     name?: string | null; rows?: Record<string, string>[];
   } | null;
   equipTargets?: { g1?: string; g2?: string };   // 장비 입력란의 타겟명
+  equipCal?: { offset?: string; param?: string }; // 장비의 현재 RF 보정값(placeholder 용)
   onRequest: (c: PendingCmd) => void;
 };
 
@@ -29,7 +30,7 @@ function Chk({ label, on, set }: { label: string; on: boolean; set: (v: boolean)
   );
 }
 
-export default function ChkProcessForm({ online, running, csvProgress, equipTargets, onRequest }: Props) {
+export default function ChkProcessForm({ online, running, csvProgress, equipTargets, equipCal, onRequest }: Props) {
   const [picker, setPicker] = useState(false);
   const [recipe, setRecipe] = useState<RecipeItem | null>(null);
   const [useG1, setUseG1] = useState(false);
@@ -48,27 +49,24 @@ export default function ChkProcessForm({ online, running, csvProgress, equipTarg
   const [dcDelay, setDcDelay] = useState(false);
   const [shutter, setShutter] = useState("5");
   const [ptime, setPtime] = useState("10");
-  const [offset, setOffset] = useState("6.79");
-  const [param, setParam] = useState("1.0395");
+  // 비우면 장비 값을 쓴다(키를 보내지 않는다)
+  const [offset, setOffset] = useState("");
+  const [param, setParam] = useState("");
+
+  // 장비에 레시피가 적재돼 대기 중이면 장비가 수동 시작을 거부한다
+  const equipLoaded = !!csvProgress && !csvProgress.active && !running;
+  const loadedName = csvProgress?.name || "이름 없음";
+  const loadedSteps = csvProgress?.rows?.length || csvProgress?.total || 0;
 
   const pickRecipe = (r: RecipeItem) => {
     setRecipe(r);
     setPicker(false);
-    const s = r.rows?.[0];
-    if (!s) return;
-    const b = (v?: string) => v === "1";
-    setUseG1(b(s.gun1)); setUseG2(b(s.gun2));
-    setUseAr(b(s.Ar)); setAr(s.Ar_flow ?? "");
-    setUseO2(b(s.O2)); setO2(s.O2_flow ?? "");
-    setWp(s.working_pressure ?? "");
-    setUseRf(b(s.use_rf_power)); setRf(s.rf_power ?? "");
-    setUseDc(b(s.use_dc_power)); setDc(s.dc_power ?? "");
-    setDcDelay(b(s.use_dc_delay));
-    setShutter(s.shutter_delay ?? "");
-    setPtime(s.process_time ?? "");
   };
 
-  const start = () =>
+  const start = () => {
+    const cal: Record<string, string> = {};
+    if (offset.trim()) cal.offset = offset.trim();
+    if (param.trim()) cal.param = param.trim();
     onRequest({
       command: "PROCESS_START",
       label: "공정 시작",
@@ -80,9 +78,10 @@ export default function ChkProcessForm({ online, running, csvProgress, equipTarg
         workingPressure: wp,
         useRf, rfPower: rf, useDc, dcPower: dc, dcDelay,
         shutterDelay: shutter, processTime: ptime,
-        offset, param,
+        ...cal,
       },
     });
+  };
 
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-3">
@@ -121,9 +120,13 @@ export default function ChkProcessForm({ online, running, csvProgress, equipTarg
         <div className="space-y-1"><p className="text-[11px] font-medium text-gray-600">process time [min]</p>
           <input className={F} value={ptime} onChange={(e) => setPtime(e.target.value)} inputMode="decimal" /></div>
         <div className="space-y-1"><p className="text-[11px] font-medium text-gray-600">offset</p>
-          <input className={F} value={offset} onChange={(e) => setOffset(e.target.value)} inputMode="decimal" /></div>
+          <input className={F} value={offset} onChange={(e) => setOffset(e.target.value)} inputMode="decimal"
+            placeholder={equipCal?.offset || ""} />
+          <p className="text-[10px] text-gray-400">비우면 장비 값 사용</p></div>
         <div className="space-y-1"><p className="text-[11px] font-medium text-gray-600">param</p>
-          <input className={F} value={param} onChange={(e) => setParam(e.target.value)} inputMode="decimal" /></div>
+          <input className={F} value={param} onChange={(e) => setParam(e.target.value)} inputMode="decimal"
+            placeholder={equipCal?.param || ""} />
+          <p className="text-[10px] text-gray-400">비우면 장비 값 사용</p></div>
         <div className="flex items-end pb-1"><Chk label="DC stabilize" on={dcDelay} set={setDcDelay} /></div>
       </div>
 
@@ -237,7 +240,7 @@ export default function ChkProcessForm({ online, running, csvProgress, equipTarg
             onClick={() => onRequest({
               command: "RECIPE_PROCESS_RUN", label: "레시피 적재",
               detail: `${recipe.name} (${recipe.rows.length}스텝)`,
-              args: { rows: recipe.rows },
+              args: { rows: recipe.rows, name: recipe.name },
             })}
             className="rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 disabled:opacity-40">
             1. 적재
@@ -251,14 +254,30 @@ export default function ChkProcessForm({ online, running, csvProgress, equipTarg
             2. 레시피로 시작
           </button>
           <button onClick={() => setRecipe(null)}
-            className="ml-auto text-[11px] text-gray-400 hover:text-gray-600">해제</button>
+            className="ml-auto text-[11px] text-gray-400 hover:text-gray-600">선택 취소</button>
+        </div>
+      )}
+
+      {equipLoaded && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
+          <span className="text-[11px] font-semibold text-amber-800">
+            장비 적재 레시피 · {loadedName}{loadedSteps ? ` (${loadedSteps}스텝)` : ""}
+          </span>
+          <button disabled={!online}
+            onClick={() => onRequest({
+              command: "RECIPE_CLEAR", label: "레시피 적재 해제",
+              detail: loadedName,
+            })}
+            className="ml-auto rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-amber-800 disabled:opacity-40">
+            장비 적재 해제
+          </button>
         </div>
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-3">
         <button
           onClick={start}
-          disabled={!online || running}
+          disabled={!online || running || equipLoaded}
           className="rounded-xl bg-gray-800 px-4 py-2 text-xs font-semibold text-white disabled:opacity-40"
         >
           공정 시작
@@ -278,8 +297,14 @@ export default function ChkProcessForm({ online, running, csvProgress, equipTarg
           ALL STOP
         </button>
       </div>
+      {equipLoaded && (
+        <p className="mt-2 text-[11px] font-medium text-amber-700">
+          장비에 레시피({loadedName})가 적재돼 있어 수동 시작을 할 수 없습니다. 레시피로 시작하거나 장비 적재를 해제하세요.
+        </p>
+      )}
       <p className="mt-2 text-[10px] text-gray-400">
-        시작하면 이 값들이 장비 프로그램의 입력란에 그대로 적용된 뒤 공정이 시작됩니다.
+        장비가 값을 검사한 뒤 통과하면 장비 입력란에 반영하고 시작합니다. 보내지 않은 체크 항목은 꺼진 것으로 봅니다.
+        offset·param 은 입력했을 때만 장비 값을 바꿉니다.
       </p>
 
       {picker && (
