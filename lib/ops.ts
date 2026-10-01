@@ -17,9 +17,9 @@ export type OpsPayload = {
   stage?: string;
   process?: {
     name?: string;
-    remainSec?: number;   // 메인 공정 잔여 초. -1 = 아직 메인 공정 전
-    totalSec?: number;    // 메인 공정 총 초
-    phase?: string;       // "main" | "pre"
+    remainSec?: number;   // 메인 공정 잔여 초(딜레이 중에는 딜레이 남은 초). -1 = 아직 메인 공정 전
+    totalSec?: number;    // 메인 공정 총 초(딜레이 중에는 딜레이 전체 초)
+    phase?: string;       // "main" | "pre" | "delay"(CSV 대기 스텝)
   };
   plc_link?: boolean;       // false = PLC 통신 두절. indicators/valves 는 마지막 값이다
   mvInterlock?: boolean;
