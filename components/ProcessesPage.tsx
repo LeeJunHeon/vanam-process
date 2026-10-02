@@ -220,6 +220,7 @@ export default function ProcessesPage() {
                         {p.status}
                       </span>
                       <span className="text-sm font-bold text-gray-900">{p.processCode.code}</span>
+                      {p.order.jobName && <span className="text-sm font-bold text-gray-900">{p.order.jobName}</span>}
                       {p.detail && <span className="text-sm text-gray-700">{p.detail}</span>}
                       {dd && (
                         <span className="rounded-md bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
@@ -230,7 +231,6 @@ export default function ProcessesPage() {
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] text-gray-400">
                       <span className="font-semibold text-gray-500">{p.order.orderNo} #{p.sequence}</span>
                       {p.order.company && <span>{p.order.company}</span>}
-                      {p.order.jobName && <span>{p.order.jobName}</span>}
                       <span className="flex items-center gap-1">
                         <CalendarDays size={11} /> 시작 {fmtDate(p.plannedStart as string | null)}
                       </span>

@@ -62,9 +62,10 @@ export async function syncProcessCalendar(processId: number): Promise<void> {
       return;
     }
 
-    // 제목·설명 — 실제 시트 생성 일정과 동일 형식
+    // 제목·설명 — 설명은 실제 시트 생성 일정과 동일 형식
     const eventBody = {
-      title: `[${p.processCode.code}] ${p.detail || p.order.jobName || p.order.orderNo}`,
+      // 작업명이 대표 이름(비어 있는 과거 데이터만 발주번호), 공정상세는 뒤에 붙인다
+      title: `[${p.processCode.code}] ${p.order.jobName || p.order.orderNo}${p.detail ? ` · ${p.detail}` : ""}`,
       description: [
         `발주관리번호: ${p.order.orderNo}`,
         `작업명: ${p.order.jobName ?? ""}`,

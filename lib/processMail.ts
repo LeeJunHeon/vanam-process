@@ -24,7 +24,7 @@ export async function sendProcessAssignMail(processId: number, actorEmail?: stri
     if (!p.owner?.email) return; // 담당자 없음 / 이메일 없음 → 스킵
     if (isSelf(p.owner.email, actorEmail)) return; // 본인이 한 변경 → 스킵
 
-    const subject = `[공정 배정] ${p.processCode.code} · ${p.detail || p.order.jobName || p.order.orderNo}`;
+    const subject = `[공정 배정] ${p.processCode.code} · ${p.order.jobName || p.order.orderNo}${p.detail ? ` · ${p.detail}` : ""}`;
     const body = [
       `${p.owner.name} 님, 아래 공정이 배정되었습니다.`,
       ``,
@@ -77,7 +77,7 @@ export async function sendProcessRescheduleMail(
 
     const fmt = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "미정");
 
-    const subject = `[공정 일정 변경] ${p.processCode.code} · ${p.detail || p.order.jobName || p.order.orderNo}`;
+    const subject = `[공정 일정 변경] ${p.processCode.code} · ${p.order.jobName || p.order.orderNo}${p.detail ? ` · ${p.detail}` : ""}`;
     const body = [
       `${p.owner.name} 님, 담당 공정의 작업시작예정일이 변경되었습니다.`,
       ``,
