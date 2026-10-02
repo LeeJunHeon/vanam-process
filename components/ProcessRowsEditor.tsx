@@ -59,14 +59,14 @@ export default function ProcessRowsEditor({
   codes,
   employees,
   rowPrefix = "#",
-  ownerHint,
+  hideOwner = false,
 }: {
   rows: ProcessRow[];
   onChange: (rows: ProcessRow[]) => void;
   codes: CodeOption[];
   employees: EmployeeOption[];
   rowPrefix?: string;
-  ownerHint?: string;   // 담당자 칸 아래 안내 문구
+  hideOwner?: boolean;  // true 면 담당자 칸을 그리지 않는다(사내작업: 등록자 본인 고정)
 }) {
   const setRow = (i: number, patch: Partial<ProcessRow>) =>
     onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -121,18 +121,19 @@ export default function ProcessRowsEditor({
                 {PROCESS_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-            <div>
-              <label className={rowLabelClass}>담당자</label>
-              <select
-                value={r.ownerEmployeeId}
-                onChange={(e) => setRow(i, { ownerEmployeeId: e.target.value })}
-                className={inputClass}
-              >
-                <option value="">담당자 선택</option>
-                {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-              </select>
-              {ownerHint && <p className="mt-1 text-[10px] leading-snug text-gray-400">{ownerHint}</p>}
-            </div>
+            {!hideOwner && (
+              <div>
+                <label className={rowLabelClass}>담당자</label>
+                <select
+                  value={r.ownerEmployeeId}
+                  onChange={(e) => setRow(i, { ownerEmployeeId: e.target.value })}
+                  className={inputClass}
+                >
+                  <option value="">담당자 선택</option>
+                  {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                </select>
+              </div>
+            )}
             <div>
               <label className={rowLabelClass}>현위치</label>
               <input value={r.location} onChange={(e) => setRow(i, { location: e.target.value })} className={inputClass} />

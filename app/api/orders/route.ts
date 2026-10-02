@@ -99,7 +99,18 @@ export async function POST(request: Request) {
     // 공정 행 검증·정규화
     const parsed = parseProcessRows(rows);
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
-    const procData = parsed.rows;
+    // 사내작업은 담당자를 등록한 본인으로 고정한다(클라이언트 값 무시)
+    let procData = parsed.rows;
+    if (internal) {
+      const myEmployeeId = _auth.session.user?.employeeId ?? null;
+      if (myEmployeeId === null) {
+        return NextResponse.json(
+          { error: "직원 정보가 연결돼 있지 않아 등록할 수 없습니다. 관리자에게 문의하세요." },
+          { status: 400 },
+        );
+      }
+      procData = procData.map((p) => ({ ...p, ownerEmployeeId: myEmployeeId }));
+    }
 
     // 사내작업은 고객·납기·결제·검수·메모를 받지 않는다(클라이언트 값 무시)
     const sampleReceivedAt = internal ? null : parseDateOnly(body.sampleReceivedAt);

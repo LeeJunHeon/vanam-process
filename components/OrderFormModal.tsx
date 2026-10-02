@@ -36,9 +36,6 @@ const inputClass =
   "w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400";
 const labelClass = "mb-1.5 block text-[11px] font-semibold text-gray-500";
 
-const OWNER_HINT =
-  "담당자가 본인이 아닌 공정은 내 공정 목록에 표시되지 않습니다 (관리자와 해당 담당자에게만 보입니다).";
-
 // 발주 관리 탭 [발주 등록] → kind '발주', 공정 관리 탭 [공정 등록] → kind '사내작업'.
 // 수정 시에는 target.kind 를 따른다(구분은 등록 후 바꿀 수 없다).
 export default function OrderFormModal({
@@ -60,10 +57,7 @@ export default function OrderFormModal({
   const internal = (target ? target.kind : kind) === "사내작업";
   const { data: session } = useSession();
 
-  // 사내작업 등록: 첫 공정 행의 담당자 기본값 = 본인(직원 목록에 있을 때만)
-  const myId = session?.user?.employeeId;
-  const myOwner =
-    internal && !isEdit && myId != null && employees.some((e) => e.id === myId) ? String(myId) : "";
+  const myName = session?.user?.name ?? "";
 
   const [receivedAt, setReceivedAt] = useState(target?.receivedAt?.slice(0, 10) ?? today());
   const [company, setCompany] = useState(target?.company ?? "");
@@ -74,22 +68,9 @@ export default function OrderFormModal({
   const [paymentStatus, setPaymentStatus] = useState(target?.paymentStatus ?? "미결제");
   const [precheckStatus, setPrecheckStatus] = useState(target?.precheckStatus ?? "미완료");
   const [memo, setMemo] = useState(target?.memo ?? "");
-  const [rows, setRows] = useState<ProcessRow[]>(() => [emptyProcessRow({ ownerEmployeeId: myOwner })]);
-  // 담당자 기본값을 이미 넣었거나 사용자가 첫 행 담당자를 직접 바꿨으면 true
-  const [ownerSettled, setOwnerSettled] = useState(myOwner !== "");
+  const [rows, setRows] = useState<ProcessRow[]>([emptyProcessRow()]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  // 세션·직원 목록이 늦게 오면 그때 한 번 반영한다(렌더 중 상태 보정).
-  if (!ownerSettled && myOwner) {
-    setOwnerSettled(true);
-    setRows((prev) => prev.map((r, i) => (i === 0 && r.ownerEmployeeId === "" ? { ...r, ownerEmployeeId: myOwner } : r)));
-  }
-
-  const changeRows = (next: ProcessRow[]) => {
-    if (next[0]?.ownerEmployeeId !== rows[0]?.ownerEmployeeId) setOwnerSettled(true);
-    setRows(next);
-  };
 
   const submit = async () => {
     setErr(null);
@@ -135,7 +116,13 @@ export default function OrderFormModal({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
             internal
-              ? { kind: "사내작업", receivedAt: today(), jobName, processes: valid }
+              ? {
+                  kind: "사내작업",
+                  receivedAt: today(),
+                  jobName,
+                  // 담당자는 서버가 등록자 본인으로 정한다
+                  processes: valid.map((p) => ({ ...p, ownerEmployeeId: null })),
+                }
               : {
                   kind: "발주",
                   receivedAt,
@@ -189,7 +176,7 @@ export default function OrderFormModal({
               <input value={jobName} onChange={(e) => setJobName(e.target.value)} maxLength={200} className={inputClass} />
               {!isEdit && (
                 <p className="mt-1 text-[10px] text-gray-400">
-                  공정 이름은 발주 관리의 작업명으로 저장되고 캘린더 일정 제목에도 쓰입니다. 발주번호는 오늘 날짜 기준으로 자동 부여됩니다.
+                  담당자는 등록하는 본인({myName})으로 지정되고 캘린더 일정 참석자로 등록됩니다. 공정 이름은 발주 관리의 작업명으로 저장되고 캘린더 일정 제목에도 쓰입니다. 발주번호는 오늘 날짜 기준으로 자동 부여됩니다.
                 </p>
               )}
             </div>
@@ -264,10 +251,10 @@ export default function OrderFormModal({
 
               <ProcessRowsEditor
                 rows={rows}
-                onChange={changeRows}
+                onChange={setRows}
                 codes={codes}
                 employees={employees}
-                ownerHint={internal ? OWNER_HINT : undefined}
+                hideOwner={internal}
               />
               {!internal && (
                 <p className="mt-1 text-[10px] text-gray-400">
