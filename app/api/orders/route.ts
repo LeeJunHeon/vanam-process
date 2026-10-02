@@ -5,10 +5,10 @@ import { logActivity, buildOrderState } from "@/lib/activity";
 import {
   PAYMENT_STATUSES,
   PRECHECK_STATUSES,
-  PROCESS_STATUSES,
   parseDateOnly,
   generateOrderNo,
 } from "@/lib/orderUtils";
+import { parseProcessRows } from "@/lib/processRows";
 import { syncProcessCalendar } from "@/lib/calendarSync";
 import { sendProcessAssignMail } from "@/lib/processMail";
 
@@ -81,51 +81,9 @@ export async function POST(request: Request) {
     }
 
     // 공정 행 검증·정규화
-    const procData: {
-      processCodeId: number; detail: string | null; qty: number | null;
-      plannedStart: Date | null; durationHours: number | null; status: string;
-      location: string | null; ownerEmployeeId: number | null; memo: string | null;
-    }[] = [];
-    for (const raw of rows) {
-      const p = raw as Record<string, unknown>;
-      const processCodeId = Number(p.processCodeId);
-      if (!Number.isInteger(processCodeId) || processCodeId <= 0) {
-        return NextResponse.json({ error: "공정을 선택해주세요." }, { status: 400 });
-      }
-      const plannedStart = parseDateOnly(p.plannedStart);
-      if (plannedStart === undefined) {
-        return NextResponse.json({ error: "작업시작예정 날짜 형식이 올바르지 않습니다." }, { status: 400 });
-      }
-      const qty = p.qty === null || p.qty === undefined || p.qty === "" ? null : Number(p.qty);
-      if (qty !== null && !Number.isInteger(qty)) {
-        return NextResponse.json({ error: "횟수는 정수여야 합니다." }, { status: 400 });
-      }
-      const durationHours =
-        p.durationHours === null || p.durationHours === undefined || p.durationHours === ""
-          ? null
-          : Number(p.durationHours);
-      if (durationHours !== null && (!Number.isFinite(durationHours) || durationHours < 0)) {
-        return NextResponse.json({ error: "소요시간은 0 이상의 숫자여야 합니다." }, { status: 400 });
-      }
-      const status = typeof p.status === "string" && p.status ? p.status : "대기";
-      if (!(PROCESS_STATUSES as readonly string[]).includes(status)) {
-        return NextResponse.json({ error: "상태 값이 올바르지 않습니다." }, { status: 400 });
-      }
-      procData.push({
-        processCodeId,
-        detail: typeof p.detail === "string" && p.detail.trim() ? p.detail.trim() : null,
-        qty,
-        plannedStart,
-        durationHours,
-        status,
-        location: typeof p.location === "string" && p.location.trim() ? p.location.trim() : null,
-        ownerEmployeeId:
-          p.ownerEmployeeId === null || p.ownerEmployeeId === undefined || p.ownerEmployeeId === ""
-            ? null
-            : Number(p.ownerEmployeeId),
-        memo: typeof p.memo === "string" && p.memo.trim() ? p.memo.trim() : null,
-      });
-    }
+    const parsed = parseProcessRows(rows);
+    if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+    const procData = parsed.rows;
 
     const sampleReceivedAt = parseDateOnly(body.sampleReceivedAt);
     const dueAt = parseDateOnly(body.dueAt);

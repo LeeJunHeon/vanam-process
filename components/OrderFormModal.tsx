@@ -1,9 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { X, Plus, Trash2 } from "lucide-react";
+import { X, Plus } from "lucide-react";
 import { errorMessage } from "@/lib/fetchError";
-import { PAYMENT_STATUSES, PRECHECK_STATUSES, PROCESS_STATUSES } from "@/lib/status";
+import { PAYMENT_STATUSES, PRECHECK_STATUSES } from "@/lib/status";
+import ProcessRowsEditor, {
+  emptyProcessRow, toProcessPayload, type ProcessRow,
+} from "@/components/ProcessRowsEditor";
 
 export type CodeOption = { id: number; code: string };
 export type EmployeeOption = { id: number; name: string };
@@ -21,30 +24,6 @@ export type OrderEditTarget = {
   memo: string | null;
 };
 
-type ProcessRow = {
-  processCodeId: string;
-  detail: string;
-  qty: string;
-  plannedStart: string;
-  durationHours: string;
-  status: string;
-  location: string;
-  ownerEmployeeId: string;
-  memo: string;
-};
-
-const emptyRow = (): ProcessRow => ({
-  processCodeId: "",
-  detail: "",
-  qty: "",
-  plannedStart: "",
-  durationHours: "",
-  status: "대기",
-  location: "",
-  ownerEmployeeId: "",
-  memo: "",
-});
-
 function today(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -54,7 +33,6 @@ function today(): string {
 const inputClass =
   "w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-blue-400";
 const labelClass = "mb-1.5 block text-[11px] font-semibold text-gray-500";
-const rowLabelClass = "mb-1 block text-[10px] font-semibold text-gray-400";
 
 export default function OrderFormModal({
   target,
@@ -80,12 +58,9 @@ export default function OrderFormModal({
   const [paymentStatus, setPaymentStatus] = useState(target?.paymentStatus ?? "미결제");
   const [precheckStatus, setPrecheckStatus] = useState(target?.precheckStatus ?? "미완료");
   const [memo, setMemo] = useState(target?.memo ?? "");
-  const [rows, setRows] = useState<ProcessRow[]>([emptyRow()]);
+  const [rows, setRows] = useState<ProcessRow[]>([emptyProcessRow()]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-
-  const setRow = (i: number, patch: Partial<ProcessRow>) =>
-    setRows((prev) => prev.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
 
   const submit = async () => {
     setErr(null);
@@ -114,7 +89,7 @@ export default function OrderFormModal({
           throw new Error(d?.error ?? "수정에 실패했습니다.");
         }
       } else {
-        const valid = rows.filter((r) => r.processCodeId !== "");
+        const valid = toProcessPayload(rows);
         if (valid.length === 0) return setErr("공정을 1개 이상 입력해주세요.");
 
         const res = await fetch("/api/orders", {
@@ -130,17 +105,7 @@ export default function OrderFormModal({
             paymentStatus,
             precheckStatus,
             memo,
-            processes: valid.map((r) => ({
-              processCodeId: Number(r.processCodeId),
-              detail: r.detail,
-              qty: r.qty === "" ? null : Number(r.qty),
-              plannedStart: r.plannedStart || null,
-              durationHours: r.durationHours === "" ? null : Number(r.durationHours),
-              status: r.status,
-              location: r.location,
-              ownerEmployeeId: r.ownerEmployeeId === "" ? null : Number(r.ownerEmployeeId),
-              memo: r.memo,
-            })),
+            processes: valid,
           }),
         });
         if (!res.ok) {
@@ -231,85 +196,14 @@ export default function OrderFormModal({
                 </label>
                 <button
                   type="button"
-                  onClick={() => setRows((p) => [...p, emptyRow()])}
+                  onClick={() => setRows((p) => [...p, emptyProcessRow()])}
                   className="flex items-center gap-1 rounded-lg bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-600 hover:bg-gray-200"
                 >
                   <Plus size={12} /> 공정 추가
                 </button>
               </div>
 
-              <div className="space-y-2">
-                {rows.map((r, i) => (
-                  <div key={i} className="rounded-xl border border-gray-100 bg-gray-50 p-3">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-gray-400">#{i + 1}</span>
-                      {rows.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() => setRows((p) => p.filter((_, idx) => idx !== i))}
-                          className="rounded-lg p-1 text-gray-400 hover:bg-rose-50 hover:text-rose-500"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      <div>
-                        <label className={rowLabelClass}>공정 <span className="text-rose-500">*</span></label>
-                        <select
-                          value={r.processCodeId}
-                          onChange={(e) => setRow(i, { processCodeId: e.target.value })}
-                          className={inputClass}
-                        >
-                          <option value="">공정 선택</option>
-                          {codes.map((c) => <option key={c.id} value={c.id}>{c.code}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className={rowLabelClass}>공정상세</label>
-                        <input value={r.detail} onChange={(e) => setRow(i, { detail: e.target.value })} className={inputClass} />
-                      </div>
-                      <div>
-                        <label className={rowLabelClass}>횟수</label>
-                        <input type="number" min={1} value={r.qty} onChange={(e) => setRow(i, { qty: e.target.value })} className={inputClass} />
-                      </div>
-                      <div>
-                        <label className={rowLabelClass}>작업시작예정</label>
-                        <input type="date" value={r.plannedStart} onChange={(e) => setRow(i, { plannedStart: e.target.value })} className={inputClass} />
-                      </div>
-                      <div>
-                        <label className={rowLabelClass}>소요시간(h)</label>
-                        <input type="number" min={0} step={0.5} value={r.durationHours} onChange={(e) => setRow(i, { durationHours: e.target.value })} className={inputClass} />
-                      </div>
-                      <div>
-                        <label className={rowLabelClass}>상태</label>
-                        <select value={r.status} onChange={(e) => setRow(i, { status: e.target.value })} className={inputClass}>
-                          {PROCESS_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className={rowLabelClass}>담당자</label>
-                        <select
-                          value={r.ownerEmployeeId}
-                          onChange={(e) => setRow(i, { ownerEmployeeId: e.target.value })}
-                          className={inputClass}
-                        >
-                          <option value="">담당자 선택</option>
-                          {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className={rowLabelClass}>현위치</label>
-                        <input value={r.location} onChange={(e) => setRow(i, { location: e.target.value })} className={inputClass} />
-                      </div>
-                      <div className="col-span-2 sm:col-span-4">
-                        <label className={rowLabelClass}>공정메모</label>
-                        <input value={r.memo} onChange={(e) => setRow(i, { memo: e.target.value })} className={inputClass} />
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              <ProcessRowsEditor rows={rows} onChange={setRows} codes={codes} employees={employees} />
               <p className="mt-1 text-[10px] text-gray-400">
                 발주관리번호는 접수일 기준으로 자동 부여됩니다 (예: 20260813-001).
               </p>
