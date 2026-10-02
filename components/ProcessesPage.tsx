@@ -106,6 +106,16 @@ export default function ProcessesPage() {
     }
   };
 
+  // 담당자 필터 옵션: 화이트리스트 순서 뒤에, 목록에만 있는 담당자(사내작업 등록자 등)를 이름순으로 붙인다
+  const ownerOptions = useMemo(() => {
+    const known = new Set(employees.map((e) => e.id));
+    const extra = new Map<number, EmployeeOption>();
+    for (const p of items) {
+      if (p.owner && !known.has(p.owner.id)) extra.set(p.owner.id, { id: p.owner.id, name: p.owner.name });
+    }
+    return [...employees, ...[...extra.values()].sort((a, b) => a.name.localeCompare(b.name, "ko"))];
+  }, [employees, items]);
+
   const view = useMemo(() => {
     let list = items;
     if (statusFilter === "active") list = list.filter((p) => ACTIVE_STATUSES.includes(p.status));
@@ -157,7 +167,7 @@ export default function ProcessesPage() {
             className="rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-sm outline-none focus:border-blue-400"
           >
             <option value="">담당자 전체</option>
-            {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+            {ownerOptions.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
           </select>
         )}
         <select

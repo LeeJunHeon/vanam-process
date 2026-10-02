@@ -39,6 +39,9 @@ export default function ProcessEditModal({
   const [status, setStatus] = useState(proc.status);
   const [location, setLocation] = useState(proc.location ?? "");
   const [ownerEmployeeId, setOwnerEmployeeId] = useState(proc.owner ? String(proc.owner.id) : "");
+  // 담당자 목록은 화이트리스트(process_owner)만 온다. 현재 담당자가 그 밖이면 맨 위에 넣어 그대로 보이게 한다.
+  const ownerOptions =
+    proc.owner && !employees.some((e) => e.id === proc.owner!.id) ? [proc.owner, ...employees] : employees;
   const [memo, setMemo] = useState(proc.memo ?? "");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -119,7 +122,7 @@ export default function ProcessEditModal({
             <label className={labelClass}>담당자</label>
             <select value={ownerEmployeeId} onChange={(e) => setOwnerEmployeeId(e.target.value)} className={inputClass}>
               <option value="">미지정</option>
-              {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+              {ownerOptions.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
             </select>
           </div>
           <div>
