@@ -85,6 +85,20 @@ export async function PATCH(
       { state: buildOrderState(updated), before },
       "work_order",
     );
+
+    // 작업명은 캘린더 일정 제목·설명에 들어가므로 바뀌었을 때만 살아있는 공정을 다시 동기화한다
+    // (실패는 sync_status 에만 기록)
+    if (nextJob !== row.jobName) {
+      const procs = await prisma.workOrderProcess.findMany({
+        where: { orderId: row.id, deletedAt: null },
+        select: { id: true },
+        orderBy: { sequence: "asc" },
+      });
+      for (const p of procs) {
+        await syncProcessCalendar(p.id);
+      }
+    }
+
     return NextResponse.json(updated);
   } catch (e) {
     console.error("order update failed:", e);
