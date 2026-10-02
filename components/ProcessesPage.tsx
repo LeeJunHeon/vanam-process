@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
-import { Search, Pencil, Camera, Images, CalendarDays } from "lucide-react";
+import { Search, Pencil, Camera, Images, CalendarDays, Plus } from "lucide-react";
 import ProcessEditModal from "@/components/ProcessEditModal";
 import type { ProcessItem } from "@/components/ProcessEditModal";
 import ReceiptListModal from "@/components/ReceiptListModal";
 import SubstrateFormModal from "@/components/SubstrateFormModal";
+import OrderFormModal from "@/components/OrderFormModal";
 import type { CodeOption, EmployeeOption } from "@/components/OrderFormModal";
 import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE } from "@/lib/status";
 import { errorMessage } from "@/lib/fetchError";
@@ -53,6 +54,7 @@ export default function ProcessesPage() {
   const [editing, setEditing] = useState<Row | null>(null);
   const [viewing, setViewing] = useState<Row | null>(null);
   const [recording, setRecording] = useState<Row | null>(null);
+  const [creating, setCreating] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -167,6 +169,12 @@ export default function ProcessesPage() {
           <option value="plannedDesc">시작 늦은순</option>
           <option value="createdDesc">최근 등록순</option>
         </select>
+        <button
+          onClick={() => setCreating(true)}
+          className="flex items-center gap-1.5 rounded-xl bg-blue-500 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-600"
+        >
+          <Plus size={16} /> 공정 등록
+        </button>
       </div>
 
       {error && (
@@ -277,6 +285,15 @@ export default function ProcessesPage() {
         </div>
       )}
 
+      {creating && (
+        <OrderFormModal
+          kind="사내작업"
+          codes={codes}
+          employees={employees}
+          onClose={() => setCreating(false)}
+          onSaved={load}
+        />
+      )}
       {editing && (
         <ProcessEditModal
           proc={editing}

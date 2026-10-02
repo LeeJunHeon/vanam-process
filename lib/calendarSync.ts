@@ -14,7 +14,7 @@ export async function syncProcessCalendar(processId: number): Promise<void> {
     const p = await prisma.workOrderProcess.findUnique({
       where: { id: processId },
       include: {
-        order: { select: { orderNo: true, deletedAt: true } },
+        order: { select: { orderNo: true, jobName: true, deletedAt: true } },
         processCode: {
           select: { code: true, calendarId: true, calendarEnabled: true },
         },
@@ -64,9 +64,10 @@ export async function syncProcessCalendar(processId: number): Promise<void> {
 
     // 제목·설명 — 실제 시트 생성 일정과 동일 형식
     const eventBody = {
-      title: `[${p.processCode.code}] ${p.detail || p.order.orderNo}`,
+      title: `[${p.processCode.code}] ${p.detail || p.order.jobName || p.order.orderNo}`,
       description: [
         `발주관리번호: ${p.order.orderNo}`,
+        `작업명: ${p.order.jobName ?? ""}`,
         `Sequence: ${p.sequence}`,
         `공정: ${p.processCode.code}`,
         `공정상세: ${p.detail ?? ""}`,

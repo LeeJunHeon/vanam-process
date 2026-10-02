@@ -177,7 +177,7 @@ export async function POST(request: Request) {
 
     // 담당자 배정 메일 (담당자·이메일 없는 공정은 내부에서 스킵)
     for (const p of full!.processes) {
-      await sendProcessAssignMail(p.id);
+      await sendProcessAssignMail(p.id, _auth.session.user?.email);
     }
 
     return NextResponse.json(full, { status: 201 });

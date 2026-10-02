@@ -3,7 +3,11 @@ import { sendEmail } from "@/lib/email";
 
 // 공정 배정 메일 — 캘린더 일정 설명과 동일한 형식으로 담당자에게 발송.
 // 실패해도 본 작업을 막지 않는다 (내부에서 전부 흡수).
-export async function sendProcessAssignMail(processId: number): Promise<void> {
+// actorEmail: 변경한 사람. 담당자 본인이 한 변경이면 메일을 보내지 않는다.
+const isSelf = (ownerEmail: string, actorEmail?: string | null) =>
+  !!actorEmail && ownerEmail.toLowerCase() === actorEmail.toLowerCase();
+
+export async function sendProcessAssignMail(processId: number, actorEmail?: string | null): Promise<void> {
   try {
     const p = await prisma.workOrderProcess.findUnique({
       where: { id: processId },
@@ -18,8 +22,9 @@ export async function sendProcessAssignMail(processId: number): Promise<void> {
     if (!p || p.deletedAt || p.order.deletedAt) return;
     if (p.status === "취소") return;
     if (!p.owner?.email) return; // 담당자 없음 / 이메일 없음 → 스킵
+    if (isSelf(p.owner.email, actorEmail)) return; // 본인이 한 변경 → 스킵
 
-    const subject = `[공정 배정] ${p.processCode.code} · ${p.detail || p.order.orderNo}`;
+    const subject = `[공정 배정] ${p.processCode.code} · ${p.detail || p.order.jobName || p.order.orderNo}`;
     const body = [
       `${p.owner.name} 님, 아래 공정이 배정되었습니다.`,
       ``,
@@ -52,6 +57,7 @@ export async function sendProcessAssignMail(processId: number): Promise<void> {
 export async function sendProcessRescheduleMail(
   processId: number,
   prevPlannedStart: Date | null,
+  actorEmail?: string | null,
 ): Promise<void> {
   try {
     const p = await prisma.workOrderProcess.findUnique({
@@ -67,10 +73,11 @@ export async function sendProcessRescheduleMail(
     if (!p || p.deletedAt || p.order.deletedAt) return;
     if (p.status === "취소") return;
     if (!p.owner?.email) return; // 담당자 없음 / 이메일 없음 → 스킵
+    if (isSelf(p.owner.email, actorEmail)) return; // 본인이 한 변경 → 스킵
 
     const fmt = (d: Date | null) => (d ? d.toISOString().slice(0, 10) : "미정");
 
-    const subject = `[공정 일정 변경] ${p.processCode.code} · ${p.detail || p.order.orderNo}`;
+    const subject = `[공정 일정 변경] ${p.processCode.code} · ${p.detail || p.order.jobName || p.order.orderNo}`;
     const body = [
       `${p.owner.name} 님, 담당 공정의 작업시작예정일이 변경되었습니다.`,
       ``,

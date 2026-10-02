@@ -110,9 +110,9 @@ export async function PATCH(
     const plannedChanged =
       (nextPlanned?.getTime() ?? null) !== (row.plannedStart?.getTime() ?? null);
     if (ownerChanged) {
-      await sendProcessAssignMail(updated.id);
+      await sendProcessAssignMail(updated.id, _auth.session.user?.email);
     } else if (plannedChanged) {
-      await sendProcessRescheduleMail(updated.id, row.plannedStart);
+      await sendProcessRescheduleMail(updated.id, row.plannedStart, _auth.session.user?.email);
     }
 
     return NextResponse.json(updated);

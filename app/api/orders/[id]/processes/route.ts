@@ -71,7 +71,7 @@ export async function POST(
       await syncProcessCalendar(p.id);
     }
     for (const p of newProcs) {
-      await sendProcessAssignMail(p.id);
+      await sendProcessAssignMail(p.id, _auth.session.user?.email);
     }
 
     return NextResponse.json({ ok: true, added: procData.length }, { status: 201 });
