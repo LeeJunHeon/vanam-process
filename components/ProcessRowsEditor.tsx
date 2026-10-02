@@ -59,14 +59,14 @@ export default function ProcessRowsEditor({
   codes,
   employees,
   rowPrefix = "#",
-  hideOwner = false,
+  fixedOwnerName,
 }: {
   rows: ProcessRow[];
   onChange: (rows: ProcessRow[]) => void;
   codes: CodeOption[];
   employees: EmployeeOption[];
   rowPrefix?: string;
-  hideOwner?: boolean;  // true 면 담당자 칸을 그리지 않는다(사내작업: 등록자 본인 고정)
+  fixedOwnerName?: string;  // 값이 있으면 담당자를 고르지 않고 이 이름을 읽기 전용으로 보인다(사내작업: 등록자 본인)
 }) {
   const setRow = (i: number, patch: Partial<ProcessRow>) =>
     onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -121,9 +121,11 @@ export default function ProcessRowsEditor({
                 {PROCESS_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
-            {!hideOwner && (
-              <div>
-                <label className={rowLabelClass}>담당자</label>
+            <div>
+              <label className={rowLabelClass}>담당자</label>
+              {fixedOwnerName ? (
+                <input readOnly disabled value={fixedOwnerName} className={`${inputClass} bg-gray-100 text-gray-500`} />
+              ) : (
                 <select
                   value={r.ownerEmployeeId}
                   onChange={(e) => setRow(i, { ownerEmployeeId: e.target.value })}
@@ -132,8 +134,8 @@ export default function ProcessRowsEditor({
                   <option value="">담당자 선택</option>
                   {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
                 </select>
-              </div>
-            )}
+              )}
+            </div>
             <div>
               <label className={rowLabelClass}>현위치</label>
               <input value={r.location} onChange={(e) => setRow(i, { location: e.target.value })} className={inputClass} />

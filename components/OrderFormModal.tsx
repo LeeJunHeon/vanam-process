@@ -57,7 +57,7 @@ export default function OrderFormModal({
   const internal = (target ? target.kind : kind) === "사내작업";
   const { data: session } = useSession();
 
-  const myName = session?.user?.name ?? "";
+  const myName = session?.user?.name || "본인";
 
   const [receivedAt, setReceivedAt] = useState(target?.receivedAt?.slice(0, 10) ?? today());
   const [company, setCompany] = useState(target?.company ?? "");
@@ -176,7 +176,7 @@ export default function OrderFormModal({
               <input value={jobName} onChange={(e) => setJobName(e.target.value)} maxLength={200} className={inputClass} />
               {!isEdit && (
                 <p className="mt-1 text-[10px] text-gray-400">
-                  담당자는 등록하는 본인({myName})으로 지정되고 캘린더 일정 참석자로 등록됩니다. 공정 이름은 발주 관리의 작업명으로 저장되고 캘린더 일정 제목에도 쓰입니다. 발주번호는 오늘 날짜 기준으로 자동 부여됩니다.
+                  담당자는 등록하는 본인으로 고정되며 캘린더 일정 참석자로 등록됩니다. 공정 이름은 발주 관리의 작업명으로 저장되고 캘린더 일정 제목에 쓰입니다. 발주번호는 오늘 날짜 기준으로 자동 부여됩니다.
                 </p>
               )}
             </div>
@@ -254,7 +254,7 @@ export default function OrderFormModal({
                 onChange={setRows}
                 codes={codes}
                 employees={employees}
-                hideOwner={internal}
+                fixedOwnerName={internal ? myName : undefined}
               />
               {!internal && (
                 <p className="mt-1 text-[10px] text-gray-400">
