@@ -136,6 +136,7 @@ export function buildProcessState(p: ProcessSnapshotInput) {
 
 type OrderSnapshotInput = {
   orderNo: string;
+  kind: string;
   receivedAt: Date;
   company: string | null;
   customerName: string | null;
@@ -153,6 +154,7 @@ export function buildOrderState(
 ) {
   return {
     orderNo: o.orderNo,
+    kind: o.kind,
     receivedAt: o.receivedAt.toISOString().slice(0, 10),
     company: o.company,
     customerName: o.customerName,

@@ -1,6 +1,6 @@
 import type { Prisma } from "@/app/generated/prisma/client";
 
-export { PROCESS_STATUSES, PAYMENT_STATUSES, PRECHECK_STATUSES } from "./status";
+export { PROCESS_STATUSES, PAYMENT_STATUSES, PRECHECK_STATUSES, ORDER_KINDS } from "./status";
 
 // "YYYY-MM-DD" 형식만 허용. 잘못된 값은 null 대신 undefined 를 돌려 호출부가 400 처리.
 export function parseDateOnly(value: unknown): Date | null | undefined {

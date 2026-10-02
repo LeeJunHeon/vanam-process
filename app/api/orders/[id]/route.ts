@@ -25,7 +25,12 @@ export async function PATCH(
       return NextResponse.json({ error: "삭제된 발주는 수정할 수 없습니다." }, { status: 400 });
     }
 
-    const body = await request.json();
+    // kind 는 등록 후 바꾸지 않는다(body.kind 무시). 사내작업은 작업명만 수정한다.
+    const raw = await request.json();
+    if (typeof raw.jobName === "string" && !raw.jobName.trim()) {
+      return NextResponse.json({ error: "작업명(공정 이름)을 입력해주세요." }, { status: 400 });
+    }
+    const body = row.kind === "사내작업" ? { jobName: raw.jobName } : raw;
 
     const nextReceivedAt = body.receivedAt !== undefined ? parseDateOnly(body.receivedAt) : row.receivedAt;
     const nextSample = body.sampleReceivedAt !== undefined ? parseDateOnly(body.sampleReceivedAt) : row.sampleReceivedAt;

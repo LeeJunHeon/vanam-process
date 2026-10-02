@@ -5,6 +5,7 @@ import { logActivity, buildOrderState } from "@/lib/activity";
 import {
   PAYMENT_STATUSES,
   PRECHECK_STATUSES,
+  ORDER_KINDS,
   parseDateOnly,
   generateOrderNo,
 } from "@/lib/orderUtils";
@@ -61,16 +62,31 @@ export async function GET(request: Request) {
   }
 }
 
-// POST /api/orders — 발주 + 공정 일괄 등록 (관리자 전용, 발주번호 자동 채번)
+// POST /api/orders — 작업 묶음 + 공정 일괄 등록 (발주번호 자동 채번)
+// kind='발주' 는 관리자만, kind='사내작업' 은 전 직원(헤더는 작업명만 받는다).
 export async function POST(request: Request) {
   const _auth = await requireSession();
   if (!_auth.ok) return _auth.response;
-  if (!isAdminSession(_auth.session)) {
-    return NextResponse.json({ error: "발주 등록은 관리자만 가능합니다." }, { status: 403 });
-  }
 
   try {
     const body = await request.json();
+
+    const kind = body.kind ?? "발주";
+    if (!(ORDER_KINDS as readonly unknown[]).includes(kind)) {
+      return NextResponse.json({ error: "구분 값이 올바르지 않습니다." }, { status: 400 });
+    }
+    const internal = kind === "사내작업";
+    if (!internal && !isAdminSession(_auth.session)) {
+      return NextResponse.json({ error: "발주 등록은 관리자만 가능합니다." }, { status: 403 });
+    }
+
+    const jobName = typeof body.jobName === "string" ? body.jobName.trim() : "";
+    if (!jobName) {
+      return NextResponse.json({ error: "작업명(공정 이름)을 입력해주세요." }, { status: 400 });
+    }
+    if (jobName.length > 200) {
+      return NextResponse.json({ error: "작업명은 200자 이내로 입력해주세요." }, { status: 400 });
+    }
 
     if (typeof body.receivedAt !== "string" || parseDateOnly(body.receivedAt) === undefined || body.receivedAt === "") {
       return NextResponse.json({ error: "접수일은 필수입니다." }, { status: 400 });
@@ -85,15 +101,17 @@ export async function POST(request: Request) {
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
     const procData = parsed.rows;
 
-    const sampleReceivedAt = parseDateOnly(body.sampleReceivedAt);
-    const dueAt = parseDateOnly(body.dueAt);
+    // 사내작업은 고객·납기·결제·검수·메모를 받지 않는다(클라이언트 값 무시)
+    const sampleReceivedAt = internal ? null : parseDateOnly(body.sampleReceivedAt);
+    const dueAt = internal ? null : parseDateOnly(body.dueAt);
     if (sampleReceivedAt === undefined || dueAt === undefined) {
       return NextResponse.json({ error: "날짜 형식이 올바르지 않습니다." }, { status: 400 });
     }
     const paymentStatus =
-      typeof body.paymentStatus === "string" && body.paymentStatus ? body.paymentStatus : "미결제";
+      !internal && typeof body.paymentStatus === "string" && body.paymentStatus ? body.paymentStatus : "미결제";
     const precheckStatus =
-      typeof body.precheckStatus === "string" && body.precheckStatus ? body.precheckStatus : "미완료";
+      !internal && typeof body.precheckStatus === "string" && body.precheckStatus ? body.precheckStatus : "미완료";
+    const str = (v: unknown) => (!internal && typeof v === "string" && v.trim() ? v.trim() : null);
     if (
       !(PAYMENT_STATUSES as readonly string[]).includes(paymentStatus) ||
       !(PRECHECK_STATUSES as readonly string[]).includes(precheckStatus)
@@ -112,16 +130,16 @@ export async function POST(request: Request) {
           const order = await tx.workOrder.create({
             data: {
               orderNo,
+              kind,
               receivedAt: new Date(body.receivedAt),
-              company: typeof body.company === "string" && body.company.trim() ? body.company.trim() : null,
-              customerName:
-                typeof body.customerName === "string" && body.customerName.trim() ? body.customerName.trim() : null,
-              jobName: typeof body.jobName === "string" && body.jobName.trim() ? body.jobName.trim() : null,
+              company: str(body.company),
+              customerName: str(body.customerName),
+              jobName,
               sampleReceivedAt,
               dueAt,
               paymentStatus,
               precheckStatus,
-              memo: typeof body.memo === "string" && body.memo.trim() ? body.memo.trim() : null,
+              memo: str(body.memo),
               createdByEmail: email,
             },
           });
@@ -145,7 +163,9 @@ export async function POST(request: Request) {
       _auth.session,
       "create",
       full!.id,
-      `${full!.orderNo} 발주 등록 · 공정 ${full!.processes.length}건`,
+      internal
+        ? `${full!.orderNo} 공정 등록(사내작업) · 공정 ${full!.processes.length}건`
+        : `${full!.orderNo} 발주 등록 · 공정 ${full!.processes.length}건`,
       { state: buildOrderState(full!, full!.processes) },
       "work_order",
     );

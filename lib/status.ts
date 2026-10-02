@@ -2,6 +2,14 @@
 export const PROCESS_STATUSES = ["대기", "예약", "진행", "보류", "완료", "취소"] as const;
 export const PAYMENT_STATUSES = ["미결제", "세금계산서 발급", "입금확인", "선금확인", "부분입금확인"] as const;
 export const PRECHECK_STATUSES = ["해당없음", "미완료", "완료", "이상보고"] as const;
+// 작업 묶음(work_order) 구분. 발주 = 고객 의뢰(관리자), 사내작업 = 직원이 공정 관리에서 등록
+export const ORDER_KINDS = ["발주", "사내작업"] as const;
+
+// 구분 칩
+export const KIND_STYLE: Record<string, string> = {
+  발주: "bg-blue-50 text-blue-600",
+  사내작업: "bg-violet-50 text-violet-600",
+};
 
 // 상태 배지(셀 단위)
 export const STATUS_STYLE: Record<string, string> = {

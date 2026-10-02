@@ -39,6 +39,7 @@ const ACTION_LABEL: Record<string, string> = {
 // 발주/공정 스냅샷의 필드 한글 라벨. 표시 순서도 이 순서를 따른다.
 const FIELD_LABEL: Record<string, string> = {
   orderNo: "발주번호",
+  kind: "구분",
   receivedAt: "접수일",
   company: "고객사",
   customerName: "고객명",

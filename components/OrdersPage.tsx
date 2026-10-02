@@ -12,7 +12,7 @@ import type { ProcessItem } from "@/components/ProcessEditModal";
 import ReceiptListModal from "@/components/ReceiptListModal";
 import ProcessRowsEditor, { emptyProcessRow, toProcessPayload } from "@/components/ProcessRowsEditor";
 import { errorMessage } from "@/lib/fetchError";
-import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE, SYNC_STYLE } from "@/lib/status";
+import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE, SYNC_STYLE, ORDER_KINDS, KIND_STYLE } from "@/lib/status";
 import { dueProgress, PROGRESS_BAR, PROGRESS_TEXT } from "@/lib/progress";
 
 type OrderProcess = ProcessItem & { _count?: { substrateReceipts: number } };
@@ -38,6 +38,7 @@ export default function OrdersPage() {
   const [q, setQ] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("");
+  const [kindFilter, setKindFilter] = useState("");
   const [sortKey, setSortKey] = useState<"receivedDesc" | "receivedAsc" | "dueAsc">("receivedDesc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,6 +85,7 @@ export default function OrdersPage() {
   // 검색은 서버, 필터·정렬은 클라이언트(최대 200건이라 즉각 반응)
   const view = useMemo(() => {
     let list = items;
+    if (kindFilter) list = list.filter((o) => o.kind === kindFilter);
     if (statusFilter)
       list = list.filter((o) => o.processes.some((p) => p.status === statusFilter));
     if (ownerFilter)
@@ -103,7 +105,7 @@ export default function OrdersPage() {
       });
     }
     return sorted;
-  }, [items, statusFilter, ownerFilter, sortKey]);
+  }, [items, kindFilter, statusFilter, ownerFilter, sortKey]);
 
   const toggle = (id: number) =>
     setOpen((prev) => {
@@ -171,6 +173,14 @@ export default function OrdersPage() {
           />
         </div>
         <select
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value)}
+          className="rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-sm outline-none focus:border-blue-400"
+        >
+          <option value="">구분 전체</option>
+          {ORDER_KINDS.map((k) => <option key={k} value={k}>{k}</option>)}
+        </select>
+        <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
           className="rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-sm outline-none focus:border-blue-400"
@@ -237,6 +247,11 @@ export default function OrdersPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-bold text-gray-900">{o.orderNo}</span>
+                        {o.kind !== "발주" && (
+                          <span className={`rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${KIND_STYLE[o.kind] ?? "bg-gray-100 text-gray-600"}`}>
+                            {o.kind}
+                          </span>
+                        )}
                         {o.company && <span className="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600">{o.company}</span>}
                         {o.jobName && <span className="text-sm text-gray-600">{o.jobName}</span>}
                         {chips.map(([s, n]) => (
@@ -254,7 +269,8 @@ export default function OrdersPage() {
                         )}
                       </div>
                       <p className="mt-1 flex items-center gap-1 text-[11px] text-gray-400">
-                        <CalendarDays size={11} /> 접수 {fmt(o.receivedAt)} · 납기 {fmt(o.dueAt)} · {o.paymentStatus} · {o.precheckStatus}
+                        <CalendarDays size={11} /> 접수 {fmt(o.receivedAt)}
+                        {o.kind !== "사내작업" && <> · 납기 {fmt(o.dueAt)} · {o.paymentStatus} · {o.precheckStatus}</>}
                       </p>
                       {(() => {
                         const dp = dueProgress(o.receivedAt, o.dueAt);
@@ -388,7 +404,7 @@ export default function OrdersPage() {
       )}
 
       {showForm && (
-        <OrderFormModal codes={codes} employees={employees} onClose={() => setShowForm(false)} onSaved={load} />
+        <OrderFormModal kind="발주" codes={codes} employees={employees} onClose={() => setShowForm(false)} onSaved={load} />
       )}
       {editing && (
         <OrderFormModal target={editing} codes={codes} employees={employees} onClose={() => setEditing(null)} onSaved={load} />

@@ -164,6 +164,7 @@ model ProcessCode {
 model WorkOrder {
   id               Int       @id @default(autoincrement())
   orderNo          String    @unique @map("order_no") @db.VarChar(20)
+  kind             String    @default("발주") @db.VarChar(20) // 발주 | 사내작업
   receivedAt       DateTime  @map("received_at") @db.Date
   company          String?   @db.VarChar(100)
   customerName     String?   @map("customer_name") @db.VarChar(100)

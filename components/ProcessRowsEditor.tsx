@@ -59,12 +59,14 @@ export default function ProcessRowsEditor({
   codes,
   employees,
   rowPrefix = "#",
+  ownerHint,
 }: {
   rows: ProcessRow[];
   onChange: (rows: ProcessRow[]) => void;
   codes: CodeOption[];
   employees: EmployeeOption[];
   rowPrefix?: string;
+  ownerHint?: string;   // 담당자 칸 아래 안내 문구
 }) {
   const setRow = (i: number, patch: Partial<ProcessRow>) =>
     onChange(rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r)));
@@ -129,6 +131,7 @@ export default function ProcessRowsEditor({
                 <option value="">담당자 선택</option>
                 {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
               </select>
+              {ownerHint && <p className="mt-1 text-[10px] leading-snug text-gray-400">{ownerHint}</p>}
             </div>
             <div>
               <label className={rowLabelClass}>현위치</label>
