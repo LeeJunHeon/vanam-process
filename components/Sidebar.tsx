@@ -3,12 +3,7 @@
 import { useState } from "react";
 import { Workflow, LayoutDashboard, ClipboardList, ListChecks, Layers, History, Gauge, Cpu, X, LogOut, ArrowLeft } from "lucide-react";
 import { useSession, signOut } from "next-auth/react";
-
-type Page =
-  | "dashboard" | "processes" | "orders" | "substrate" | "activity"
-  | "opsDashboard"
-  | "equipCh12" | "equipChk" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline";
-type Workspace = "business" | "ops";
+import { visibleNav, type NavIconName, type NavItem, type Page, type Workspace } from "@/lib/navMenu";
 
 interface SidebarProps {
   workspace: Workspace;
@@ -19,27 +14,10 @@ interface SidebarProps {
   onClose: () => void;
 }
 
-type NavItem = { key: Page; label: string; icon: typeof Layers; adminOnly?: boolean };
-
-// 업무 관리 워크스페이스 — 기존 메뉴 그대로 (ISA-95 Level 4 영역)
-const BUSINESS_NAV: NavItem[] = [
-  { key: "dashboard", label: "대시보드", icon: LayoutDashboard },
-  { key: "processes", label: "공정 관리", icon: ListChecks },
-  { key: "substrate", label: "기판 반입 기록", icon: Layers },
-  { key: "orders", label: "발주 관리", icon: ClipboardList, adminOnly: true },
-  { key: "activity", label: "활동 이력", icon: History, adminOnly: true },
-];
-
-// 장비 운전 워크스페이스 — 장비 아이콘은 Cpu로 통일
-const OPS_NAV: NavItem[] = [
-  { key: "opsDashboard", label: "운전 대시보드", icon: Gauge },
-  { key: "equipCh12", label: "CH1&2 Sputter", icon: Cpu },
-  { key: "equipChk", label: "CHK", icon: Cpu },
-  { key: "equipRayvac", label: "Rayvac ALD", icon: Cpu },
-  { key: "equipNcd", label: "NCD ALD", icon: Cpu },
-  { key: "equipEvap", label: "Evaporator", icon: Cpu },
-  { key: "equipInline", label: "In-Line Sputter", icon: Cpu },
-];
+// 메뉴 정의(lib/navMenu)의 아이콘 이름 → 컴포넌트
+const NAV_ICONS: Record<NavIconName, typeof Layers> = {
+  LayoutDashboard, ListChecks, Layers, ClipboardList, History, Gauge, Cpu,
+};
 
 export default function Sidebar({
   workspace,
@@ -57,9 +35,7 @@ export default function Sidebar({
   const roleLabel =
     role === "ceo" ? "대표" : role === "admin" ? "관리자" : "직원";
   const isAdmin = role === "admin" || role === "ceo";
-  const nav = workspace === "ops" ? OPS_NAV : BUSINESS_NAV;
-  const commonItems = nav.filter((item) => !item.adminOnly);
-  const adminItems = isAdmin ? nav.filter((item) => item.adminOnly) : [];
+  const { common: commonItems, admin: adminItems } = visibleNav(workspace, isAdmin);
   const initial = (() => {
     if (!userName || userName === "사용자") return "?";
     const parts = userName.trim().split(" ").filter((p) => p.length > 0);
@@ -74,7 +50,7 @@ export default function Sidebar({
 
   // 공통 / 관리자 그룹에서 같은 버튼을 재사용한다
   const renderNavItem = (item: NavItem) => {
-    const Icon = item.icon;
+    const Icon = NAV_ICONS[item.icon];
     const active = currentPage === item.key;
     return (
       <button
