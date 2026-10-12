@@ -293,8 +293,12 @@ export function StatusHero({
   const elapsed = secBetween(runStartedAt);
   const total = process?.totalSec ?? 0;
   const remain = process?.remainSec ?? -1;
-  const inMain = (process?.phase ?? "") === "main" && remain >= 0 && total > 0;
-  const pct = inMain ? Math.min(100, Math.round(((total - remain) / total) * 100)) : 0;
+  const phase = process?.phase ?? "";
+  const inMain = phase === "main" && remain >= 0 && total > 0;
+  // CSV 딜레이(대기 스텝) 중이면 장비가 딜레이 남은·전체 초를 보낸다
+  const inDelay = phase === "delay" && remain >= 0 && total > 0;
+  const timed = inMain || inDelay;
+  const pct = timed ? Math.min(100, Math.round(((total - remain) / total) * 100)) : 0;
 
   return (
     <OpsCard>
@@ -305,13 +309,14 @@ export function StatusHero({
             {stage || "공정 진행"}
           </p>
           <p className="mt-1 truncate text-[11px] text-gray-400">
-            {runName ?? "이름 없는 공정"} · 시작 {fmtTime(runStartedAt)} · 경과 {fmtDuration(elapsed)}
+            {runName ?? "이름 없는 공정"}
+            {runStartedAt && <> · 시작 {fmtTime(runStartedAt)} · 경과 {fmtDuration(elapsed)}</>}
           </p>
         </div>
         <div className="shrink-0 text-right">
-          {inMain ? (
+          {timed ? (
             <>
-              <p className="text-[11px] text-gray-400">남은 시간</p>
+              <p className="text-[11px] text-gray-400">{inDelay ? "딜레이 남은 시간" : "남은 시간"}</p>
               <p className="text-xl font-bold tabular-nums text-gray-900 sm:text-2xl">
                 {fmtDuration(remain)}
               </p>
@@ -325,7 +330,7 @@ export function StatusHero({
         </div>
       </div>
 
-      {inMain && (
+      {timed && (
         <div className="mt-3">
           <div className="h-1.5 overflow-hidden rounded-full bg-gray-100">
             <div className="h-full rounded-full bg-gray-800 transition-all" style={{ width: `${pct}%` }} />
