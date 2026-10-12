@@ -5,7 +5,7 @@ import { X, Trash2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import PhotoUploader from "@/components/ui/PhotoUploader";
 import { errorMessage } from "@/lib/fetchError";
-import { assetPath } from "@/lib/assetPath";
+import { photoUrl } from "@/lib/photoUrl";
 
 type Photo = { id: number; originalName: string };
 export type EditTarget = {
@@ -231,7 +231,11 @@ export default function SubstrateFormModal({ target, lockedProcess, onClose, onS
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={assetPath(`/api/photos/${p.id}/file`)}
+                      src={photoUrl(p.id, "thumb")}
+                      width={72}
+                      height={72}
+                      loading="lazy"
+                      decoding="async"
                       alt={p.originalName}
                       className="h-full w-full object-cover"
                     />

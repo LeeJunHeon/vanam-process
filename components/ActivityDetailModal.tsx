@@ -1,7 +1,7 @@
 "use client";
 
 import { X } from "lucide-react";
-import { assetPath } from "@/lib/assetPath";
+import { photoUrl } from "@/lib/photoUrl";
 
 export type ReceiptState = {
   receivedAt: string;
@@ -261,7 +261,7 @@ export default function ActivityDetailModal({
                   {s!.photoIds.map((pid) => (
                     <a
                       key={pid}
-                      href={assetPath(`/api/photos/${pid}/file`)}
+                      href={photoUrl(pid)}
                       target="_blank"
                       rel="noreferrer"
                       className="overflow-hidden rounded-lg bg-gray-100"
@@ -269,7 +269,11 @@ export default function ActivityDetailModal({
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={assetPath(`/api/photos/${pid}/file`)}
+                        src={photoUrl(pid, "thumb")}
+                        width={72}
+                        height={72}
+                        loading="lazy"
+                        decoding="async"
                         alt={`사진 ${pid}`}
                         className="h-full w-full object-cover"
                       />

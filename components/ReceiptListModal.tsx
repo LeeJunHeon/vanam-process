@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X, ImageOff } from "lucide-react";
-import { assetPath } from "@/lib/assetPath";
+import { photoUrl } from "@/lib/photoUrl";
 import { errorMessage } from "@/lib/fetchError";
 
 type Photo = { id: number; originalName: string };
@@ -100,7 +100,11 @@ export default function ReceiptListModal({
                       >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={assetPath(`/api/photos/${p.id}/file`)}
+                          src={photoUrl(p.id, "thumb")}
+                          width={64}
+                          height={64}
+                          loading="lazy"
+                          decoding="async"
                           alt={p.originalName}
                           className="h-full w-full object-cover"
                         />
@@ -122,10 +126,20 @@ export default function ReceiptListModal({
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={assetPath(`/api/photos/${preview}/file`)}
+            src={photoUrl(preview, "medium")}
             alt="기판 사진"
+            decoding="async"
             className="max-h-full max-w-full object-contain"
           />
+          <a
+            href={photoUrl(preview)}
+            target="_blank"
+            rel="noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="absolute bottom-4 right-4 rounded-lg bg-white/90 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-white"
+          >
+            원본 보기
+          </a>
         </div>
       )}
     </div>
