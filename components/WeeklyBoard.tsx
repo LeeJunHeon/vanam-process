@@ -15,6 +15,9 @@ type Row = ProcessItem & {
 
 const DAY = 86400000;
 const DOW = ["월", "화", "수", "목", "금", "토", "일"];
+// 요일 헤더와 장비 줄이 함께 쓰는 열 정의. minmax(0,1fr) 이라야 긴 칩 문구가 칸 폭을 키우지 않는다.
+// Tailwind 가 인식하도록 완성된 클래스명 그대로 둔다.
+const GRID_COLS = "grid-cols-[84px_repeat(7,minmax(0,1fr))]";
 
 function pad(n: number): string {
   return String(n).padStart(2, "0");
@@ -126,7 +129,7 @@ export default function WeeklyBoard() {
         <div className="overflow-x-auto">
           <div className="min-w-[820px]">
             {/* 요일 헤더 */}
-            <div className="grid grid-cols-[84px_repeat(7,1fr)] border-b border-gray-50">
+            <div className={`grid ${GRID_COLS} border-b border-gray-50`}>
               <div />
               {days.map((d, i) => {
                 const isToday = toStr(d) === todayStr;
@@ -147,7 +150,7 @@ export default function WeeklyBoard() {
             {codes.map((c) => (
               <div
                 key={c.id}
-                className="grid grid-cols-[84px_repeat(7,1fr)] border-b border-gray-50 last:border-b-0"
+                className={`grid ${GRID_COLS} border-b border-gray-50 last:border-b-0`}
               >
                 <div className="flex items-center px-3 py-1 text-xs font-bold text-gray-700">
                   {c.code}
@@ -159,7 +162,7 @@ export default function WeeklyBoard() {
                   return (
                     <div
                       key={i}
-                      className={`min-h-[40px] space-y-1 border-l border-gray-50 p-1 ${
+                      className={`min-h-[40px] min-w-0 space-y-1 border-l border-gray-50 p-1 ${
                         isToday ? "bg-blue-50/40" : ""
                       }`}
                     >
@@ -173,12 +176,19 @@ export default function WeeklyBoard() {
                             key={p.id}
                             onClick={() => setEditing(p)}
                             title={`${p.order.orderNo} #${p.sequence} · ${p.detail ?? ""} · ${p.status}`}
-                            className={`block w-full truncate rounded px-1.5 py-0.5 text-left text-[10px] font-semibold ${
+                            className={`flex w-full items-start gap-1 rounded px-1.5 py-0.5 text-left text-[10px] font-semibold ${
                               STATUS_STYLE[p.status] ?? "bg-gray-100 text-gray-600"
                             } ${delayed ? "ring-1 ring-rose-400" : ""}`}
                           >
-                            {p.detail || p.order.orderNo}
-                            {over24 ? ` ~${Math.ceil((p.durationHours as number) / 24)}일` : ""}
+                            {/* 끝부분만 다른 공정도 구분되도록 최대 3줄까지 줄바꿈, 넘치면 말줄임 */}
+                            <span className="line-clamp-3 min-w-0 flex-1 wrap-anywhere">
+                              {p.detail || p.order.orderNo}
+                            </span>
+                            {over24 && (
+                              <span className="shrink-0 whitespace-nowrap">
+                                ~{Math.ceil((p.durationHours as number) / 24)}일
+                              </span>
+                            )}
                           </button>
                         );
                       })}
