@@ -4,7 +4,8 @@
 export type Page =
   | "dashboard" | "processes" | "orders" | "substrate" | "activity"
   | "opsDashboard"
-  | "equipCh12" | "equipChk" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline";
+  | "equipCh12" | "equipChk" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline"
+  | "ops2Admin";
 export type Workspace = "business" | "ops";
 
 // 포털 런처와 약속한 아이콘 이름 중 이 앱이 쓰는 것
@@ -31,6 +32,7 @@ export const OPS_NAV: NavItem[] = [
   { key: "equipNcd", label: "NCD ALD", icon: "Cpu" },
   { key: "equipEvap", label: "Evaporator", icon: "Cpu" },
   { key: "equipInline", label: "In-Line Sputter", icon: "Cpu" },
+  { key: "ops2Admin", label: "장비 관리(v2)", icon: "Gauge", adminOnly: true },
 ];
 
 export const NAV_BY_WORKSPACE: Record<Workspace, NavItem[]> = {

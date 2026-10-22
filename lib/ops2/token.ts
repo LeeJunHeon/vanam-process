@@ -5,10 +5,10 @@ export function hashToken(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
-/** Authorization: Bearer <토큰> 이 그 장비의 해시와 같은지. 자리표시·형식이 다른 해시는 늘 거짓. */
-export function tokenMatches(authHeader: string | null, tokenHash: string): boolean {
+/** Authorization: Bearer <토큰> 이 그 장비의 해시와 같은지. 해시가 없거나 형식이 다르면 늘 거짓. */
+export function tokenMatches(authHeader: string | null, tokenHash: string | null): boolean {
   const m = /^Bearer (.+)$/.exec(authHeader ?? "");
-  if (!m || !/^[0-9a-f]{64}$/.test(tokenHash)) return false;
+  if (!m || !tokenHash || !/^[0-9a-f]{64}$/.test(tokenHash)) return false;
   const got = Buffer.from(hashToken(m[1]), "hex");
   const want = Buffer.from(tokenHash, "hex");
   return got.length === want.length && timingSafeEqual(got, want);

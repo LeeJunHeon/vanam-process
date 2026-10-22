@@ -1,218 +1,289 @@
 "use client";
 
-// 챔버K v2 연결 확인용(admin) — 장비 목록·주인 실행·마지막 연락·시계 차와 최근 state·사건·run.
-// v2 장비 화면은 W-3 에서 따로 만든다.
+// 장비 관리(v2) — 챔버K v2 장비 연결 확인(관리자만). 3 s 마다 갱신.
+// 장비 목록(주인 실행·마지막 연락·시계 차·최근 409 …)과 고른 장비의 최근 기록, 주인 비우기(강제 인수).
+// 담당자 지정·토큰 교체는 W-3 에서 이 화면에 더한다.
 import { useCallback, useEffect, useState } from "react";
-import { fmtAgo, fmtLogTime } from "@/lib/ops";
+import { AlertTriangle, Cpu, RefreshCw, Unlock } from "lucide-react";
+import { fmtLogTime } from "@/lib/ops";
 
 type Device = {
-  equipment: string; label: string | null; enabled: boolean; holderInstance: string | null;
-  holderSeenAt: string | null; runMode: string | null; writesAllowed: boolean | null; program: string | null;
-  version: string | null; webSchemaHash: string | null; configVersion: number | null; clockSkewMs: number | null;
-  lastSeenAt: string | null; online: boolean;
+  equipment: string; label: string | null; enabled: boolean; hasToken: boolean;
+  holderInstance: string | null; holderSeenAt: string | null;
+  conflictInstance: string | null; conflictAt: string | null;
+  runMode: string | null; writesAllowed: boolean | null; program: string | null; version: string | null;
+  configVersion: number | null; webConfigVersion: number | null; webSchemaHash: string | null; hasWebSchema: boolean;
+  clockSkewMs: number | null; lastHelloAt: string | null; lastSeenAt: string | null;
+};
+type StateBrief = {
+  instance: string; ts: string; receivedAt: string; procState: string | null; runId: string | null;
+  step: { no?: number; total?: number; type?: string; label?: string; remainS?: number } | null;
+  alarmCount: number; stopping: string | null; configVersion: number | null;
+  uplink: { connected: boolean | null; queued: number | null; dropped: number | null; lastError: string | null };
 };
 type Ev = { msgId: string; ts: string; level: string; code: string; message: string; source: string | null;
-            runId: string | null; instance: string };
-type Run = { runId: string; name: string | null; recipeName: string | null; startedBy: string | null;
-             startedAt: string | null; endedAt: string | null; result: string | null; reasonCode: string | null;
-             stepNo: number | null };
-type Res = { msgId: string; ts: string; cmdId: string | null; kind: string; status: string; reasonCode: string | null;
-             source: string | null; requestedBy: string | null };
-type Detail = {
+            runId: string | null };
+type Run = { runId: string; instance: string; name: string | null; recipeName: string | null; startedBy: string | null;
+             stepNo: number | null; startedAt: string | null; endedAt: string | null; result: string | null;
+             reasonCode: string | null };
+type Cmd = { id: string; origin: string; kind: string; status: string; reasonCode: string | null;
+             requestedBy: string; requestedAt: string; resultAt: string | null };
+type Bad = { id: string; instance: string | null; receivedAt: string; reason: string };
+type Overview = {
   devices: Device[]; leaseSec: number;
-  state?: { instance: string; ts: string; receivedAt: string; data: Record<string, unknown> } | null;
-  events?: Ev[]; runs?: Run[]; results?: Res[];
-  instances?: { instance: string; version: string | null; runMode: string | null; firstSeenAt: string; lastSeenAt: string }[];
-  bad?: { id: string; receivedAt: string; error: string }[];
-  schemas?: { hash: string; version: number | null; receivedAt: string }[];
-  summaryCount?: number;
+  state?: StateBrief | null; events?: Ev[]; runs?: Run[]; commands?: Cmd[]; bad?: Bad[]; summaryCount?: number;
 };
 
-const LEVEL_TONE: Record<string, string> = {
-  error: "text-rose-600", warn: "text-amber-600", info: "text-gray-500",
-};
+const SKEW_WARN_MS = 3_000;
+const LEVEL_TONE: Record<string, string> = { error: "text-rose-600", warn: "text-amber-600", info: "text-gray-500" };
+
+const short = (s?: string | null, n = 8) => (s ? s.slice(0, n) : "-");
+function agoSec(iso: string | null, now: number): string {
+  if (!iso) return "-";
+  const s = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
+  return s < 120 ? `${s}초 전` : s < 7200 ? `${Math.round(s / 60)}분 전` : fmtLogTime(iso);
+}
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-2xl border border-gray-100 bg-white p-3">
+    <section className="rounded-2xl border border-gray-100 bg-white p-3 sm:p-4">
       <h3 className="mb-2 text-xs font-bold text-gray-700">{title}</h3>
       {children}
     </section>
   );
 }
 
-const short = (s?: string | null, n = 8) => (s ? s.slice(0, n) : "-");
-const skewText = (ms: number | null) => (ms === null ? "-" : `${ms >= 0 ? "+" : ""}${(ms / 1000).toFixed(1)} s`);
-
 export default function Ops2AdminPage() {
-  const [data, setData] = useState<Detail | null>(null);
+  const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [sel, setSel] = useState<string>("");
+  const [sel, setSel] = useState("");
+  const [now, setNow] = useState(0);
+  const [confirm, setConfirm] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
       const qs = sel ? `?equipment=${encodeURIComponent(sel)}` : "";
-      const res = await fetch(`/api/ops2/admin${qs}`, { cache: "no-store" });
+      const res = await fetch(`/api/ops2/admin/overview${qs}`, { cache: "no-store" });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j?.error ?? String(res.status));
-      setData(j as Detail);
+      if (!res.ok) throw new Error(j?.error ?? `HTTP ${res.status}`);
+      setData(j as Overview);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "불러오지 못했습니다.");
+    } finally {
+      setNow(Date.now());
     }
   }, [sel]);
 
-  // 바로 한 번(다음 틱) + 2 s 마다
   useEffect(() => {
     const first = setTimeout(load, 0);
-    const t = setInterval(load, 2_000);
+    const t = setInterval(load, 3_000);
     return () => { clearTimeout(first); clearInterval(t); };
   }, [load]);
 
+  const release = async (equipment: string) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/ops2/admin/devices/${encodeURIComponent(equipment)}/release`, { method: "POST" });
+      const j = await res.json().catch(() => ({}));
+      setMsg(res.ok ? `${equipment} 주인 실행을 비웠습니다(${short(j?.released)}).` : j?.error ?? "실패했습니다.");
+    } catch {
+      setMsg("실패했습니다.");
+    } finally {
+      setBusy(false);
+      setConfirm(null);
+      load();
+    }
+  };
+
   const st = data?.state;
-  const sd = (st?.data ?? {}) as Record<string, unknown>;
-  const uplink = sd.uplink as Record<string, unknown> | undefined;
-  const alarms = (sd.alarms as unknown[] | undefined) ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-3 p-3 sm:p-6">
-      <h2 className="text-base font-bold text-gray-900">챔버K v2 연결 확인</h2>
+    <div className="space-y-3 p-3 sm:p-6">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="flex items-center gap-1.5 text-base font-bold text-gray-900">
+          <Cpu className="h-4 w-4" /> 장비 관리(v2)
+        </h2>
+        <button onClick={load} className="flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100">
+          <RefreshCw className="h-3 w-3" /> 3초마다 갱신
+        </button>
+      </div>
       {error && <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</p>}
+      {msg && <p className="rounded-2xl border border-gray-100 bg-white p-3 text-xs text-gray-600">{msg}</p>}
 
-      <Card title={`장비 (lease ${data?.leaseSec ?? "-"} s)`}>
+      <Card title={`장비 (주인 실행은 ${data?.leaseSec ?? 30}초 넘게 조용하면 다른 실행이 넘겨받습니다)`}>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full whitespace-nowrap text-left text-xs">
             <thead className="text-[11px] text-gray-400">
               <tr>
-                <th className="py-1 pr-3">장비</th><th className="pr-3">연결</th><th className="pr-3">주인 실행</th>
-                <th className="pr-3">마지막 연락</th><th className="pr-3">시계 차</th><th className="pr-3">runMode</th>
-                <th className="pr-3">버전</th><th className="pr-3">설정</th><th>webSchema</th>
+                <th className="py-1 pr-3">장비</th><th className="pr-3">모드</th><th className="pr-3">버전</th>
+                <th className="pr-3">주인 실행</th><th className="pr-3">마지막 연락</th><th className="pr-3">시계 차</th>
+                <th className="pr-3">쓰기</th><th className="pr-3">설정(장비/웹)</th><th className="pr-3">묶음</th>
+                <th className="pr-3">최근 409</th><th>토큰</th>
               </tr>
             </thead>
             <tbody>
-              {(data?.devices ?? []).map((d) => (
-                <tr
-                  key={d.equipment}
-                  onClick={() => setSel(d.equipment)}
-                  className={`cursor-pointer border-t border-gray-50 hover:bg-gray-50 ${sel === d.equipment ? "bg-gray-50" : ""}`}
-                >
-                  <td className="py-1.5 pr-3 font-semibold">{d.equipment}{!d.enabled && " (꺼짐)"}</td>
-                  <td className="pr-3">
-                    <span className={d.online ? "text-emerald-600" : "text-gray-400"}>{d.online ? "연결" : "끊김"}</span>
-                  </td>
-                  <td className="pr-3 font-mono">{short(d.holderInstance)}</td>
-                  <td className="pr-3">{d.lastSeenAt ? `${fmtLogTime(d.lastSeenAt)} (${fmtAgo(d.lastSeenAt)})` : "-"}</td>
-                  <td className={`pr-3 ${d.clockSkewMs !== null && Math.abs(d.clockSkewMs) > 3000 ? "text-amber-600" : ""}`}>
-                    {skewText(d.clockSkewMs)}
-                  </td>
-                  <td className="pr-3">
-                    {d.runMode ?? "-"}{d.writesAllowed === false && " · 읽기 전용"}
-                  </td>
-                  <td className="pr-3 font-mono">{d.version ?? "-"}</td>
-                  <td className="pr-3">{d.configVersion ?? "-"}</td>
-                  <td className="font-mono">{short(d.webSchemaHash, 12)}</td>
-                </tr>
-              ))}
+              {(data?.devices ?? []).map((d) => {
+                const online = !!d.lastSeenAt && now - new Date(d.lastSeenAt).getTime() < 30_000;
+                const skewBad = d.clockSkewMs !== null && Math.abs(d.clockSkewMs) > SKEW_WARN_MS;
+                return (
+                  <tr
+                    key={d.equipment}
+                    onClick={() => setSel(d.equipment)}
+                    className={`cursor-pointer border-t border-gray-50 hover:bg-gray-50 ${sel === d.equipment ? "bg-gray-50" : ""}`}
+                  >
+                    <td className="py-1.5 pr-3">
+                      <span className={`mr-1.5 inline-block h-2 w-2 rounded-full ${online ? "bg-emerald-500" : "bg-gray-300"}`} />
+                      <span className="font-semibold">{d.label ?? d.equipment}</span>
+                      <span className="ml-1 text-gray-400">{d.equipment}</span>
+                      {!d.enabled && <span className="ml-1 text-rose-500">(꺼짐)</span>}
+                    </td>
+                    <td className="pr-3">
+                      {d.runMode === "sim"
+                        ? <span className="rounded bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-600">sim</span>
+                        : d.runMode ?? "-"}
+                    </td>
+                    <td className="pr-3 font-mono">{d.version ?? "-"}</td>
+                    <td className="pr-3 font-mono">{short(d.holderInstance)}</td>
+                    <td className="pr-3">{agoSec(d.lastSeenAt, now)}</td>
+                    <td className={`pr-3 ${skewBad ? "font-semibold text-amber-600" : ""}`}>
+                      {d.clockSkewMs === null ? "-" : `${d.clockSkewMs >= 0 ? "+" : ""}${(d.clockSkewMs / 1000).toFixed(1)}초`}
+                      {skewBad && <AlertTriangle className="ml-1 inline h-3 w-3" />}
+                    </td>
+                    <td className="pr-3">{d.writesAllowed === null ? "-" : d.writesAllowed ? "허용" : "읽기 전용"}</td>
+                    <td className="pr-3">{d.configVersion ?? "-"} / {d.webConfigVersion ?? "-"}</td>
+                    <td className="pr-3">{d.hasWebSchema ? "받음" : d.webSchemaHash ? "없음" : "-"}</td>
+                    <td className="pr-3">
+                      {d.conflictAt
+                        ? <span className="text-amber-600"><span className="font-mono">{short(d.conflictInstance)}</span> · {agoSec(d.conflictAt, now)}</span>
+                        : "-"}
+                    </td>
+                    <td>{d.hasToken ? "있음" : <span className="text-rose-500">없음</span>}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
-        <p className="mt-2 text-[11px] text-gray-400">줄을 누르면 아래에 그 장비의 최근 기록이 나옵니다.</p>
+        <p className="mt-2 text-[11px] text-gray-400">줄을 누르면 그 장비의 최근 기록이 아래에 나옵니다.</p>
       </Card>
 
-      {sel && data && (
+      {sel && data?.devices.some((d) => d.equipment === sel) && (
         <>
-          <Card title={`최근 state — ${sel}`}>
-            {st ? (
-              <div className="space-y-1 text-xs text-gray-700">
-                <p>
-                  <span className="font-mono">{short(st.instance)}</span> · 장비 {fmtLogTime(st.ts)} · 받음 {fmtLogTime(st.receivedAt)}
-                </p>
-                <p>
-                  procState <b>{String(sd.procState ?? "-")}</b> · runId {String(sd.runId ?? "-")} · 설정 {String(sd.configVersion ?? "-")}
-                  {sd.stopping ? ` · 정지 중 ${String(sd.stopping)}` : ""}
-                </p>
-                <p>알람 {alarms.length ? JSON.stringify(alarms) : "없음"}</p>
-                <p>
-                  uplink: SSE {uplink?.connected ? "연결" : "끊김"} · queued {String(uplink?.queued ?? "-")} ·
-                  dropped {String(uplink?.dropped ?? "-")} · lastError {String(uplink?.lastError ?? "-")}
-                </p>
-                <details>
-                  <summary className="cursor-pointer text-[11px] text-gray-400">state 전체</summary>
-                  <pre className="mt-1 max-h-80 overflow-auto rounded-lg bg-gray-50 p-2 text-[10px]">
-                    {JSON.stringify(sd, null, 2)}
-                  </pre>
-                </details>
-              </div>
-            ) : <p className="text-xs text-gray-400">아직 없음</p>}
+          <Card title={`최신 state — ${sel}`}>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              {st ? (
+                <div className="space-y-1 text-xs text-gray-700">
+                  <p>
+                    실행 <span className="font-mono">{short(st.instance)}</span> · 장비 시각 {fmtLogTime(st.ts)} · 받음 {agoSec(st.receivedAt, now)}
+                  </p>
+                  <p>
+                    공정 상태 <b>{st.procState ?? "-"}</b> · runId <span className="font-mono">{st.runId ?? "-"}</span>
+                    {st.step && ` · 블록 ${st.step.no}/${st.step.total} ${st.step.label || st.step.type || ""}`}
+                    {st.stopping && ` · 정지 중 ${st.stopping}`}
+                  </p>
+                  <p>
+                    알람 <b className={st.alarmCount ? "text-rose-600" : ""}>{st.alarmCount}</b> ·
+                    웹 연결(장비가 본 것) 명령 받기 {st.uplink.connected ? "연결" : "끊김"} · 보관함 {st.uplink.queued ?? "-"}건 ·
+                    버림 {st.uplink.dropped ?? "-"}{st.uplink.lastError ? ` · 마지막 오류 ${st.uplink.lastError}` : ""}
+                  </p>
+                  <p className="text-gray-400">1분 요약(공정 중) {data.summaryCount ?? 0}건</p>
+                </div>
+              ) : <p className="text-xs text-gray-400">아직 받은 state 가 없습니다.</p>}
+              <button
+                onClick={() => setConfirm(sel)}
+                className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                <Unlock className="h-3.5 w-3.5" /> 주인 비우기(강제 인수)
+              </button>
+            </div>
           </Card>
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            <Card title="사건(최근 50)">
-              <ul className="max-h-96 space-y-1 overflow-auto text-[11px]">
+            <Card title="최근 사건 30">
+              <ul className="max-h-[28rem] space-y-1 overflow-auto text-[11px]">
                 {(data.events ?? []).map((e) => (
                   <li key={e.msgId} className="flex gap-2">
                     <span className="shrink-0 font-mono text-gray-400">{fmtLogTime(e.ts)}</span>
                     <span className={`shrink-0 font-semibold ${LEVEL_TONE[e.level] ?? ""}`}>{e.code}</span>
-                    <span className="min-w-0 text-gray-600">
-                      {e.message}{e.runId ? ` [run ${e.runId}]` : ""}{e.source ? ` (${e.source})` : ""}
+                    <span className="min-w-0 break-words text-gray-600">
+                      {e.message}{e.source ? ` · ${e.source}` : ""}{e.runId ? ` · run ${e.runId}` : ""}
                     </span>
                   </li>
                 ))}
+                {!data.events?.length && <li className="text-gray-400">없음</li>}
               </ul>
             </Card>
             <div className="space-y-3">
-              <Card title="공정 run(최근 20)">
+              <Card title="공정 run 10">
                 <ul className="space-y-1 text-[11px] text-gray-600">
                   {(data.runs ?? []).map((r) => (
                     <li key={r.runId}>
-                      <span className="font-mono">{r.runId}</span> · {r.name ?? r.recipeName ?? "-"} · 행 {r.stepNo ?? "-"} ·
-                      {" "}{r.startedAt ? fmtLogTime(r.startedAt) : "시작 기록 없음"} → {r.endedAt ? fmtLogTime(r.endedAt) : "진행/끝 기록 없음"}
-                      {r.result && ` · ${r.result}`}{r.reasonCode && ` (${r.reasonCode})`}{r.startedBy && ` · ${r.startedBy}`}
+                      <span className="font-mono">{r.runId}</span> · {r.name ?? r.recipeName ?? "-"}
+                      {r.stepNo !== null && ` · 행 ${r.stepNo}`} · {r.startedAt ? fmtLogTime(r.startedAt) : "시작 기록 없음"} →{" "}
+                      {r.endedAt
+                        ? `${fmtLogTime(r.endedAt)} ${r.result ?? ""}${r.reasonCode ? ` (${r.reasonCode})` : ""}`
+                        : <span className="text-amber-600">끝 기록 없음</span>}
+                      {r.startedBy && ` · ${r.startedBy}`}
                     </li>
                   ))}
                   {!data.runs?.length && <li className="text-gray-400">없음</li>}
                 </ul>
               </Card>
-              <Card title="명령 결과(cmd_result, 최근 20)">
+              <Card title="명령 결과 10">
                 <ul className="space-y-1 text-[11px] text-gray-600">
-                  {(data.results ?? []).map((r) => (
-                    <li key={r.msgId}>
-                      <span className="font-mono text-gray-400">{fmtLogTime(r.ts)}</span> {r.kind} · {r.status}
-                      {r.reasonCode && ` (${r.reasonCode})`} · {r.source ?? "-"} · {r.requestedBy ?? "-"}
+                  {(data.commands ?? []).map((c) => (
+                    <li key={c.id}>
+                      <span className="font-mono text-gray-400">{fmtLogTime(c.resultAt ?? c.requestedAt)}</span> {c.kind} ·{" "}
+                      <span className={c.status === "rejected" ? "text-rose-600" : ""}>{c.status}</span>
+                      {c.reasonCode && ` (${c.reasonCode})`} · {c.origin} · {c.requestedBy}
                     </li>
                   ))}
-                  {!data.results?.length && <li className="text-gray-400">없음</li>}
+                  {!data.commands?.length && <li className="text-gray-400">없음</li>}
                 </ul>
               </Card>
-              <Card title="실행·묶음·형식 오류">
-                <div className="space-y-2 text-[11px] text-gray-600">
-                  <div>
-                    {(data.instances ?? []).map((i) => (
-                      <p key={i.instance}>
-                        <span className="font-mono">{short(i.instance)}</span> · {i.version ?? "-"} · {i.runMode ?? "-"} ·
-                        {" "}{fmtLogTime(i.firstSeenAt)} ~ {fmtLogTime(i.lastSeenAt)}
-                      </p>
-                    ))}
-                  </div>
-                  <div>
-                    {(data.schemas ?? []).map((s) => (
-                      <p key={s.hash}>webSchema <span className="font-mono">{short(s.hash, 12)}</span> v{s.version ?? "-"} · {fmtLogTime(s.receivedAt)}</p>
-                    ))}
-                    <p>1분 요약 {data.summaryCount ?? 0}건</p>
-                  </div>
-                  <div>
-                    {(data.bad ?? []).map((b) => (
-                      <p key={b.id} className="text-rose-600">
-                        {fmtLogTime(b.receivedAt)} <span className="font-mono">{short(b.id, 12)}</span> {b.error}
-                      </p>
-                    ))}
-                    {!data.bad?.length && <p className="text-gray-400">형식 오류 없음</p>}
-                  </div>
-                </div>
+              <Card title="받지 못한 메시지 10">
+                <ul className="space-y-1 text-[11px]">
+                  {(data.bad ?? []).map((b) => (
+                    <li key={b.id} className="text-rose-600">
+                      <span className="font-mono text-gray-400">{fmtLogTime(b.receivedAt)}</span>{" "}
+                      <span className="font-mono">{short(b.id, 12)}</span> {b.reason}
+                    </li>
+                  ))}
+                  {!data.bad?.length && <li className="text-gray-400">없음</li>}
+                </ul>
               </Card>
             </div>
           </div>
         </>
+      )}
+
+      {confirm && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-4">
+            <p className="text-sm font-bold text-gray-900">주인 비우기(강제 인수)</p>
+            <p className="mt-2 text-sm text-gray-700">
+              <b>{confirm}</b> 의 주인 실행을 비웁니다. 다음에 먼저 연결한 실행이 주인이 됩니다 —
+              지금 주인이 살아 있으면 곧바로 다시 잡습니다.
+            </p>
+            <p className="mt-3 text-[11px] text-gray-400">사건 INSTANCE_RELEASED 로 실행자와 함께 기록됩니다.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setConfirm(null)} className="rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50">
+                취소
+              </button>
+              <button
+                onClick={() => release(confirm)}
+                disabled={busy}
+                className="rounded-xl bg-gray-800 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+              >
+                비우기
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

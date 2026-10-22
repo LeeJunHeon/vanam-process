@@ -13,6 +13,7 @@ import OpsDashboardPage from "@/components/OpsDashboardPage";
 import Ch12Page from "@/components/Ch12Page";
 import EquipmentStubPage from "@/components/EquipmentStubPage";
 import ChkPage from "@/components/ChkPage";
+import Ops2AdminPage from "@/components/ops2/Ops2AdminPage";
 import {
   PAGE_TITLE, WS_HOME, isAdminOnlyPage, isPage, workspaceOf, type Page, type Workspace,
 } from "@/lib/navMenu";
@@ -124,6 +125,7 @@ export default function AppShell() {
           {page === "equipNcd" && <EquipmentStubPage equip="ncd" />}
           {page === "equipEvap" && <EquipmentStubPage equip="evap" />}
           {page === "equipInline" && <EquipmentStubPage equip="inline" />}
+          {page === "ops2Admin" && <Ops2AdminPage />}
         </main>
       </div>
     </div>

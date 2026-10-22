@@ -1,40 +1,34 @@
-// 챔버K v2 장비 → 웹 받기(POST /api/ops2/uplink/ingest). 계약은 v2 common/messages.py 독스트링.
-// - 배치 하나 = 트랜잭션 하나. 커밋 뒤에만 acked(이미 있던 id 도 넣는다). state 는 ack 하지 않는다.
-// - type 별 표의 msg_id UNIQUE 로 한 번만 저장(createMany skipDuplicates) — 뒤따르는 처리는 새로 들어간 행에만.
-// - 형식이 틀린 envelope 은 ops2_bad_message 에 넣고 ack 한다(안 하면 장비가 계속 다시 보낸다).
-// - 같은 장비 ID 의 두 실행: lease. 주인이 없거나·같은 실행이거나·주인이 LEASE_MS 넘게 조용하면 받는다.
-//   그 밖은 hello 가 있어도 409(v2 는 다시 연결할 때마다 hello 를 보내므로 v1 처럼 "hello 면 인수" 를 쓰지 않는다).
+// 챔버K v2 장비 → 웹 받기(POST /api/ops2/uplink/ingest). 계약은 챔버K v2 common/messages.py 독스트링.
+// - lease(같은 장비 ID 두 실행): 배치 전에 조건부 UPDATE 한 문장으로. 주인이 없거나·같은 실행이거나·
+//   주인이 LEASE_MS 넘게 조용하면 받는다. 그 밖은 hello 가 있어도 409(v2 는 다시 연결할 때마다 hello 를 보낸다).
+// - 배치 하나 = 트랜잭션 하나, 받은 순서대로. 표마다 한 번에 넣는다(메시지마다 왕복하지 않음).
+//   같은 id 는 한 번만 저장(msg_id PK·UNIQUE), 이미 있던 것도 acked. 뒤따르는 처리는 새로 들어간 것에만.
+// - 받지 못하는 envelope 은 ops2_bad_message 에 넣고 ack(안 하면 장비가 계속 다시 보낸다).
+// - 배치가 실패하면 하나씩 따로 — 혼자서도 실패하는 것은 bad_message 로(하나 때문에 보관함이 막히지 않게).
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 export const LEASE_MS = 30_000;
-export const INGEST_BODY_MAX = 2 * 1024 * 1024;   // 넘으면 413 — 장비가 반으로 나눠 다시 보낸다
+const SCHEMA_RETRY_MS = 10 * 60_000;   // 해시가 다른 webSchema 를 받은 뒤 다시 달라고 하지 않는 시간
+const RAW_MAX = 64 * 1024;
+
+export function ingestMaxBytes(): number {
+  const v = Number(process.env.OPS2_INGEST_MAX_BYTES);
+  return Number.isInteger(v) && v > 0 ? v : 2 * 1024 * 1024;
+}
 
 type Obj = Record<string, unknown>;
+type Tx = Prisma.TransactionClient;
 
-export type Envelope = {
-  id: string;
-  instance: string;
-  seq: number;
-  ts: Date;
-  type: string;
-  data: Obj;
-};
-
-type Bad = { id: string; ackId: string | null; instance: string | null; error: string; raw: unknown };
-
-export class LeaseConflict extends Error {
-  constructor(public holder: string, public quietMs: number) {
-    super("another instance is active");
-  }
-}
+export type Envelope = { id: string; instance: string; seq: number; ts: Date; type: string; data: Obj };
+type Bad = { id: string; ackId: string | null; instance: string | null; reason: string; raw: unknown };
 
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
 const int = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) ? v : null);
 const json = (v: unknown) => v as Prisma.InputJsonValue;
-const ID_RE = /^[A-Za-z0-9_-]{1,100}$/;
+const webId = () => `web-${randomUUID().replace(/-/g, "")}`;
 
 function parseIso(v: unknown): Date | null {
   if (typeof v !== "string" || !v) return null;
@@ -42,9 +36,11 @@ function parseIso(v: unknown): Date | null {
   return Number.isFinite(t) ? new Date(t) : null;
 }
 
-// type 별로 저장에 꼭 필요한 것만 본다(계약의 required 중 장비가 null 을 보내기도 하는 것 — HMI cmd_result 의 cmdId 등 — 은 허용).
-const REQUIRED: Record<string, [string, "str" | "int" | "obj" | "iso"][]> = {
-  hello: [["instance", "str"], ["webSchemaHash", "str"]],
+// type 별로 저장에 꼭 필요한 것만 본다(계약의 required 중 장비가 null 을 보내기도 하는 것 — id 없는
+// 노트북 명령의 cmd_result.cmdId 등 — 은 허용).
+type FT = "str" | "int" | "obj" | "iso";
+const REQUIRED: Record<string, [string, FT][]> = {
+  hello: [["equipment", "str"], ["instance", "str"], ["webSchemaHash", "str"]],
   state: [],
   event: [["level", "str"], ["code", "str"], ["message", "str"]],
   run_start: [["runId", "str"]],
@@ -54,309 +50,396 @@ const REQUIRED: Record<string, [string, "str" | "int" | "obj" | "iso"][]> = {
   config_ack: [["status", "str"]],
 };
 
-function checkField(v: unknown, t: "str" | "int" | "obj" | "iso"): boolean {
+function fieldOk(v: unknown, t: FT): boolean {
   if (t === "str") return typeof v === "string";
   if (t === "int") return int(v) !== null;
   if (t === "obj") return isObj(v);
   return parseIso(v) !== null;
 }
 
-/** envelope 하나 검사 — 통과하면 Envelope, 아니면 Bad. */
-export function parseEnvelope(raw: unknown): { env: Envelope } | { bad: Bad } {
+function badOf(raw: unknown, reason: string): Bad {
   const rawId = isObj(raw) ? str(raw.id) : null;
-  const ackId = rawId;
-  const badId = rawId && rawId.length <= 200
+  const id = rawId && rawId.length <= 200
     ? rawId
     : `bad-${createHash("sha256").update(JSON.stringify(raw) ?? "").digest("hex").slice(0, 32)}`;
-  const fail = (error: string) => ({
-    bad: { id: badId, ackId, instance: isObj(raw) ? str(raw.instance) : null, error, raw },
-  });
+  return { id, ackId: rawId, instance: isObj(raw) ? str(raw.instance) : null, reason, raw };
+}
+
+/** envelope 하나 검사. */
+export function parseEnvelope(raw: unknown, equipment: string): { env: Envelope } | { bad: Bad } {
+  const fail = (reason: string) => ({ bad: badOf(raw, reason) });
   if (!isObj(raw)) return fail("envelope 이 객체가 아님");
-  if (!rawId || !ID_RE.test(rawId)) return fail("id 형식");
+  const id = str(raw.id);
+  if (!id || id.length > 64) return fail("id 형식(문자열 1~64)");
   const instance = str(raw.instance);
   if (!instance) return fail("instance 없음");
   const seq = int(raw.seq);
-  if (seq === null) return fail("seq 형식");
+  if (seq === null) return fail("seq 형식(정수)");
   const ts = parseIso(raw.ts);
-  if (!ts) return fail("ts 형식");
+  if (!ts) return fail("ts 형식(ISO)");
   const type = str(raw.type);
-  if (!type) return fail("type 없음");
+  const req = type ? REQUIRED[type] : undefined;
+  if (!type || !req) return fail(`모르는 type ${String(raw.type).slice(0, 40)}`);
   if (!isObj(raw.data)) return fail("data 가 객체가 아님");
-  const req = REQUIRED[type];
-  if (!req) return fail(`모르는 type ${type.slice(0, 40)}`);
   for (const [k, t] of req) {
-    if (!checkField(raw.data[k], t)) return fail(`${type}.data.${k} 형식(${t})`);
+    if (!fieldOk(raw.data[k], t)) return fail(`${type}.data.${k} 형식(${t})`);
   }
-  return { env: { id: rawId, instance, seq, ts, type, data: raw.data } };
+  if (type === "hello" && raw.data.equipment !== equipment) {
+    return fail(`hello.data.equipment(${String(raw.data.equipment).slice(0, 20)}) ≠ ${equipment}`);
+  }
+  return { env: { id, instance, seq, ts, type, data: raw.data } };
 }
 
-// 큰 원본은 잘라서 넣는다(형식 틀린 메시지 기록이 DB 를 키우지 않게)
-function rawForStore(raw: unknown): Prisma.InputJsonValue {
-  const s = JSON.stringify(raw) ?? "null";
-  if (s.length <= 64 * 1024) return json(raw ?? null);
-  return { truncated: true, bytes: s.length, head: s.slice(0, 4000) };
+function rawText(raw: unknown): string {
+  const s = typeof raw === "string" ? raw : JSON.stringify(raw) ?? String(raw);
+  return s.length > RAW_MAX ? s.slice(0, RAW_MAX) : s;
 }
 
-export type IngestInput = {
-  equipment: string;
-  instance: string;
-  schemaHash: string | null;
-  messages: unknown[];
-};
+// ───────────── lease ─────────────
+export type Lease =
+  | { ok: true; prev: string | null; prevSeen: Date | null }
+  | { ok: false; holder: string | null; quietMs: number | null };
 
-export type IngestResult = { acked: string[]; needWebSchema: boolean };
+/** 조건부 UPDATE 한 문장 — 동시에 와도 주인은 하나(경합하면 PostgreSQL 이 바뀐 행으로 조건을 다시 본다). */
+export async function claimLease(equipment: string, instance: string, now: Date): Promise<Lease> {
+  const stale = new Date(now.getTime() - LEASE_MS);
+  const won = await prisma.$queryRaw<{ prev: string | null; prev_seen: Date | null }[]>`
+    WITH prev AS (SELECT holder_instance, holder_seen_at FROM "process"."ops2_device" WHERE equipment = ${equipment})
+    UPDATE "process"."ops2_device" d
+       SET holder_instance = ${instance}, holder_seen_at = ${now}, last_seen_at = ${now}
+     WHERE d.equipment = ${equipment}
+       AND (d.holder_instance IS NULL OR d.holder_instance = ${instance}
+            OR d.holder_seen_at IS NULL OR d.holder_seen_at < ${stale})
+    RETURNING (SELECT holder_instance FROM prev) AS prev, (SELECT holder_seen_at FROM prev) AS prev_seen`;
+  if (won.length) {
+    const { prev, prev_seen } = won[0];
+    if (prev && prev !== instance) {
+      const silentSec = prev_seen ? Math.round((now.getTime() - prev_seen.getTime()) / 1000) : null;
+      await prisma.ops2Event.create({
+        data: {
+          msgId: webId(), equipment, instance, seq: 0, ts: now, receivedAt: now, level: "info",
+          code: "INSTANCE_TAKEOVER",
+          message: `실행 ${prev.slice(0, 8)} → ${instance.slice(0, 8)} 넘겨받음(이전 실행 ${silentSec ?? "?"} s 조용)`,
+          source: "web", kind: "lease", context: { from: prev, to: instance, silentSec },
+        },
+      });
+    }
+    return { ok: true, prev, prevSeen: prev_seen };
+  }
+  // 409 — 사건은 남기지 않는다(장비가 10 s 마다 다시 오므로). 마지막 409 만 장비 행에.
+  const cur = await prisma.$queryRaw<{ holder_instance: string | null; holder_seen_at: Date | null }[]>`
+    UPDATE "process"."ops2_device" SET conflict_instance = ${instance}, conflict_at = ${now}
+     WHERE equipment = ${equipment}
+    RETURNING holder_instance, holder_seen_at`;
+  const seen = cur[0]?.holder_seen_at ?? null;
+  return { ok: false, holder: cur[0]?.holder_instance ?? null, quietMs: seen ? now.getTime() - seen.getTime() : null };
+}
 
-export async function processIngest(input: IngestInput): Promise<IngestResult> {
-  const { equipment, instance } = input;
-  const now = new Date();
+// ───────────── 배치 ─────────────
+// 해시가 다른 webSchema 를 받았을 때 그 해시로는 한동안 needWebSchema 를 주지 않는다(200 KB 무한 반복 방지).
+const g = globalThis as unknown as { __ops2SchemaHold?: Map<string, number> };
+const schemaHold = (g.__ops2SchemaHold ??= new Map<string, number>());
 
-  const valid: Envelope[] = [];
+type Ctx = { equipment: string; instance: string; now: Date };
+
+/** 메시지 묶음 하나를 트랜잭션 하나로. 돌려주는 값 = acked(커밋되면 유효) */
+async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<string[]> {
+  const { equipment, now } = ctx;
+  const ok: Envelope[] = [];
   const bads: Bad[] = [];
-  for (const raw of input.messages) {
-    const r = parseEnvelope(raw);
-    if ("env" in r) valid.push(r.env);
+  for (const raw of raws) {
+    const r = parseEnvelope(raw, equipment);
+    if ("env" in r) ok.push(r.env);
     else bads.push(r.bad);
   }
+  const of = (t: string) => ok.filter((e) => e.type === t);
+  const hellos = of("hello");
+  const states = of("state");
+  const runMsgs = ok.filter((e) => e.type === "run_start" || e.type === "run_end");
+  const events = of("event");
+  const sums = of("snapshot_summary");
+  const results = of("cmd_result");
+  const acks = of("config_ack");
+  const devicePatch: Prisma.Ops2DeviceUpdateInput = {};
 
-  const hellos = valid.filter((e) => e.type === "hello");
-  const states = valid.filter((e) => e.type === "state");
-  const lastState = states.length ? states[states.length - 1] : null;
-  const lastHello = hellos.length ? hellos[hellos.length - 1] : null;
-  const byType = (t: string) => valid.filter((e) => e.type === t);
-
-  let needWebSchema = false;
-
-  await prisma.$transaction(async (tx) => {
-    // ── lease: 장비 행을 잠그고 판정(같은 장비의 ingest 는 여기서 한 줄로 선다) ──
-    const rows = await tx.$queryRaw<{ holder_instance: string | null; holder_seen_at: Date | null }[]>`
-      SELECT holder_instance, holder_seen_at FROM "process"."ops2_device" WHERE equipment = ${equipment} FOR UPDATE`;
-    const prev = rows[0]?.holder_instance ?? null;
-    const seenAt = rows[0]?.holder_seen_at ?? null;
-    const quietMs = seenAt ? now.getTime() - seenAt.getTime() : Infinity;
-    if (prev && prev !== instance && quietMs <= LEASE_MS) {
-      throw new LeaseConflict(prev, quietMs);
-    }
-    if (prev && prev !== instance) {
-      const q = Number.isFinite(quietMs) ? Math.round(quietMs / 1000) : null;
-      await tx.ops2Event.create({
-        data: {
-          msgId: `web-${randomUUID().replace(/-/g, "")}`,
-          equipment, instance, ts: now, receivedAt: now, level: "warn", code: "INSTANCE_TAKEOVER",
-          message: `실행 ${prev.slice(0, 8)} → ${instance.slice(0, 8)} 넘겨받음(이전 실행 ${q ?? "?"} s 조용)`,
-          source: "web", kind: "takeover", context: { from: prev, to: instance, quietSec: q },
-        },
-      });
-    }
-
-    const device: Prisma.Ops2DeviceUpdateInput = {
-      holderInstance: instance, holderSeenAt: now, lastSeenAt: now,
-      ...(input.schemaHash ? { schemaHash: input.schemaHash } : {}),
+  // ── hello: 실행·장비 정보, 웹 묶음, 설정 첫 기준값(장비 현재값) ──
+  for (const h of hellos) {
+    const { webSchema, ...d } = h.data;
+    const fields = {
+      program: str(d.program), version: str(d.version), runMode: str(d.runMode), schemaHash: str(d.schemaHash),
+      webSchemaHash: d.webSchemaHash as string, configVersion: int(d.configVersion),
+      snapshotColumns: Array.isArray(d.snapshotColumns) ? json(d.snapshotColumns) : undefined,
+      commandKinds: Array.isArray(d.commandKinds) ? json(d.commandKinds) : undefined,
+      writesAllowed: typeof d.writesAllowed === "boolean" ? d.writesAllowed : null,
+      helloAt: now, lastSeenAt: now,
     };
+    await tx.ops2Instance.upsert({
+      where: { instance: h.instance },
+      create: { instance: h.instance, equipment, firstSeenAt: now, ...fields },
+      update: fields,
+    });
+    const deviceUtc = parseIso(d.deviceUtc);
+    Object.assign(devicePatch, {
+      runMode: fields.runMode, program: fields.program, version: fields.version, schemaHash: fields.schemaHash,
+      webSchemaHash: fields.webSchemaHash, configVersion: fields.configVersion, writesAllowed: fields.writesAllowed,
+      lastHello: json(d), lastHelloAt: now,
+      ...(deviceUtc ? { clockSkewMs: deviceUtc.getTime() - now.getTime() } : {}),
+    });
 
-    // ── hello: 실행 이력·장비 정보·웹 묶음 ──
-    for (const h of hellos) {
-      const { webSchema, ...rest } = h.data;
-      await tx.ops2Instance.upsert({
-        where: { instance: h.instance },
-        create: {
-          instance: h.instance, equipment, program: str(rest.program), version: str(rest.version),
-          runMode: str(rest.runMode), firstSeenAt: now, lastSeenAt: now, hello: json(rest),
-        },
-        update: { lastSeenAt: now, program: str(rest.program), version: str(rest.version),
-                  runMode: str(rest.runMode), hello: json(rest) },
-      });
-      const hash = rest.webSchemaHash as string;
-      if (isObj(webSchema)) {
-        if (webSchema.hash === hash) {
-          await tx.ops2WebSchema.createMany({
-            data: [{ hash, version: int(webSchema.version), paramSchemaHash: str(webSchema.paramSchemaHash),
-                     configVersion: int(webSchema.configVersion), bundle: json(webSchema),
-                     firstEquipment: equipment, receivedAt: now }],
-            skipDuplicates: true,
-          });
-        } else {
-          // 다시 달라고 하지 않는다(같은 묶음이 매초 다시 오는 것을 막는다)
-          await tx.ops2Event.create({
-            data: {
-              msgId: `web-${randomUUID().replace(/-/g, "")}`, equipment, instance: h.instance, ts: now, receivedAt: now,
-              level: "warn", code: "WEB_SCHEMA_HASH_MISMATCH",
-              message: `webSchema 묶음 해시(${String(webSchema.hash).slice(0, 12)})가 hello 의 해시(${hash.slice(0, 12)})와 다름 — 저장하지 않음`,
-              source: "web", kind: "web_schema",
-            },
-          });
-        }
-      }
-    }
-    if (lastHello) {
-      const d = lastHello.data;
-      const { webSchema: _omit, ...rest } = d;
-      void _omit;
-      const deviceUtc = parseIso(d.deviceUtc);
-      Object.assign(device, {
-        runMode: str(d.runMode), writesAllowed: typeof d.writesAllowed === "boolean" ? d.writesAllowed : null,
-        program: str(d.program), version: str(d.version), webSchemaHash: d.webSchemaHash as string,
-        configVersion: int(d.configVersion), lastHello: json(rest),
-        ...(str(d.schemaHash) ? { schemaHash: str(d.schemaHash) } : {}),
-        ...(deviceUtc ? { clockSkewMs: deviceUtc.getTime() - now.getTime(), clockCheckedAt: now } : {}),
-      });
-      if (!isObj(d.webSchema)) {
-        const known = await tx.ops2WebSchema.findUnique({ where: { hash: d.webSchemaHash as string }, select: { hash: true } });
-        needWebSchema = !known;
-      }
-    }
-
-    // ── 형식이 틀린 것 ──
-    if (bads.length) {
-      await tx.ops2BadMessage.createMany({
-        data: bads.map((b) => ({ id: b.id, equipment, instance: b.instance, receivedAt: now, error: b.error,
-                                 raw: rawForStore(b.raw) })),
-        skipDuplicates: true,
-      });
-    }
-
-    // ── 공정(run): run_end 가 먼저 와도 행을 만들고, 나중 run_start 가 시작 쪽을 채운다 ──
-    for (const e of valid) {
-      if (e.type === "run_start") {
-        const d = e.data;
-        const start = {
-          startMsgId: e.id, recipeName: str(d.recipeName), startedBy: str(d.by), name: str(d.name),
-          stepNo: int(d.stepNo), params: isObj(d.params) ? json(d.params) : undefined,
-          blocks: Array.isArray(d.blocks) ? json(d.blocks) : undefined, configVersion: int(d.configVersion),
-          startedAt: e.ts,
-        };
-        const c = await tx.ops2Run.createMany({
-          data: [{ equipment, runId: d.runId as string, instance: e.instance, ...start }], skipDuplicates: true,
-        });
-        if (c.count === 0) {
-          await tx.ops2Run.updateMany({ where: { equipment, runId: d.runId as string, startMsgId: null }, data: start });
-        }
-      } else if (e.type === "run_end") {
-        const d = e.data;
-        const end = {
-          endMsgId: e.id, endedAt: e.ts, result: str(d.result), reasonCode: str(d.reasonCode),
-          summary: isObj(d.summary) ? json(d.summary) : undefined,
-        };
-        const c = await tx.ops2Run.createMany({
-          data: [{ equipment, runId: d.runId as string, instance: e.instance, ...end }], skipDuplicates: true,
-        });
-        if (c.count === 0) {
-          await tx.ops2Run.updateMany({ where: { equipment, runId: d.runId as string, endMsgId: null }, data: end });
-        }
-      }
-    }
-
-    // ── 사건: context.data.run_id → 없으면 같은 instance 의 그 시각에 열린 run ──
-    const events = byType("event");
-    if (events.length) {
-      const runOf = (e: Envelope): string | null => {
-        const ctx = isObj(e.data.context) ? e.data.context : null;
-        const cd = ctx && isObj(ctx.data) ? ctx.data : null;
-        return (cd && str(cd.run_id)) || null;
-      };
-      const loose = events.filter((e) => !runOf(e));
-      let open: { runId: string; instance: string; startedAt: Date | null; endedAt: Date | null }[] = [];
-      if (loose.length) {
-        const minTs = new Date(Math.min(...loose.map((e) => e.ts.getTime())));
-        const maxTs = new Date(Math.max(...loose.map((e) => e.ts.getTime())));
-        open = await tx.ops2Run.findMany({
-          where: {
-            equipment, instance: { in: [...new Set(loose.map((e) => e.instance))] },
-            startedAt: { lte: maxTs }, OR: [{ endedAt: null }, { endedAt: { gte: minTs } }],
-          },
-          select: { runId: true, instance: true, startedAt: true, endedAt: true },
-          orderBy: { startedAt: "desc" },
-        });
-      }
-      const openAt = (e: Envelope) =>
-        open.find((r) => r.instance === e.instance && r.startedAt && r.startedAt <= e.ts
-                         && (!r.endedAt || r.endedAt >= e.ts))?.runId ?? null;
-
-      await tx.ops2Event.createMany({
-        data: events.map((e) => {
-          const d = e.data;
-          const ctx = isObj(d.context) ? d.context : null;
-          return {
-            msgId: e.id, equipment, instance: e.instance, seq: e.seq, runId: runOf(e) ?? openAt(e),
-            ts: e.ts, receivedAt: now, level: d.level as string, code: d.code as string, ruleId: str(d.ruleId),
-            message: (d.message as string).slice(0, 2000), source: ctx ? str(ctx.source) : null,
-            kind: ctx ? str(ctx.kind) : null, context: ctx ? json(ctx) : undefined,
-          };
-        }),
-        skipDuplicates: true,
-      });
-    }
-
-    // ── 1분 요약 ──
-    const sums = byType("snapshot_summary");
-    if (sums.length) {
-      await tx.ops2Summary.createMany({
-        data: sums.map((e) => ({
-          msgId: e.id, equipment, instance: e.instance, fromTs: parseIso(e.data.from)!, toTs: parseIso(e.data.to)!,
-          rows: e.data.rows as number, vals: json(e.data.values), quality: json(e.data.quality), receivedAt: now,
-        })),
-        skipDuplicates: true,
-      });
-    }
-
-    // ── 명령 결과: 원본 저장. hmi 출처는 명령 표에 origin hmi 행으로(새로 들어간 것만) ──
-    const results = byType("cmd_result");
-    if (results.length) {
-      const fresh = await tx.ops2CmdResult.createManyAndReturn({
-        data: results.map((e) => ({
-          msgId: e.id, equipment, instance: e.instance, seq: e.seq, ts: e.ts, receivedAt: now,
-          cmdId: str(e.data.cmdId), kind: e.data.kind as string, status: e.data.status as string,
-          reasonCode: str(e.data.reasonCode), source: str(e.data.source), requestedBy: str(e.data.by),
-          detail: str(e.data.detail),
-        })),
-        skipDuplicates: true,
-        select: { msgId: true, instance: true, ts: true, cmdId: true, kind: true, status: true, reasonCode: true,
-                  source: true, requestedBy: true, detail: true },
-      });
-      const hmi = fresh.filter((r) => r.source === "hmi");
-      if (hmi.length) {
-        await tx.ops2Command.createMany({
-          data: hmi.map((r) => ({
-            id: `hmi-${r.msgId}`, equipment, targetInstance: r.instance, origin: "hmi", kind: r.kind, args: {},
-            requestedBy: r.requestedBy ?? "local", requestedAt: r.ts, status: r.status, resultAt: r.ts,
-            reasonCode: r.reasonCode, detail: r.detail, resultMsgId: r.msgId, localCmdId: r.cmdId,
-          })),
+    if (isObj(webSchema)) {
+      const hash = d.webSchemaHash as string;
+      if (webSchema.hash === hash) {
+        await tx.ops2WebSchema.createMany({
+          data: [{ hash, version: int(webSchema.version), paramSchemaHash: str(webSchema.paramSchemaHash),
+                   bundle: json(webSchema), firstEquipment: equipment, receivedAt: now }],
           skipDuplicates: true,
         });
+        const hasBase = await tx.ops2ConfigVersion.findFirst({ where: { equipment }, select: { version: true } });
+        if (!hasBase) {
+          const values: Obj = {};
+          for (const p of Array.isArray(webSchema.params) ? webSchema.params : []) {
+            if (isObj(p) && typeof p.key === "string" && p.scope !== "secret") values[p.key] = p.current ?? null;
+          }
+          await tx.ops2ConfigVersion.createMany({
+            data: [{ equipment, version: int(d.configVersion) ?? 0, kind: "import", paramValues: json(values),
+                     paramSchemaHash: str(webSchema.paramSchemaHash), createdBy: "device", createdAt: now }],
+            skipDuplicates: true,
+          });
+        }
+      } else {
+        schemaHold.set(hash, now.getTime() + SCHEMA_RETRY_MS);
+        bads.push({ id: `schema-${h.id}`, ackId: null, instance: h.instance,
+                    reason: `webSchema 해시 불일치(묶음 ${String(webSchema.hash).slice(0, 12)} ≠ hello ${hash.slice(0, 12)}) — 저장하지 않음`,
+                    raw: { id: h.id, bundleHash: webSchema.hash, helloHash: hash } });
       }
     }
+  }
 
-    // ── 설정 결과: 원본만(버전 반영은 W-5) ──
-    const acks = byType("config_ack");
-    if (acks.length) {
-      await tx.ops2ConfigAck.createMany({
-        data: acks.map((e) => ({
-          msgId: e.id, equipment, instance: e.instance, ts: e.ts, receivedAt: now, version: int(e.data.version),
-          status: e.data.status as string, reasonCode: str(e.data.reasonCode), kind: str(e.data.kind),
-          requestedBy: str(e.data.by), data: json(e.data),
-        })),
-        skipDuplicates: true,
-      });
+  // ── 받지 못한 것 ──
+  if (bads.length) {
+    await tx.ops2BadMessage.createMany({
+      data: bads.map((b) => ({ id: b.id, equipment, instance: b.instance, receivedAt: now, reason: b.reason,
+                               raw: rawText(b.raw) })),
+      skipDuplicates: true,
+    });
+  }
+
+  // ── 사건이 붙을 열린 run: 배치 전 DB 상태에서 시작해 배치 순서대로 따라간다 ──
+  const evInstances = [...new Set(events.map((e) => e.instance))];
+  const openRun = new Map<string, string>();
+  if (evInstances.length) {
+    const open = await tx.ops2Run.findMany({
+      where: { equipment, instance: { in: evInstances }, endedAt: null, startedAt: { not: null } },
+      orderBy: { startedAt: "desc" },
+      select: { runId: true, instance: true },
+    });
+    for (const r of open) if (!openRun.has(r.instance)) openRun.set(r.instance, r.runId);
+  }
+  const eventRun = new Map<string, string | null>();
+  for (const e of ok) {
+    if (e.type === "run_start") openRun.set(e.instance, e.data.runId as string);
+    else if (e.type === "run_end" && openRun.get(e.instance) === e.data.runId) openRun.delete(e.instance);
+    else if (e.type === "event") {
+      const ctxObj = isObj(e.data.context) ? e.data.context : null;
+      const cd = ctxObj && isObj(ctxObj.data) ? ctxObj.data : null;
+      eventRun.set(e.id, (cd && str(cd.run_id)) || openRun.get(e.instance) || null);
     }
+  }
 
-    // ── 최신 state(배치의 마지막 것) ──
-    if (lastState) {
-      await tx.ops2State.upsert({
-        where: { equipment },
-        create: { equipment, instance: lastState.instance, msgId: lastState.id, ts: lastState.ts, receivedAt: now,
-                  data: json(lastState.data) },
-        update: { instance: lastState.instance, msgId: lastState.id, ts: lastState.ts, receivedAt: now,
-                  data: json(lastState.data) },
-      });
-      // 시계 차: hello 가 없으면 state ts 로(state 는 POST 마다 막 만든 것 — 1 s 안쪽으로 늦을 수 있다)
-      if (!lastHello) Object.assign(device, { clockSkewMs: lastState.ts.getTime() - now.getTime(), clockCheckedAt: now });
+  // ── 공정(run): run_start·run_end 가 어느 순서로 와도 한 행 ──
+  if (runMsgs.length) {
+    const ids = [...new Set(runMsgs.map((e) => e.data.runId as string))];
+    const have = new Map((await tx.ops2Run.findMany({
+      where: { runId: { in: ids } }, select: { runId: true, startMsgId: true, endMsgId: true },
+    })).map((r) => [r.runId, r]));
+    const creates = new Map<string, Prisma.Ops2RunCreateManyInput>();
+    const updates = new Map<string, Prisma.Ops2RunUpdateInput>();
+    for (const e of runMsgs) {
+      const runId = e.data.runId as string;
+      const d = e.data;
+      const isStart = e.type === "run_start";
+      const fields = isStart
+        ? { startMsgId: e.id, recipeName: str(d.recipeName), startedBy: str(d.by), name: str(d.name),
+            stepNo: int(d.stepNo), params: isObj(d.params) ? json(d.params) : undefined,
+            blocks: Array.isArray(d.blocks) ? json(d.blocks) : undefined, configVersion: int(d.configVersion),
+            startedAt: e.ts }
+        : { endMsgId: e.id, endedAt: e.ts, result: str(d.result), reasonCode: str(d.reasonCode),
+            summary: isObj(d.summary) ? json(d.summary) : undefined };
+      const cur = have.get(runId);
+      if (cur) {
+        if (isStart ? cur.startMsgId : cur.endMsgId) continue;              // 이미 받음(같은 메시지 다시 등)
+        if (isStart) cur.startMsgId = e.id; else cur.endMsgId = e.id;
+        updates.set(runId, { ...updates.get(runId), ...fields });
+      } else {
+        const c = creates.get(runId);
+        if (c && (isStart ? c.startMsgId : c.endMsgId)) continue;
+        creates.set(runId, { ...(c ?? { runId, equipment, instance: e.instance }), ...fields });
+      }
     }
+    if (creates.size) await tx.ops2Run.createMany({ data: [...creates.values()], skipDuplicates: true });
+    for (const [runId, data] of updates) await tx.ops2Run.update({ where: { runId }, data });
+  }
 
-    await tx.ops2Device.update({ where: { equipment }, data: device });
-  }, { timeout: 20_000, maxWait: 10_000 });
+  // ── 사건 ──
+  if (events.length) {
+    await tx.ops2Event.createMany({
+      data: events.map((e) => {
+        const d = e.data;
+        const c = isObj(d.context) ? d.context : null;
+        return {
+          msgId: e.id, equipment, instance: e.instance, seq: e.seq, runId: eventRun.get(e.id) ?? null, ts: e.ts,
+          receivedAt: now, level: d.level as string, code: d.code as string, ruleId: str(d.ruleId),
+          message: d.message as string, source: c ? str(c.source) : null, kind: c ? str(c.kind) : null,
+          context: c ? json(c) : undefined,
+        };
+      }),
+      skipDuplicates: true,
+    });
+  }
 
-  const acked = [
-    ...valid.filter((e) => e.type !== "state").map((e) => e.id),
+  // ── 1분 요약: 공정 중인 것만(같은 장비·instance 의 run 중 started_at < to, ended_at 없음 또는 > from) ──
+  if (sums.length) {
+    const span = sums.map((e) => ({ e, from: parseIso(e.data.from)!, to: parseIso(e.data.to)! }));
+    const maxTo = new Date(Math.max(...span.map((s) => s.to.getTime())));
+    const minFrom = new Date(Math.min(...span.map((s) => s.from.getTime())));
+    const runs = await tx.ops2Run.findMany({
+      where: { equipment, instance: { in: [...new Set(sums.map((e) => e.instance))] },
+               startedAt: { lt: maxTo }, OR: [{ endedAt: null }, { endedAt: { gt: minFrom } }] },
+      orderBy: { startedAt: "desc" },
+      select: { runId: true, instance: true, startedAt: true, endedAt: true },
+    });
+    const keep = span.flatMap(({ e, from, to }) => {
+      const r = runs.find((x) => x.instance === e.instance && x.startedAt! < to && (!x.endedAt || x.endedAt > from));
+      return r ? [{ msgId: e.id, equipment, instance: e.instance, runId: r.runId, fromTs: from, toTs: to,
+                    rowCount: e.data.rows as number, stats: json(e.data.values), quality: json(e.data.quality) }] : [];
+    });
+    if (keep.length) await tx.ops2Summary.createMany({ data: keep, skipDuplicates: true });
+  }
+
+  // ── 명령 결과: 같은 장비·id 의 명령이 있으면 결과 칸, 없으면 새 행(노트북 명령 등) ──
+  if (results.length) {
+    const idOf = (e: Envelope) => str(e.data.cmdId) || `hmi-${e.id}`;
+    const have = new Map((await tx.ops2Command.findMany({
+      where: { equipment, id: { in: [...new Set(results.map(idOf))] } },
+      select: { id: true, resultMsgId: true },
+    })).map((c) => [c.id, c]));
+    const creates = new Map<string, Prisma.Ops2CommandCreateManyInput>();
+    for (const e of results) {
+      const d = e.data;
+      const id = idOf(e);
+      const result = { status: d.status as string, reasonCode: str(d.reasonCode), detail: str(d.detail),
+                       resultAt: e.ts, resultMsgId: e.id, resultInstance: e.instance };
+      const cur = have.get(id);
+      if (cur) {
+        if (cur.resultMsgId === e.id) continue;
+        cur.resultMsgId = e.id;
+        await tx.ops2Command.updateMany({ where: { id, equipment }, data: result });
+      } else if (!creates.has(id)) {
+        creates.set(id, { id, equipment, targetInstance: e.instance, origin: str(d.source) ?? "hmi",
+                          kind: d.kind as string, args: {}, requestedBy: str(d.by) ?? "local", requestedAt: e.ts,
+                          ...result });
+      }
+    }
+    if (creates.size) await tx.ops2Command.createMany({ data: [...creates.values()], skipDuplicates: true });
+  }
+
+  // ── 설정 결과: (장비, 버전) 행이 있으면 ack 칸, 없으면 사건 CONFIG_ACK ──
+  if (acks.length) {
+    const versions = [...new Set(acks.map((e) => int(e.data.version)).filter((v): v is number => v !== null))];
+    const have = new Map((await tx.ops2ConfigVersion.findMany({
+      where: { equipment, version: { in: versions } }, select: { version: true, ackMsgId: true },
+    })).map((r) => [r.version, r]));
+    const loose: Prisma.Ops2EventCreateManyInput[] = [];
+    for (const e of acks) {
+      const d = e.data;
+      const v = int(d.version);
+      const cur = v === null ? undefined : have.get(v);
+      if (cur) {
+        if (cur.ackMsgId === e.id) continue;
+        cur.ackMsgId = e.id;
+        await tx.ops2ConfigVersion.update({
+          where: { equipment_version: { equipment, version: v! } },
+          data: { ackStatus: d.status as string, ackAt: e.ts, reasonCode: str(d.reasonCode), ackMsgId: e.id,
+                  errors: Array.isArray(d.errors) ? json(d.errors) : undefined,
+                  appliedKeys: Array.isArray(d.appliedKeys) ? json(d.appliedKeys) : undefined,
+                  pendingKeys: Array.isArray(d.pendingKeys) ? json(d.pendingKeys) : undefined,
+                  overriddenKeys: Array.isArray(d.overriddenKeys) ? json(d.overriddenKeys) : undefined,
+                  changes: Array.isArray(d.changes) ? json(d.changes) : undefined },
+        });
+      } else {
+        loose.push({ msgId: e.id, equipment, instance: e.instance, seq: e.seq, ts: e.ts, receivedAt: now,
+                     level: d.status === "rejected" ? "warn" : "info", code: "CONFIG_ACK",
+                     message: `설정 버전 ${v ?? "?"} ${String(d.status)}${d.reasonCode ? ` (${String(d.reasonCode)})` : ""}`,
+                     source: "config", kind: str(d.kind), context: json(d) });
+      }
+    }
+    if (loose.length) await tx.ops2Event.createMany({ data: loose, skipDuplicates: true });
+  }
+
+  // ── 최신 state(배치의 마지막 것) ──
+  const st = states.length ? states[states.length - 1] : null;
+  if (st) {
+    const row = { instance: st.instance, msgId: st.id, seq: st.seq, ts: st.ts, receivedAt: now,
+                  procState: str(st.data.procState), runId: str(st.data.runId), data: json(st.data) };
+    await tx.ops2State.upsert({ where: { equipment }, create: { equipment, ...row }, update: row });
+    // 시계 차: hello 가 없으면 state ts 로(state 는 최대 1 s 늦게 만들어진 것)
+    if (!hellos.length) devicePatch.clockSkewMs = st.ts.getTime() - now.getTime();
+  }
+
+  if (Object.keys(devicePatch).length) await tx.ops2Device.update({ where: { equipment }, data: devicePatch });
+  await tx.ops2Instance.updateMany({ where: { instance: ctx.instance }, data: { lastSeenAt: now } });
+
+  return [
+    ...ok.filter((e) => e.type !== "state" && e.type !== "hello").map((e) => e.id),
     ...bads.map((b) => b.ackId).filter((v): v is string => !!v),
   ];
-  return { acked, needWebSchema };
+}
+
+const TX_OPTS = { timeout: 10_000, maxWait: 5_000 };
+
+export type IngestResult = { acked: string[]; needWebSchema: boolean; fallback: number };
+
+export async function processIngest(ctx: Ctx, messages: unknown[]): Promise<IngestResult> {
+  let acked: string[];
+  let fallback = 0;
+  try {
+    acked = await prisma.$transaction((tx) => applyBatch(tx, ctx, messages), TX_OPTS);
+  } catch (batchErr) {
+    // 하나씩 따로. 혼자서도 실패하면 bad_message 로 넣고 ack — 그것도 실패하면(DB 끊김 등) 던진다(500).
+    console.error("[ops2/ingest] 배치 실패 — 하나씩 처리", ctx.equipment, (batchErr as Error)?.message);
+    acked = [];
+    for (const raw of messages) {
+      try {
+        acked.push(...await prisma.$transaction((tx) => applyBatch(tx, ctx, [raw]), TX_OPTS));
+      } catch (e) {
+        fallback += 1;
+        const b = badOf(raw, `처리 실패: ${String((e as Error)?.message ?? e).slice(0, 300)}`);
+        await prisma.ops2BadMessage.createMany({
+          data: [{ id: b.id, equipment: ctx.equipment, instance: b.instance, receivedAt: ctx.now, reason: b.reason,
+                   raw: rawText(raw) }],
+          skipDuplicates: true,
+        });
+        if (b.ackId) acked.push(b.ackId);
+      }
+    }
+  }
+
+  // needWebSchema 는 hello 가 있는 POST 만: 묶음이 없거나 이 장비의 설정 기준값이 없으면
+  let needWebSchema = false;
+  const hello = messages
+    .map((m) => parseEnvelope(m, ctx.equipment))
+    .flatMap((r) => ("env" in r && r.env.type === "hello" ? [r.env] : []))
+    .pop();
+  if (hello) {
+    const hash = hello.data.webSchemaHash as string;
+    const hold = schemaHold.get(hash);
+    if (!hold || hold < ctx.now.getTime()) {
+      const [ws, base] = await Promise.all([
+        prisma.ops2WebSchema.findUnique({ where: { hash }, select: { hash: true } }),
+        prisma.ops2ConfigVersion.findFirst({ where: { equipment: ctx.equipment }, select: { version: true } }),
+      ]);
+      needWebSchema = !ws || !base;
+    }
+  }
+  return { acked, needWebSchema, fallback };
 }
