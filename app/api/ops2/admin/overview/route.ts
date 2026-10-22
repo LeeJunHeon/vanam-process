@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
     ops2Db.ops2Command.findMany({
       where: { equipment }, orderBy: { requestedAt: "desc" }, take: 20,
       select: { id: true, origin: true, kind: true, status: true, reasonCode: true, detail: true, requestedBy: true,
-                requestedAt: true, resultAt: true, targetInstance: true, sentVia: true, sentAt: true,
+                requestedAt: true, resultAt: true, resultReceivedAt: true, targetInstance: true, sentVia: true, sentAt: true,
                 lastSentAt: true, sendCount: true, expiresAtServer: true },
     }),
     ops2Db.ops2BadMessage.findMany({

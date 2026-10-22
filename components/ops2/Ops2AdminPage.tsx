@@ -29,7 +29,8 @@ type Run = { runId: string; instance: string; name: string | null; recipeName: s
              stepNo: number | null; startedAt: string | null; endedAt: string | null; result: string | null;
              reasonCode: string | null };
 type Cmd = { id: string; origin: string; kind: string; status: string; reasonCode: string | null; detail: string | null;
-             requestedBy: string; requestedAt: string; resultAt: string | null; targetInstance: string | null;
+             requestedBy: string; requestedAt: string; resultAt: string | null; resultReceivedAt: string | null;
+             targetInstance: string | null;
              sentVia: string | null; sentAt: string | null; lastSentAt: string | null; sendCount: number;
              expiresAtServer: string | null };
 type Operator = { equipment: string; employeeId: number; name: string | null; active: boolean; createdBy: string };
@@ -341,7 +342,9 @@ export default function Ops2AdminPage() {
                   {(data.commands ?? []).map((c) => {
                     const unknown = c.status === "sent" && !!c.expiresAtServer
                       && now - new Date(c.expiresAtServer).getTime() > UNKNOWN_AFTER_MS;
-                    const took = c.resultAt ? new Date(c.resultAt).getTime() - new Date(c.requestedAt).getTime() : null;
+                    // 둘 다 웹 시계(result_at 은 장비 시계라 쓰지 않는다)
+                    const took = c.resultReceivedAt
+                      ? new Date(c.resultReceivedAt).getTime() - new Date(c.requestedAt).getTime() : null;
                     return (
                       <li key={c.id}>
                         <span className="font-mono text-gray-400">{fmtKst(c.requestedAt)}</span> {c.kind} ·{" "}

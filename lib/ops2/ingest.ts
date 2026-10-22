@@ -350,7 +350,8 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<string[]> 
     if (keep.length) await tx.ops2Summary.createMany({ data: keep, skipDuplicates: true });
   }
 
-  // ── 명령 결과: 같은 장비·id 의 명령이 있으면 결과 칸, 없으면 새 행(노트북 명령 등) ──
+  // ── 명령 결과: 같은 장비·id 의 명령이 있으면 결과 칸(결과가 아직 없을 때만 — 처음 것), 없으면 새 행(노트북 명령 등).
+  //    다시 보낸 명령에 장비가 같은 cmd_result 를 새 envelope 으로 다시 보내도 처음 결과·시각을 덮지 않는다 ──
   if (results.length) {
     const idOf = (e: Envelope) => str(e.data.cmdId) || `hmi-${e.id}`;
     const have = new Map((await tx.ops2Command.findMany({
@@ -362,12 +363,12 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<string[]> 
       const d = e.data;
       const id = idOf(e);
       const result = { status: d.status as string, reasonCode: str(d.reasonCode), detail: str(d.detail),
-                       resultAt: e.ts, resultMsgId: e.id, resultInstance: e.instance };
+                       resultAt: e.ts, resultMsgId: e.id, resultInstance: e.instance, resultReceivedAt: now };
       const cur = have.get(id);
       if (cur) {
-        if (cur.resultMsgId === e.id) continue;
+        if (cur.resultMsgId) continue;                                 // 이미 결과 있음(같은 결과의 반복)
         cur.resultMsgId = e.id;
-        await tx.ops2Command.updateMany({ where: { id, equipment }, data: result });
+        await tx.ops2Command.updateMany({ where: { id, equipment, resultMsgId: null }, data: result });
       } else if (!creates.has(id)) {
         creates.set(id, { id, equipment, targetInstance: e.instance, origin: str(d.source) ?? "hmi",
                           kind: d.kind as string, args: {}, requestedBy: str(d.by) ?? "local", requestedAt: e.ts,

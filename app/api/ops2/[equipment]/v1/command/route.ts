@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { ops2Db } from "@/lib/ops2/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { readLimited } from "@/lib/ops2/body";
-import { COMMAND_TTL_MS, expireDue, missingArgs, webCommandDef } from "@/lib/ops2/commands";
+import { COMMAND_TTL_MS, CONFIG_KINDS, expireDue, missingArgs, webCommandDef } from "@/lib/ops2/commands";
+import { stripNul } from "@/lib/ops2/ingest";
 import { canRunCommand, operatorEquipments } from "@/lib/ops2/perm";
 import { kick } from "@/lib/ops2/hub";
 import type { Prisma } from "@/app/generated/prisma/client";
@@ -35,7 +36,7 @@ async function waitResult(c: Out, waitS: number): Promise<Out> {
 }
 
 // POST /api/ops2/[equipment]/v1/command — 웹 → 장비 명령 만들기(세션 필요). 본문 {kind, args?, label?, id?}
-// 검사: 장비(404) → 웹 설정 묶음(409 no_schema) → kind·sources·args(400) → 권한(403, lib/ops2/perm.ts) → 연결(409 device_offline)
+// 검사: 장비(404) → 웹 설정 묶음(409 no_schema) → 설정 명령(400 config_path) → kind·sources·args(400) → 권한(403, lib/ops2/perm.ts) → 연결(409 device_offline)
 // 만들면 pending — 장비 SSE(hub.kick)나 다음 POST 응답으로 간다. 30 s 안에 못 보내면 expired(WEB_EXPIRED).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ equipment: string }> }) {
   const auth = await requireSession();
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
   if (text === null) return NextResponse.json({ error: "too_large", max: MAX_BODY }, { status: 413 });
   let body: { kind?: unknown; args?: unknown; label?: unknown; id?: unknown };
   try {
-    body = JSON.parse(text);
+    body = stripNul(JSON.parse(text)) as typeof body;   // NUL 은 text·jsonb 가 받지 못한다(args·label)
   } catch {
     return NextResponse.json({ error: "bad_json" }, { status: 400 });
   }
@@ -63,6 +64,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
   if (!schema) return NextResponse.json({ error: "no_schema" }, { status: 409 });
 
   const kind = typeof body.kind === "string" ? body.kind : "";
+  if (CONFIG_KINDS.includes(kind)) {
+    return NextResponse.json({ error: "config_path", detail: "설정 변경은 설정 화면에서(W-5)" }, { status: 400 });
+  }
   const def = kind ? webCommandDef(schema.bundle, kind) : null;
   if (!def) return NextResponse.json({ error: "unknown_kind", detail: "웹에서 낼 수 없는 명령" }, { status: 400 });
   const args = body.args === undefined ? {} : body.args;

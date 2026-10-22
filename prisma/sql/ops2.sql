@@ -159,6 +159,7 @@ CREATE TABLE IF NOT EXISTS "process"."ops2_command" (
     "send_count" INTEGER NOT NULL DEFAULT 0,
     "sent_via" TEXT,
     "result_at" TIMESTAMPTZ(6),
+    "result_received_at" TIMESTAMPTZ(6),
     "reason_code" TEXT,
     "detail" TEXT,
     "result_msg_id" TEXT,

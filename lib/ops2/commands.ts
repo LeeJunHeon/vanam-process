@@ -9,6 +9,10 @@ export const COMMAND_TTL_MS = 30_000;          // 명령 유효 시간(웹 시�
 const RESEND_AFTER_MS = 3_000;                 // sent 인데 결과가 없으면 이만큼 뒤 POST 응답으로 다시
 const RESEND_UNTIL_MS = 5 * 60_000;            // expires_at_server 뒤 이만큼까지만 다시
 
+/** 설정 명령 — 일반 명령 API 로는 내지 않는다. 설정은 웹(ops2_config_version)이 값의 원본이라
+ *  W-5 의 설정 경로가 버전 행과 명령을 같이 만든다. */
+export const CONFIG_KINDS: readonly string[] = ["CONFIG_APPLY", "CONFIG_ROLLBACK"];
+
 /** 웹 설정 묶음 commands[] 한 항목(필요한 것만) */
 export type CommandDef = { kind: string; role?: unknown; sources?: unknown; args?: unknown };
 

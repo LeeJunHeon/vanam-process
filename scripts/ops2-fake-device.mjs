@@ -238,9 +238,14 @@ const scenarios = {
         answered.add(c.id);
         const e = result(c);
         out.push(e);
+        console.log(`  cmd_result ${c.id} envelope ${e.id}`);
         if (first && mode === "dup") {                                   // 같은 cmd_result(같은 envelope)를 다음 POST 에 한 번 더
-          setTimeout(() => out.push(e), 1500);
-          setTimeout(() => out.push(result(c)), 2500);                   // 그리고 새 envelope 으로 한 번 더(장비가 다시 보낼 때처럼)
+          setTimeout(() => { out.push(e); console.log(`  cmd_result ${c.id} envelope ${e.id}(같은 것 다시)`); }, 1500);
+          setTimeout(() => {                                             // 그리고 새 envelope 으로 한 번 더(장비가 다시 보낼 때처럼)
+            const e2 = result(c);
+            out.push(e2);
+            console.log(`  cmd_result ${c.id} envelope ${e2.id}(새 envelope)`);
+          }, 2500);
         }
       }
       await new Promise((ok) => setTimeout(ok, 1000));

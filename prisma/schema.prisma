@@ -483,27 +483,28 @@ model Ops2Summary {
 // 명령. origin web = 웹이 만든 것(W-2), hmi = 노트북에서 실행된 것(cmd_result 로 알게 됨)
 // status: pending → sent → accepted / rejected, 또는 expired
 model Ops2Command {
-  id              String    @id
-  equipment       String
-  targetInstance  String?   @map("target_instance")
-  origin          String
-  kind            String
-  args            Json      @default("{}")
-  label           String?
-  requestedBy     String    @map("requested_by")
-  requestedAt     DateTime  @map("requested_at") @db.Timestamptz(6)
-  expiresAt       DateTime? @map("expires_at") @db.Timestamptz(6) // 장비 시계 기준
-  expiresAtServer DateTime? @map("expires_at_server") @db.Timestamptz(6)
-  status          String
-  sentAt          DateTime? @map("sent_at") @db.Timestamptz(6) // 처음 보낸 시각
-  lastSentAt      DateTime? @map("last_sent_at") @db.Timestamptz(6)
-  sendCount       Int       @default(0) @map("send_count")
-  sentVia         String?   @map("sent_via")
-  resultAt        DateTime? @map("result_at") @db.Timestamptz(6)
-  reasonCode      String?   @map("reason_code")
-  detail          String?
-  resultMsgId     String?   @unique @map("result_msg_id")
-  resultInstance  String?   @map("result_instance")
+  id               String    @id
+  equipment        String
+  targetInstance   String?   @map("target_instance")
+  origin           String
+  kind             String
+  args             Json      @default("{}")
+  label            String?
+  requestedBy      String    @map("requested_by")
+  requestedAt      DateTime  @map("requested_at") @db.Timestamptz(6)
+  expiresAt        DateTime? @map("expires_at") @db.Timestamptz(6) // 장비 시계 기준
+  expiresAtServer  DateTime? @map("expires_at_server") @db.Timestamptz(6)
+  status           String
+  sentAt           DateTime? @map("sent_at") @db.Timestamptz(6) // 처음 보낸 시각
+  lastSentAt       DateTime? @map("last_sent_at") @db.Timestamptz(6)
+  sendCount        Int       @default(0) @map("send_count")
+  sentVia          String?   @map("sent_via")
+  resultAt         DateTime? @map("result_at") @db.Timestamptz(6) // 장비 시계(cmd_result ts)
+  resultReceivedAt DateTime? @map("result_received_at") @db.Timestamptz(6) // 웹 시계 — 결과를 처음 받은 시각
+  reasonCode       String?   @map("reason_code")
+  detail           String?
+  resultMsgId      String?   @unique @map("result_msg_id")
+  resultInstance   String?   @map("result_instance")
 
   @@index([equipment, status])
   @@index([equipment, requestedAt])
