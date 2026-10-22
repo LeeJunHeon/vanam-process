@@ -155,6 +155,8 @@ CREATE TABLE IF NOT EXISTS "process"."ops2_command" (
     "expires_at_server" TIMESTAMPTZ(6),
     "status" TEXT NOT NULL,
     "sent_at" TIMESTAMPTZ(6),
+    "last_sent_at" TIMESTAMPTZ(6),
+    "send_count" INTEGER NOT NULL DEFAULT 0,
     "sent_via" TEXT,
     "result_at" TIMESTAMPTZ(6),
     "reason_code" TEXT,
@@ -201,6 +203,16 @@ CREATE TABLE IF NOT EXISTS "process"."ops2_bad_message" (
     CONSTRAINT "ops2_bad_message_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE IF NOT EXISTS "process"."ops2_operator" (
+    "equipment" TEXT NOT NULL,
+    "employee_id" INTEGER NOT NULL,
+    "created_by" TEXT NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ops2_operator_pkey" PRIMARY KEY ("equipment","employee_id")
+);
+
 -- CreateIndex
 CREATE INDEX IF NOT EXISTS "ops2_instance_equipment_first_seen_at_idx" ON "process"."ops2_instance"("equipment", "first_seen_at");
 
@@ -239,6 +251,9 @@ CREATE INDEX IF NOT EXISTS "ops2_command_equipment_requested_at_idx" ON "process
 
 -- CreateIndex
 CREATE UNIQUE INDEX IF NOT EXISTS "ops2_config_version_ack_msg_id_key" ON "process"."ops2_config_version"("ack_msg_id");
+
+-- CreateIndex
+CREATE INDEX IF NOT EXISTS "ops2_operator_employee_id_idx" ON "process"."ops2_operator"("employee_id");
 
 -- 장비 등록. token_hash 는 비워 둔다(비어 있으면 그 장비의 연결은 모두 401) —
 -- node scripts/ops2-token.mjs <장비ID> 가 보여 주는 UPDATE 로 넣는다.

@@ -2,34 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { ops2Db } from "@/lib/ops2/db";
 import { claimLease, ingestMaxBytes, processIngest, sqlState, stripNul } from "@/lib/ops2/ingest";
 import { tokenMatches } from "@/lib/ops2/token";
+import { commandsForPost } from "@/lib/ops2/commands";
+import { readLimited } from "@/lib/ops2/body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// 본문을 상한까지만 읽는다(Content-Length 가 없거나 거짓이어도 넘으면 멈춤). 넘으면 null.
-async function readLimited(req: NextRequest, max: number): Promise<string | null> {
-  const len = Number(req.headers.get("content-length") ?? "");
-  if (Number.isFinite(len) && len > max) return null;
-  if (!req.body) return "";
-  const reader = req.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    size += value.byteLength;
-    if (size > max) {
-      await reader.cancel().catch(() => {});
-      return null;
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks).toString("utf8");
-}
-
 // POST /api/ops2/uplink/ingest — 챔버K v2 장비 → 웹(계약: 챔버K v2 common/messages.py).
 // 세션이 아니라 장비별 Bearer 토큰(ops2_device.token_hash, 장비 ID 에 묶임). 토큰·본문은 로그에 남기지 않는다.
-// 200 {acked, needWebSchema?} · 400 형식 · 401 토큰 · 409 다른 실행이 연결 중 · 413 본문 상한(OPS2_INGEST_MAX_BYTES)
+// 200 {acked, commands?, needWebSchema?} · 400 형식 · 401 토큰 · 409 다른 실행이 연결 중 · 413 본문 상한(OPS2_INGEST_MAX_BYTES)
 export async function POST(req: NextRequest) {
   const max = ingestMaxBytes();
   const text = await readLimited(req, max);
@@ -68,7 +49,13 @@ export async function POST(req: NextRequest) {
       );
     }
     const r = await processIngest({ equipment, instance, now }, b.messages);
-    return NextResponse.json({ acked: r.acked, ...(r.needWebSchema ? { needWebSchema: true } : {}) });
+    // 이 실행 앞 명령 — 처음 보내는 pending 과, sent 인데 결과가 없어 다시 보내는 것(cmd_result 를 먼저 저장한 뒤라 받은 것은 빠진다)
+    const commands = await commandsForPost(equipment, instance, new Date());
+    return NextResponse.json({
+      acked: r.acked,
+      ...(commands.length ? { commands } : {}),
+      ...(r.needWebSchema ? { needWebSchema: true } : {}),
+    });
   } catch (e) {
     console.error("[ops2/ingest]", equipment, sqlState(e) ?? "-", (e as Error)?.message?.slice(0, 300));
     return NextResponse.json({ error: "server error" }, { status: 500 });

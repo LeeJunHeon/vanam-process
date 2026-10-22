@@ -2,14 +2,16 @@
 
 // 장비 관리(v2) — 챔버K v2 장비 연결 확인(관리자만). 3 s 마다 갱신.
 // 장비 목록(주인 실행·마지막 연락·시계 차·최근 409 …)과 고른 장비의 최근 기록, 주인 비우기(강제 인수).
-// 담당자 지정·토큰 교체는 W-3 에서 이 화면에 더한다.
+// 장비(기준 ID)별 담당자 추가·삭제, 장비별 명령 SSE 연결, 명령 목록(보낸 길·횟수·결과까지 시간·결과 모름).
+// 명령 버튼은 두지 않는다(W-3). 토큰 교체는 W-3 에서 이 화면에 더한다.
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Cpu, RefreshCw, Unlock } from "lucide-react";
+import { AlertTriangle, Cpu, RefreshCw, Unlock, UserPlus, X } from "lucide-react";
 import { fmtKst } from "@/lib/ops2/time";
 
 type Device = {
   equipment: string; label: string | null; enabled: boolean; hasToken: boolean;
   holderInstance: string | null; holderSeenAt: string | null;
+  sse: { instance: string; connectedAt: string }[];
   conflictInstance: string | null; conflictAt: string | null;
   runMode: string | null; writesAllowed: boolean | null; program: string | null; version: string | null;
   configVersion: number | null; webConfigVersion: number | null; webSchemaHash: string | null; hasWebSchema: boolean;
@@ -26,8 +28,12 @@ type Ev = { msgId: string; ts: string; level: string; code: string; message: str
 type Run = { runId: string; instance: string; name: string | null; recipeName: string | null; startedBy: string | null;
              stepNo: number | null; startedAt: string | null; endedAt: string | null; result: string | null;
              reasonCode: string | null };
-type Cmd = { id: string; origin: string; kind: string; status: string; reasonCode: string | null;
-             requestedBy: string; requestedAt: string; resultAt: string | null };
+type Cmd = { id: string; origin: string; kind: string; status: string; reasonCode: string | null; detail: string | null;
+             requestedBy: string; requestedAt: string; resultAt: string | null; targetInstance: string | null;
+             sentVia: string | null; sentAt: string | null; lastSentAt: string | null; sendCount: number;
+             expiresAtServer: string | null };
+type Operator = { equipment: string; employeeId: number; name: string | null; active: boolean; createdBy: string };
+type Employee = { id: number; name: string; email: string | null; processOwner: boolean };
 type Bad = { id: string; instance: string | null; receivedAt: string; reason: string };
 type Overview = {
   devices: Device[]; leaseSec: number;
@@ -35,6 +41,7 @@ type Overview = {
 };
 
 const SKEW_WARN_MS = 3_000;
+const UNKNOWN_AFTER_MS = 60_000;     // sent 인데 만료 + 이만큼 지나도 결과가 없으면 "결과 모름"
 const LEVEL_TONE: Record<string, string> = { error: "text-rose-600", warn: "text-amber-600", info: "text-gray-500" };
 
 const short = (s?: string | null, n = 8) => (s ? s.slice(0, n) : "-");
@@ -83,6 +90,46 @@ export default function Ops2AdminPage() {
     return () => { clearTimeout(first); clearInterval(t); };
   }, [load]);
 
+  // 담당자 — 바뀔 때만 다시 읽는다
+  const [ops, setOps] = useState<{ equipments: string[]; operators: Operator[] } | null>(null);
+  const [people, setPeople] = useState<Employee[]>([]);
+  const [pick, setPick] = useState<Record<string, string>>({});
+  const loadOps = useCallback(async () => {
+    try {
+      const [o, e] = await Promise.all([
+        fetch("/api/ops2/admin/operators", { cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/ops2/admin/employees", { cache: "no-store" }).then((r) => r.json()),
+      ]);
+      if (Array.isArray(o?.operators)) setOps(o);
+      if (Array.isArray(e?.employees)) setPeople(e.employees);
+    } catch {
+      setMsg("담당자 목록을 불러오지 못했습니다.");
+    }
+  }, []);
+  useEffect(() => {
+    const first = setTimeout(loadOps, 0);
+    return () => clearTimeout(first);
+  }, [loadOps]);
+
+  const changeOperator = async (method: "POST" | "DELETE", equipment: string, employeeId: number) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = method === "POST"
+        ? await fetch("/api/ops2/admin/operators", {
+            method, headers: { "Content-Type": "application/json" }, body: JSON.stringify({ equipment, employeeId }),
+          })
+        : await fetch(`/api/ops2/admin/operators?equipment=${encodeURIComponent(equipment)}&employeeId=${employeeId}`, { method });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) setMsg(j?.error ?? "실패했습니다.");
+    } catch {
+      setMsg("실패했습니다.");
+    } finally {
+      setBusy(false);
+      loadOps();
+    }
+  };
+
   const release = async (equipment: string) => {
     setBusy(true);
     setMsg(null);
@@ -122,7 +169,7 @@ export default function Ops2AdminPage() {
                 <th className="py-1 pr-3">장비</th><th className="pr-3">모드</th><th className="pr-3">버전</th>
                 <th className="pr-3">주인 실행</th><th className="pr-3">마지막 연락</th><th className="pr-3">시계 차</th>
                 <th className="pr-3">쓰기</th><th className="pr-3">설정(장비/웹)</th><th className="pr-3">묶음</th>
-                <th className="pr-3">최근 409</th><th>토큰</th>
+                <th className="pr-3">최근 409</th><th className="pr-3">명령 연결(SSE)</th><th>토큰</th>
               </tr>
             </thead>
             <tbody>
@@ -161,6 +208,15 @@ export default function Ops2AdminPage() {
                         ? <span className="text-amber-600"><span className="font-mono">{short(d.conflictInstance)}</span> · {agoSec(d.conflictAt, now)}</span>
                         : "-"}
                     </td>
+                    <td className="pr-3">
+                      {d.sse.length
+                        ? d.sse.map((s) => (
+                            <span key={s.instance} className="mr-2">
+                              <span className="font-mono">{short(s.instance)}</span> · {agoSec(s.connectedAt, now)}부터
+                            </span>
+                          ))
+                        : <span className="text-gray-400">없음</span>}
+                    </td>
                     <td>{d.hasToken ? "있음" : <span className="text-rose-500">없음</span>}</td>
                   </tr>
                 );
@@ -169,6 +225,53 @@ export default function Ops2AdminPage() {
           </table>
         </div>
         <p className="mt-2 text-[11px] text-gray-400">줄을 누르면 그 장비의 최근 기록이 아래에 나옵니다.</p>
+      </Card>
+
+      <Card title="장비 담당자 (기준 장비 ID — CHK2 담당자는 CHK2-SIM 도 조작. 관리자는 모든 장비)">
+        <div className="space-y-2">
+          {(ops?.equipments ?? []).map((eq) => {
+            const list = (ops?.operators ?? []).filter((o) => o.equipment === eq);
+            const taken = new Set(list.map((o) => o.employeeId));
+            return (
+              <div key={eq} className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="w-16 shrink-0 font-semibold text-gray-700">{eq}</span>
+                {list.map((o) => (
+                  <span key={o.employeeId} className="flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5">
+                    {o.name ?? `#${o.employeeId}`}{!o.active && <span className="text-rose-500">(퇴사)</span>}
+                    <button
+                      onClick={() => changeOperator("DELETE", eq, o.employeeId)}
+                      disabled={busy}
+                      title="담당자에서 빼기"
+                      className="text-gray-400 hover:text-rose-600 disabled:opacity-40"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+                {!list.length && <span className="text-gray-400">없음</span>}
+                <select
+                  value={pick[eq] ?? ""}
+                  onChange={(e) => setPick((p) => ({ ...p, [eq]: e.target.value }))}
+                  className="ml-1 rounded-lg border border-gray-200 px-1.5 py-1 text-xs"
+                >
+                  <option value="">직원 고르기</option>
+                  {people.filter((p) => !taken.has(p.id)).map((p) => (
+                    <option key={p.id} value={p.id}>{p.processOwner ? "★ " : ""}{p.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => { changeOperator("POST", eq, Number(pick[eq])); setPick((p) => ({ ...p, [eq]: "" })); }}
+                  disabled={busy || !pick[eq]}
+                  className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                >
+                  <UserPlus className="h-3 w-3" /> 추가
+                </button>
+              </div>
+            );
+          })}
+          {!ops?.equipments.length && <p className="text-xs text-gray-400">등록된 장비가 없습니다.</p>}
+          <p className="text-[11px] text-gray-400">★ 공정 담당자. 목록은 재직 중 직원만.</p>
+        </div>
       </Card>
 
       {sel && data?.devices.some((d) => d.equipment === sel) && (
@@ -233,15 +336,31 @@ export default function Ops2AdminPage() {
                   {!data.runs?.length && <li className="text-gray-400">없음</li>}
                 </ul>
               </Card>
-              <Card title="명령 결과 10">
+              <Card title="명령 20 (웹 명령: 보낸 길 × 횟수 · 만들기 → 결과)">
                 <ul className="space-y-1 text-[11px] text-gray-600">
-                  {(data.commands ?? []).map((c) => (
-                    <li key={c.id}>
-                      <span className="font-mono text-gray-400">{fmtKst(c.resultAt ?? c.requestedAt)}</span> {c.kind} ·{" "}
-                      <span className={c.status === "rejected" ? "text-rose-600" : ""}>{c.status}</span>
-                      {c.reasonCode && ` (${c.reasonCode})`} · {c.origin} · {c.requestedBy}
-                    </li>
-                  ))}
+                  {(data.commands ?? []).map((c) => {
+                    const unknown = c.status === "sent" && !!c.expiresAtServer
+                      && now - new Date(c.expiresAtServer).getTime() > UNKNOWN_AFTER_MS;
+                    const took = c.resultAt ? new Date(c.resultAt).getTime() - new Date(c.requestedAt).getTime() : null;
+                    return (
+                      <li key={c.id}>
+                        <span className="font-mono text-gray-400">{fmtKst(c.requestedAt)}</span> {c.kind} ·{" "}
+                        <span className={c.status === "rejected" || unknown ? "font-semibold text-rose-600"
+                          : c.status === "expired" ? "text-amber-600" : c.status === "accepted" ? "text-emerald-600" : ""}>
+                          {unknown ? "결과 모름" : c.status}
+                        </span>
+                        {c.reasonCode && ` (${c.reasonCode})`}
+                        {c.origin === "web" && (
+                          <>
+                            {" · "}{c.sentVia ? `${c.sentVia} × ${c.sendCount}` : "안 보냄"}
+                            {took !== null && ` · ${took.toLocaleString()} ms`}
+                          </>
+                        )}
+                        {" · "}{c.origin} · {c.requestedBy}
+                        {c.detail && <span className="text-gray-400"> · {c.detail}</span>}
+                      </li>
+                    );
+                  })}
                   {!data.commands?.length && <li className="text-gray-400">없음</li>}
                 </ul>
               </Card>

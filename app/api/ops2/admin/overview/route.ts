@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { ops2Db } from "@/lib/ops2/db";
 import { isAdminSession, requireSession } from "@/lib/auth-helpers";
 import { LEASE_MS } from "@/lib/ops2/ingest";
+import { connections } from "@/lib/ops2/hub";
+import { expireDue } from "@/lib/ops2/commands";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // GET /api/ops2/admin/overview[?equipment=CHK2] — 장비 관리(v2) 화면(관리자만).
-// 장비 목록 + 고른 장비의 최신 state 요약·사건·run·명령 결과·받지 못한 메시지·1분 요약 수.
+// 장비 목록(+ SSE 연결) + 고른 장비의 최신 state 요약·사건·run·명령 결과·받지 못한 메시지·1분 요약 수.
 export async function GET(req: NextRequest) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
@@ -15,6 +17,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "관리자만 볼 수 있습니다." }, { status: 403 });
   }
 
+  await expireDue(null, new Date());       // 장비가 끊겨 ingest 가 없어도 만료가 보이게
   const rows = await ops2Db.ops2Device.findMany({ orderBy: { equipment: "asc" } });
   const schemas = new Set((await ops2Db.ops2WebSchema.findMany({
     where: { hash: { in: rows.map((d) => d.webSchemaHash).filter((h): h is string => !!h) } },
@@ -23,6 +26,7 @@ export async function GET(req: NextRequest) {
   const bases = await ops2Db.ops2ConfigVersion.groupBy({ by: ["equipment"], _max: { version: true } });
   const baseOf = new Map(bases.map((b) => [b.equipment, b._max.version]));
 
+  const sse = connections();
   const devices = rows.map((d) => ({
     equipment: d.equipment, label: d.label, enabled: d.enabled, hasToken: !!d.tokenHash,
     holderInstance: d.holderInstance, holderSeenAt: d.holderSeenAt,
@@ -31,6 +35,7 @@ export async function GET(req: NextRequest) {
     configVersion: d.configVersion, webConfigVersion: baseOf.get(d.equipment) ?? null,
     webSchemaHash: d.webSchemaHash, hasWebSchema: !!d.webSchemaHash && schemas.has(d.webSchemaHash),
     clockSkewMs: d.clockSkewMs, lastHelloAt: d.lastHelloAt, lastSeenAt: d.lastSeenAt,
+    sse: sse[d.equipment] ?? [],
   }));
 
   const equipment = req.nextUrl.searchParams.get("equipment");
@@ -45,9 +50,10 @@ export async function GET(req: NextRequest) {
                 startedAt: true, endedAt: true, result: true, reasonCode: true },
     }),
     ops2Db.ops2Command.findMany({
-      where: { equipment }, orderBy: { requestedAt: "desc" }, take: 10,
-      select: { id: true, origin: true, kind: true, status: true, reasonCode: true, requestedBy: true,
-                requestedAt: true, resultAt: true },
+      where: { equipment }, orderBy: { requestedAt: "desc" }, take: 20,
+      select: { id: true, origin: true, kind: true, status: true, reasonCode: true, detail: true, requestedBy: true,
+                requestedAt: true, resultAt: true, targetInstance: true, sentVia: true, sentAt: true,
+                lastSentAt: true, sendCount: true, expiresAtServer: true },
     }),
     ops2Db.ops2BadMessage.findMany({
       where: { equipment }, orderBy: { receivedAt: "desc" }, take: 10,

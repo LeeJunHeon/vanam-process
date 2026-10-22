@@ -10,6 +10,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { ops2Db } from "@/lib/ops2/db";
+import { closeOthers } from "@/lib/ops2/hub";
 
 export const LEASE_MS = 30_000;
 const SCHEMA_RETRY_MS = 10 * 60_000;   // 해시가 다른 webSchema 를 받은 뒤 다시 달라고 하지 않는 시간
@@ -140,6 +141,7 @@ export async function claimLease(equipment: string, instance: string, now: Date)
     RETURNING (SELECT holder_instance FROM prev) AS prev, (SELECT holder_seen_at FROM prev) AS prev_seen`;
   if (won.length) {
     const { prev, prev_seen } = won[0];
+    closeOthers(equipment, instance);                  // 주인이 바뀌었으면(넘겨받음·주인 비우기 뒤) 다른 실행의 SSE 를 닫는다
     if (prev && prev !== instance) {
       const silentSec = prev_seen ? Math.round((now.getTime() - prev_seen.getTime()) / 1000) : null;
       await ops2Db.ops2Event.create({
@@ -200,6 +202,11 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<string[]> 
       writesAllowed: typeof d.writesAllowed === "boolean" ? d.writesAllowed : null,
       helloAt: now, lastSeenAt: now,
     };
+    // 다른 실행 앞으로 만든 pending 은 보내지 않는다(sent 는 그대로 — 그 실행의 cmd_result 가 보관함에서 늦게 올 수 있음)
+    await tx.ops2Command.updateMany({
+      where: { equipment, status: "pending", NOT: { targetInstance: h.instance } },
+      data: { status: "expired", reasonCode: "INSTANCE_CHANGED", resultAt: now },
+    });
     await tx.ops2Instance.upsert({
       where: { instance: h.instance },
       create: { instance: h.instance, equipment, firstSeenAt: now, ...fields },

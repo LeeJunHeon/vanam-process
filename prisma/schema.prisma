@@ -495,7 +495,9 @@ model Ops2Command {
   expiresAt       DateTime? @map("expires_at") @db.Timestamptz(6) // 장비 시계 기준
   expiresAtServer DateTime? @map("expires_at_server") @db.Timestamptz(6)
   status          String
-  sentAt          DateTime? @map("sent_at") @db.Timestamptz(6)
+  sentAt          DateTime? @map("sent_at") @db.Timestamptz(6) // 처음 보낸 시각
+  lastSentAt      DateTime? @map("last_sent_at") @db.Timestamptz(6)
+  sendCount       Int       @default(0) @map("send_count")
   sentVia         String?   @map("sent_via")
   resultAt        DateTime? @map("result_at") @db.Timestamptz(6)
   reasonCode      String?   @map("reason_code")
@@ -545,5 +547,18 @@ model Ops2BadMessage {
   raw        String?
 
   @@map("ops2_bad_message")
+  @@schema("process")
+}
+
+// 장비 담당자 — equipment 는 기준 장비 ID(-SIM 을 뗀 것, 예 CHK2). employee_id = hr.employees.id(FK 없음)
+model Ops2Operator {
+  equipment  String
+  employeeId Int      @map("employee_id")
+  createdBy  String   @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([equipment, employeeId])
+  @@index([employeeId])
+  @@map("ops2_operator")
   @@schema("process")
 }
