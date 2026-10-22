@@ -27,6 +27,7 @@ export default auth((req: NextRequest & { auth: any }) => {
   // 장비 리포터 수집 API — 세션이 아닌 Bearer 토큰(OPS_INGEST_TOKEN) 인증.
   // route 핸들러가 자체 검증하므로 미들웨어 세션 검사에서 제외한다.
   if (pathname === "/api/ops/ingest") return NextResponse.next();
+  if (pathname.startsWith("/api/ops2/uplink/")) return NextResponse.next(); // 챔버K v2 장비 연결 — 장비별 토큰
 
   // /api/* 미인증 시 401 JSON
   if (pathname.startsWith("/api/")) {

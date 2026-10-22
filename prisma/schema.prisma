@@ -325,3 +325,260 @@ model OpsRecipe {
   @@map("ops_recipe")
   @@schema("process")
 }
+
+// ───────────────────────────────────────────────
+// 챔버K v2 장비 연결(ops2) — 계약은 v2 common/messages.py.
+// v1(ops_*)과 따로 둔다. 표는 prisma/sql/2026-10-22_ops2.sql 로 만든다.
+// 시각은 모두 UTC. ts = 장비 시계, receivedAt = 웹이 받은 시각.
+// ───────────────────────────────────────────────
+
+// 장비 등록·연결 상태. 토큰은 sha256 해시만(장비 ID 에 묶음).
+// holder = 지금 받아 주는 실행(lease: 30 s 넘게 조용하면 다른 실행이 넘겨받는다)
+model Ops2Device {
+  equipment      String    @id
+  tokenHash      String    @map("token_hash")
+  label          String?
+  enabled        Boolean   @default(true)
+  holderInstance String?   @map("holder_instance")
+  holderSeenAt   DateTime? @map("holder_seen_at")
+  runMode        String?   @map("run_mode")
+  writesAllowed  Boolean?  @map("writes_allowed")
+  program        String?
+  version        String?
+  schemaHash     String?   @map("schema_hash")
+  webSchemaHash  String?   @map("web_schema_hash")
+  configVersion  Int?      @map("config_version")
+  clockSkewMs    Int?      @map("clock_skew_ms") // 장비 시계 − 웹 시계
+  clockCheckedAt DateTime? @map("clock_checked_at")
+  lastHello      Json?     @map("last_hello")
+  lastSeenAt     DateTime? @map("last_seen_at") // 마지막으로 받아 준 ingest
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@map("ops2_device")
+  @@schema("process")
+}
+
+// 실행(프로그램을 켤 때마다 새 instance) 이력
+model Ops2Instance {
+  instance    String   @id
+  equipment   String
+  program     String?
+  version     String?
+  runMode     String?  @map("run_mode")
+  firstSeenAt DateTime @map("first_seen_at")
+  lastSeenAt  DateTime @map("last_seen_at")
+  hello       Json?
+
+  @@index([equipment, firstSeenAt])
+  @@map("ops2_instance")
+  @@schema("process")
+}
+
+// 최신 state 하나(POST 마다 배치의 마지막 것)
+model Ops2State {
+  equipment  String   @id
+  instance   String
+  msgId      String?  @map("msg_id")
+  ts         DateTime
+  receivedAt DateTime @map("received_at")
+  data       Json
+
+  @@map("ops2_state")
+  @@schema("process")
+}
+
+// 웹 설정 내보내기 묶음(web_schema.bundle) — 해시별 한 번
+model Ops2WebSchema {
+  hash            String   @id
+  version         Int?
+  paramSchemaHash String?  @map("param_schema_hash")
+  configVersion   Int?     @map("config_version")
+  bundle          Json
+  firstEquipment  String   @map("first_equipment")
+  receivedAt      DateTime @map("received_at")
+
+  @@map("ops2_web_schema")
+  @@schema("process")
+}
+
+// 공정(행 단위) — run_start ~ run_end. run_end 가 먼저 와도 행을 만든다.
+model Ops2Run {
+  equipment     String
+  runId         String    @map("run_id")
+  instance      String
+  startMsgId    String?   @unique @map("start_msg_id")
+  endMsgId      String?   @unique @map("end_msg_id")
+  recipeName    String?   @map("recipe_name")
+  startedBy     String?   @map("started_by")
+  name          String?
+  stepNo        Int?      @map("step_no")
+  params        Json?
+  blocks        Json?
+  configVersion Int?      @map("config_version")
+  startedAt     DateTime? @map("started_at")
+  endedAt       DateTime? @map("ended_at")
+  result        String?
+  reasonCode    String?   @map("reason_code")
+  summary       Json?
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@id([equipment, runId])
+  @@index([equipment, startedAt])
+  @@index([equipment, instance, startedAt])
+  @@map("ops2_run")
+  @@schema("process")
+}
+
+// 사건(event). 웹이 만든 것(INSTANCE_TAKEOVER 등)은 source "web", msg_id "web-…"
+model Ops2Event {
+  msgId      String    @id @map("msg_id")
+  equipment  String
+  instance   String
+  seq        Int?
+  runId      String?   @map("run_id")
+  ts         DateTime
+  receivedAt DateTime  @map("received_at")
+  level      String
+  code       String
+  ruleId     String?   @map("rule_id")
+  message    String
+  source     String?
+  kind       String?
+  context    Json?
+  ackedBy    String?   @map("acked_by")
+  ackedAt    DateTime? @map("acked_at")
+
+  @@index([equipment, ts])
+  @@index([equipment, runId])
+  @@index([equipment, level, ackedAt])
+  @@map("ops2_event")
+  @@schema("process")
+}
+
+// 1분(UPLINK_SUMMARY_PERIOD_SEC) 요약
+model Ops2Summary {
+  msgId      String   @id @map("msg_id")
+  equipment  String
+  instance   String
+  fromTs     DateTime @map("from_ts")
+  toTs       DateTime @map("to_ts")
+  rows       Int
+  vals       Json
+  quality    Json
+  receivedAt DateTime @map("received_at")
+
+  @@unique([equipment, instance, fromTs])
+  @@index([equipment, fromTs])
+  @@map("ops2_summary")
+  @@schema("process")
+}
+
+// cmd_result 원본(web·hmi 모두). 명령 표 반영은 W-2
+model Ops2CmdResult {
+  msgId       String   @id @map("msg_id")
+  equipment   String
+  instance    String
+  seq         Int?
+  ts          DateTime
+  receivedAt  DateTime @map("received_at")
+  cmdId       String?  @map("cmd_id")
+  kind        String
+  status      String
+  reasonCode  String?  @map("reason_code")
+  source      String?
+  requestedBy String?  @map("requested_by")
+  detail      String?
+
+  @@index([equipment, ts])
+  @@index([cmdId])
+  @@map("ops2_cmd_result")
+  @@schema("process")
+}
+
+// 명령. origin web = 웹이 만든 것(W-2), hmi = 노트북에서 실행된 것(cmd_result 로 알게 됨)
+// status: pending → sent → accepted / rejected, 또는 expired
+model Ops2Command {
+  id              String    @id
+  equipment       String
+  targetInstance  String?   @map("target_instance")
+  origin          String
+  kind            String
+  args            Json      @default("{}")
+  label           String?
+  requestedBy     String    @map("requested_by")
+  requestedAt     DateTime  @map("requested_at")
+  expiresAt       DateTime? @map("expires_at") // 장비 시계 기준
+  expiresAtServer DateTime? @map("expires_at_server")
+  status          String
+  sentAt          DateTime? @map("sent_at")
+  sentVia         String?   @map("sent_via")
+  resultAt        DateTime? @map("result_at")
+  reasonCode      String?   @map("reason_code")
+  detail          String?
+  resultMsgId     String?   @unique @map("result_msg_id")
+  localCmdId      String?   @map("local_cmd_id") // hmi: 노트북 화면이 붙인 id
+
+  @@index([equipment, status])
+  @@index([equipment, requestedAt])
+  @@map("ops2_command")
+  @@schema("process")
+}
+
+// config_ack 원본. 설정 버전 반영은 W-5
+model Ops2ConfigAck {
+  msgId       String   @id @map("msg_id")
+  equipment   String
+  instance    String
+  ts          DateTime
+  receivedAt  DateTime @map("received_at")
+  version     Int?
+  status      String
+  reasonCode  String?  @map("reason_code")
+  kind        String?
+  requestedBy String?  @map("requested_by")
+  data        Json
+
+  @@index([equipment, version])
+  @@map("ops2_config_ack")
+  @@schema("process")
+}
+
+// 설정 버전(웹이 값의 원본). kind: import / apply / rollback — W-5 에서 쓴다
+model Ops2ConfigVersion {
+  equipment       String
+  version         Int
+  kind            String
+  vals            Json
+  paramSchemaHash String?   @map("param_schema_hash")
+  createdBy       String    @map("created_by")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  note            String?
+  cmdId           String?   @map("cmd_id")
+  ackStatus       String?   @map("ack_status")
+  ackAt           DateTime? @map("ack_at")
+  reasonCode      String?   @map("reason_code")
+  errors          Json?
+  appliedKeys     Json?     @map("applied_keys")
+  pendingKeys     Json?     @map("pending_keys")
+  overriddenKeys  Json?     @map("overridden_keys")
+  changes         Json?
+  ackMsgId        String?   @unique @map("ack_msg_id")
+
+  @@id([equipment, version])
+  @@map("ops2_config_version")
+  @@schema("process")
+}
+
+// 형식이 틀린 envelope — 넣고 ack 한다(안 하면 장비가 계속 다시 보냄)
+model Ops2BadMessage {
+  id         String   @id
+  equipment  String
+  instance   String?
+  receivedAt DateTime @map("received_at")
+  error      String
+  raw        Json?
+
+  @@index([equipment, receivedAt])
+  @@map("ops2_bad_message")
+  @@schema("process")
+}
