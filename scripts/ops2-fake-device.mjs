@@ -8,6 +8,9 @@
 //   bad              틀린 envelope 이 섞인 묶음
 //   big [바이트]     상한보다 큰 본문(기본 2.2 MB) → 413
 //   bench [개수]     메시지 N 개(기본 500) 한 묶음 처리 시간
+//   nul              문자열(키·값)에 NUL 이 든 사건·state → 지운 채 저장
+//   check            정수 범위·시각 범위 검사(seq 2147483648·1800년 → bad, stepNo 범위 밖 → null)
+//   fault [코드] [개수]  사건 N 개(기본 500) 중 하나의 code 를 바꿔 두 번 보낸다(로컬 DB 시험용 트리거와 함께)
 //   post [장비 ID]   빈 묶음 하나(인증·lease 확인용)
 // 토큰은 화면에 찍지 않는다.
 import { randomUUID } from "node:crypto";
@@ -123,6 +126,39 @@ const scenarios = {
     msgs.push(state());
     show(`bench ${n}(새것)`, await post(msgs));
     show(`bench ${n}(같은 것 다시)`, await post(msgs));
+  },
+
+  async nul() {
+    const ev = env("event", { level: "info", code: "FAKE_NUL", message: "NUL\u0000 사건",
+                              context: { source: "fake", kind: "nul", "k\u0000ey": "v\u0000al", data: { s: "a\u0000b" } } });
+    const st = env("state", { procState: "IDLE", snapshot: { seq: 1, note: "x\u0000y" }, alarms: [], uplink: {} });
+    console.log(`event ${ev.id} · state ${st.id} — 문자열에 NUL`);
+    show("nul", await post([ev, st]));
+  },
+
+  async check() {
+    const bigSeq = { ...env("event", { level: "info", code: "FAKE_CHECK", message: "seq 범위 밖" }), seq: 2147483648 };
+    const oldTs = { ...env("event", { level: "info", code: "FAKE_CHECK", message: "1800년" }), ts: "1800-01-01T00:00:00Z" };
+    const runId = `rc${uid().slice(0, 10)}`;
+    const run = env("run_start", { runId, name: "stepNo 범위 밖", stepNo: 2147483648, params: {}, configVersion: 0 });
+    const good = env("event", { level: "info", code: "FAKE_CHECK", message: "정상" });
+    console.log(`bad 기대 ${bigSeq.id}·${oldTs.id} · run ${runId}(stepNo null 기대) · 정상 ${good.id}`);
+    show("check", await post([bigSeq, oldTs, run, good]));
+    show("run_end", await post([env("run_end", { runId, result: "done", summary: {} })]));
+  },
+
+  // fault [코드] [개수] — 사건 N 개 중 하나(가운데)의 code 를 바꾼다(로컬 시험용 트리거와 함께). 같은 묶음을 두 번 보낸다.
+  async fault(code = "FAULT_TEST", count = "500") {
+    const n = Number(count);
+    const inst = `fake-fault-${uid().slice(0, 8)}`;
+    const msgs = [];
+    for (let i = 0; i < n; i++) {
+      msgs.push(env("event", { level: "info", code: i === Math.floor(n / 2) ? code : "FAKE_FAULT", message: `fault ${i}` },
+                    Date.now(), inst));
+    }
+    console.log(`instance ${inst} · 사건 ${n}개 중 1개 ${code}`);
+    show("1차", await post(msgs));
+    show("같은 묶음 다시", await post(msgs));
   },
 
   async post(equipment = EQUIPMENT) {

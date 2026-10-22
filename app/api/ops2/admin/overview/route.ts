@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { ops2Db } from "@/lib/ops2/db";
 import { isAdminSession, requireSession } from "@/lib/auth-helpers";
 import { LEASE_MS } from "@/lib/ops2/ingest";
 
@@ -15,12 +15,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "관리자만 볼 수 있습니다." }, { status: 403 });
   }
 
-  const rows = await prisma.ops2Device.findMany({ orderBy: { equipment: "asc" } });
-  const schemas = new Set((await prisma.ops2WebSchema.findMany({
+  const rows = await ops2Db.ops2Device.findMany({ orderBy: { equipment: "asc" } });
+  const schemas = new Set((await ops2Db.ops2WebSchema.findMany({
     where: { hash: { in: rows.map((d) => d.webSchemaHash).filter((h): h is string => !!h) } },
     select: { hash: true },
   })).map((s) => s.hash));
-  const bases = await prisma.ops2ConfigVersion.groupBy({ by: ["equipment"], _max: { version: true } });
+  const bases = await ops2Db.ops2ConfigVersion.groupBy({ by: ["equipment"], _max: { version: true } });
   const baseOf = new Map(bases.map((b) => [b.equipment, b._max.version]));
 
   const devices = rows.map((d) => ({
@@ -37,23 +37,23 @@ export async function GET(req: NextRequest) {
   if (!equipment) return NextResponse.json({ devices, leaseSec: LEASE_MS / 1000 });
 
   const [state, events, runs, commands, bad, summaryCount] = await Promise.all([
-    prisma.ops2State.findUnique({ where: { equipment } }),
-    prisma.ops2Event.findMany({ where: { equipment }, orderBy: [{ ts: "desc" }, { seq: "desc" }], take: 30 }),
-    prisma.ops2Run.findMany({
+    ops2Db.ops2State.findUnique({ where: { equipment } }),
+    ops2Db.ops2Event.findMany({ where: { equipment }, orderBy: [{ ts: "desc" }, { seq: "desc" }], take: 30 }),
+    ops2Db.ops2Run.findMany({
       where: { equipment }, orderBy: { startedAt: { sort: "desc", nulls: "first" } }, take: 10,
       select: { runId: true, instance: true, name: true, recipeName: true, startedBy: true, stepNo: true,
                 startedAt: true, endedAt: true, result: true, reasonCode: true },
     }),
-    prisma.ops2Command.findMany({
+    ops2Db.ops2Command.findMany({
       where: { equipment }, orderBy: { requestedAt: "desc" }, take: 10,
       select: { id: true, origin: true, kind: true, status: true, reasonCode: true, requestedBy: true,
                 requestedAt: true, resultAt: true },
     }),
-    prisma.ops2BadMessage.findMany({
+    ops2Db.ops2BadMessage.findMany({
       where: { equipment }, orderBy: { receivedAt: "desc" }, take: 10,
       select: { id: true, instance: true, receivedAt: true, reason: true },
     }),
-    prisma.ops2Summary.count({ where: { equipment } }),
+    ops2Db.ops2Summary.count({ where: { equipment } }),
   ]);
 
   // state 는 요약만(전체 행은 크다)

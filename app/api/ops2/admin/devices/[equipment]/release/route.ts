@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import { ops2Db } from "@/lib/ops2/db";
 import { isAdminSession, requireSession } from "@/lib/auth-helpers";
 
 export const runtime = "nodejs";
@@ -18,7 +18,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ eq
   const who = auth.session.user?.email ?? auth.session.user?.name ?? "unknown";
   const now = new Date();
 
-  const prev = await prisma.$transaction(async (tx) => {
+  const prev = await ops2Db.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<{ holder_instance: string | null }[]>`
       SELECT holder_instance FROM "process"."ops2_device" WHERE equipment = ${equipment} FOR UPDATE`;
     if (!rows.length) return undefined;

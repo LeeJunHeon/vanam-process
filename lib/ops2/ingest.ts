@@ -4,10 +4,12 @@
 // - 배치 하나 = 트랜잭션 하나, 받은 순서대로. 표마다 한 번에 넣는다(메시지마다 왕복하지 않음).
 //   같은 id 는 한 번만 저장(msg_id PK·UNIQUE), 이미 있던 것도 acked. 뒤따르는 처리는 새로 들어간 것에만.
 // - 받지 못하는 envelope 은 ops2_bad_message 에 넣고 ack(안 하면 장비가 계속 다시 보낸다).
-// - 배치가 실패하면 하나씩 따로 — 혼자서도 실패하는 것은 bad_message 로(하나 때문에 보관함이 막히지 않게).
+// - 배치가 데이터 오류(SQLSTATE 22xxx·23xxx)로 실패하면 하나씩 따로 — 혼자서도 데이터 오류인 것만 bad_message 로
+//   (하나 때문에 보관함이 막히지 않게). 그 밖(연결 끊김·시간 초과·직렬화 충돌 …)은 버리지 않고 500(장비가 다시 보낸다).
+// - 이미 bad_message 에 있는 id 는 다시 처리하지 않고 바로 acked(같은 묶음이 다시 와도 빠르게).
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@/app/generated/prisma/client";
-import { prisma } from "@/lib/prisma";
+import { ops2Db } from "@/lib/ops2/db";
 
 export const LEASE_MS = 30_000;
 const SCHEMA_RETRY_MS = 10 * 60_000;   // 해시가 다른 webSchema 를 받은 뒤 다시 달라고 하지 않는 시간
@@ -26,15 +28,40 @@ type Bad = { id: string; ackId: string | null; instance: string | null; reason: 
 
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
 const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
-const int = (v: unknown): number | null => (typeof v === "number" && Number.isInteger(v) ? v : null);
+// 정수 칸은 int4 — 범위 밖이면 null(필수 칸이면 bad).
+const int = (v: unknown): number | null =>
+  typeof v === "number" && Number.isInteger(v) && v >= -2147483648 && v <= 2147483647 ? v : null;
 const json = (v: unknown) => v as Prisma.InputJsonValue;
 const webId = () => `web-${randomUUID().replace(/-/g, "")}`;
 
+// 시각은 1900~2200년 안만(밖이면 null — 필수 칸이면 bad).
+const TS_MIN = Date.UTC(1900, 0, 1);
+const TS_MAX = Date.UTC(2200, 0, 1);
 function parseIso(v: unknown): Date | null {
   if (typeof v !== "string" || !v) return null;
   const t = Date.parse(v);
-  return Number.isFinite(t) ? new Date(t) : null;
+  return Number.isFinite(t) && t >= TS_MIN && t < TS_MAX ? new Date(t) : null;
 }
+
+/** 문자열(객체 키 포함)의 NUL(\u0000)을 지운다 — text·jsonb 가 받지 못해 묶음 전체가 실패하므로. JSON.parse 직후에. */
+export function stripNul(v: unknown): unknown {
+  if (typeof v === "string") return v.includes("\u0000") ? v.replaceAll("\u0000", "") : v;
+  if (Array.isArray(v)) return v.map(stripNul);
+  if (isObj(v)) {
+    const out: Obj = {};
+    for (const [k, x] of Object.entries(v)) out[k.includes("\u0000") ? k.replaceAll("\u0000", "") : k] = stripNul(x);
+    return out;
+  }
+  return v;
+}
+
+/** Prisma·드라이버 어댑터 오류의 SQLSTATE(없으면 null — 연결 끊김·시간 초과 등). */
+export function sqlState(e: unknown): string | null {
+  const x = e as { cause?: { originalCode?: unknown }; meta?: { driverAdapterError?: { cause?: { originalCode?: unknown } } } };
+  const c = x?.cause?.originalCode ?? x?.meta?.driverAdapterError?.cause?.originalCode;
+  return typeof c === "string" ? c : null;
+}
+const isDataError = (code: string | null) => !!code && /^2[23][0-9A-Z]{3}$/.test(code);
 
 // type 별로 저장에 꼭 필요한 것만 본다(계약의 required 중 장비가 null 을 보내기도 하는 것 — id 없는
 // 노트북 명령의 cmd_result.cmdId 등 — 은 허용).
@@ -74,9 +101,9 @@ export function parseEnvelope(raw: unknown, equipment: string): { env: Envelope 
   const instance = str(raw.instance);
   if (!instance) return fail("instance 없음");
   const seq = int(raw.seq);
-  if (seq === null) return fail("seq 형식(정수)");
+  if (seq === null) return fail("seq 형식(int32 정수)");
   const ts = parseIso(raw.ts);
-  if (!ts) return fail("ts 형식(ISO)");
+  if (!ts) return fail("ts 형식(ISO, 1900~2200년)");
   const type = str(raw.type);
   const req = type ? REQUIRED[type] : undefined;
   if (!type || !req) return fail(`모르는 type ${String(raw.type).slice(0, 40)}`);
@@ -103,7 +130,7 @@ export type Lease =
 /** 조건부 UPDATE 한 문장 — 동시에 와도 주인은 하나(경합하면 PostgreSQL 이 바뀐 행으로 조건을 다시 본다). */
 export async function claimLease(equipment: string, instance: string, now: Date): Promise<Lease> {
   const stale = new Date(now.getTime() - LEASE_MS);
-  const won = await prisma.$queryRaw<{ prev: string | null; prev_seen: Date | null }[]>`
+  const won = await ops2Db.$queryRaw<{ prev: string | null; prev_seen: Date | null }[]>`
     WITH prev AS (SELECT holder_instance, holder_seen_at FROM "process"."ops2_device" WHERE equipment = ${equipment})
     UPDATE "process"."ops2_device" d
        SET holder_instance = ${instance}, holder_seen_at = ${now}, last_seen_at = ${now}
@@ -115,7 +142,7 @@ export async function claimLease(equipment: string, instance: string, now: Date)
     const { prev, prev_seen } = won[0];
     if (prev && prev !== instance) {
       const silentSec = prev_seen ? Math.round((now.getTime() - prev_seen.getTime()) / 1000) : null;
-      await prisma.ops2Event.create({
+      await ops2Db.ops2Event.create({
         data: {
           msgId: webId(), equipment, instance, seq: 0, ts: now, receivedAt: now, level: "info",
           code: "INSTANCE_TAKEOVER",
@@ -127,7 +154,7 @@ export async function claimLease(equipment: string, instance: string, now: Date)
     return { ok: true, prev, prevSeen: prev_seen };
   }
   // 409 — 사건은 남기지 않는다(장비가 10 s 마다 다시 오므로). 마지막 409 만 장비 행에.
-  const cur = await prisma.$queryRaw<{ holder_instance: string | null; holder_seen_at: Date | null }[]>`
+  const cur = await ops2Db.$queryRaw<{ holder_instance: string | null; holder_seen_at: Date | null }[]>`
     UPDATE "process"."ops2_device" SET conflict_instance = ${instance}, conflict_at = ${now}
      WHERE equipment = ${equipment}
     RETURNING holder_instance, holder_seen_at`;
@@ -399,22 +426,34 @@ const TX_OPTS = { timeout: 10_000, maxWait: 5_000 };
 
 export type IngestResult = { acked: string[]; needWebSchema: boolean; fallback: number };
 
-export async function processIngest(ctx: Ctx, messages: unknown[]): Promise<IngestResult> {
-  let acked: string[];
+export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestResult> {
+  // 이미 bad_message 에 있는 id 는 다시 처리하지 않고 acked
+  const rawIds = [...new Set(all.flatMap((m) => (isObj(m) && typeof m.id === "string" ? [m.id] : [])))];
+  const known = new Set(rawIds.length
+    ? (await ops2Db.ops2BadMessage.findMany({ where: { id: { in: rawIds } }, select: { id: true } })).map((b) => b.id)
+    : []);
+  const messages = known.size ? all.filter((m) => !(isObj(m) && known.has(m.id as string))) : all;
+
+  let acked: string[] = [...known];
   let fallback = 0;
   try {
-    acked = await prisma.$transaction((tx) => applyBatch(tx, ctx, messages), TX_OPTS);
+    acked.push(...await ops2Db.$transaction((tx) => applyBatch(tx, ctx, messages), TX_OPTS));
   } catch (batchErr) {
-    // 하나씩 따로. 혼자서도 실패하면 bad_message 로 넣고 ack — 그것도 실패하면(DB 끊김 등) 던진다(500).
-    console.error("[ops2/ingest] 배치 실패 — 하나씩 처리", ctx.equipment, (batchErr as Error)?.message);
-    acked = [];
+    // 데이터 오류일 때만 하나씩 따로. 혼자서도 데이터 오류면 bad_message 로 넣고 ack.
+    // 그 밖(연결 끊김·시간 초과·40001·40P01·코드 없음)은 던진다(500 — 장비가 나중에 다시 보낸다).
+    const code = sqlState(batchErr);
+    if (!isDataError(code)) throw batchErr;
+    console.error("[ops2/ingest] 배치 실패 — 하나씩 처리", ctx.equipment, code);
+    acked = [...known];
     for (const raw of messages) {
       try {
-        acked.push(...await prisma.$transaction((tx) => applyBatch(tx, ctx, [raw]), TX_OPTS));
+        acked.push(...await ops2Db.$transaction((tx) => applyBatch(tx, ctx, [raw]), TX_OPTS));
       } catch (e) {
+        const one = sqlState(e);
+        if (!isDataError(one)) throw e;
         fallback += 1;
-        const b = badOf(raw, `처리 실패: ${String((e as Error)?.message ?? e).slice(0, 300)}`);
-        await prisma.ops2BadMessage.createMany({
+        const b = badOf(raw, `처리 실패 SQLSTATE ${one}: ${String((e as Error)?.message ?? e).slice(0, 300)}`);
+        await ops2Db.ops2BadMessage.createMany({
           data: [{ id: b.id, equipment: ctx.equipment, instance: b.instance, receivedAt: ctx.now, reason: b.reason,
                    raw: rawText(raw) }],
           skipDuplicates: true,
@@ -435,8 +474,8 @@ export async function processIngest(ctx: Ctx, messages: unknown[]): Promise<Inge
     const hold = schemaHold.get(hash);
     if (!hold || hold < ctx.now.getTime()) {
       const [ws, base] = await Promise.all([
-        prisma.ops2WebSchema.findUnique({ where: { hash }, select: { hash: true } }),
-        prisma.ops2ConfigVersion.findFirst({ where: { equipment: ctx.equipment }, select: { version: true } }),
+        ops2Db.ops2WebSchema.findUnique({ where: { hash }, select: { hash: true } }),
+        ops2Db.ops2ConfigVersion.findFirst({ where: { equipment: ctx.equipment }, select: { version: true } }),
       ]);
       needWebSchema = !ws || !base;
     }

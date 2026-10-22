@@ -5,7 +5,7 @@
 // 담당자 지정·토큰 교체는 W-3 에서 이 화면에 더한다.
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Cpu, RefreshCw, Unlock } from "lucide-react";
-import { fmtLogTime } from "@/lib/ops";
+import { fmtKst } from "@/lib/ops2/time";
 
 type Device = {
   equipment: string; label: string | null; enabled: boolean; hasToken: boolean;
@@ -41,7 +41,7 @@ const short = (s?: string | null, n = 8) => (s ? s.slice(0, n) : "-");
 function agoSec(iso: string | null, now: number): string {
   if (!iso) return "-";
   const s = Math.max(0, Math.round((now - new Date(iso).getTime()) / 1000));
-  return s < 120 ? `${s}초 전` : s < 7200 ? `${Math.round(s / 60)}분 전` : fmtLogTime(iso);
+  return s < 120 ? `${s}초 전` : s < 7200 ? `${Math.round(s / 60)}분 전` : fmtKst(iso);
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
@@ -178,7 +178,7 @@ export default function Ops2AdminPage() {
               {st ? (
                 <div className="space-y-1 text-xs text-gray-700">
                   <p>
-                    실행 <span className="font-mono">{short(st.instance)}</span> · 장비 시각 {fmtLogTime(st.ts)} · 받음 {agoSec(st.receivedAt, now)}
+                    실행 <span className="font-mono">{short(st.instance)}</span> · 장비 시각 {fmtKst(st.ts)} · 받음 {agoSec(st.receivedAt, now)}
                   </p>
                   <p>
                     공정 상태 <b>{st.procState ?? "-"}</b> · runId <span className="font-mono">{st.runId ?? "-"}</span>
@@ -207,7 +207,7 @@ export default function Ops2AdminPage() {
               <ul className="max-h-[28rem] space-y-1 overflow-auto text-[11px]">
                 {(data.events ?? []).map((e) => (
                   <li key={e.msgId} className="flex gap-2">
-                    <span className="shrink-0 font-mono text-gray-400">{fmtLogTime(e.ts)}</span>
+                    <span className="shrink-0 font-mono text-gray-400">{fmtKst(e.ts)}</span>
                     <span className={`shrink-0 font-semibold ${LEVEL_TONE[e.level] ?? ""}`}>{e.code}</span>
                     <span className="min-w-0 break-words text-gray-600">
                       {e.message}{e.source ? ` · ${e.source}` : ""}{e.runId ? ` · run ${e.runId}` : ""}
@@ -223,9 +223,9 @@ export default function Ops2AdminPage() {
                   {(data.runs ?? []).map((r) => (
                     <li key={r.runId}>
                       <span className="font-mono">{r.runId}</span> · {r.name ?? r.recipeName ?? "-"}
-                      {r.stepNo !== null && ` · 행 ${r.stepNo}`} · {r.startedAt ? fmtLogTime(r.startedAt) : "시작 기록 없음"} →{" "}
+                      {r.stepNo !== null && ` · 행 ${r.stepNo}`} · {r.startedAt ? fmtKst(r.startedAt) : "시작 기록 없음"} →{" "}
                       {r.endedAt
-                        ? `${fmtLogTime(r.endedAt)} ${r.result ?? ""}${r.reasonCode ? ` (${r.reasonCode})` : ""}`
+                        ? `${fmtKst(r.endedAt)} ${r.result ?? ""}${r.reasonCode ? ` (${r.reasonCode})` : ""}`
                         : <span className="text-amber-600">끝 기록 없음</span>}
                       {r.startedBy && ` · ${r.startedBy}`}
                     </li>
@@ -237,7 +237,7 @@ export default function Ops2AdminPage() {
                 <ul className="space-y-1 text-[11px] text-gray-600">
                   {(data.commands ?? []).map((c) => (
                     <li key={c.id}>
-                      <span className="font-mono text-gray-400">{fmtLogTime(c.resultAt ?? c.requestedAt)}</span> {c.kind} ·{" "}
+                      <span className="font-mono text-gray-400">{fmtKst(c.resultAt ?? c.requestedAt)}</span> {c.kind} ·{" "}
                       <span className={c.status === "rejected" ? "text-rose-600" : ""}>{c.status}</span>
                       {c.reasonCode && ` (${c.reasonCode})`} · {c.origin} · {c.requestedBy}
                     </li>
@@ -249,7 +249,7 @@ export default function Ops2AdminPage() {
                 <ul className="space-y-1 text-[11px]">
                   {(data.bad ?? []).map((b) => (
                     <li key={b.id} className="text-rose-600">
-                      <span className="font-mono text-gray-400">{fmtLogTime(b.receivedAt)}</span>{" "}
+                      <span className="font-mono text-gray-400">{fmtKst(b.receivedAt)}</span>{" "}
                       <span className="font-mono">{short(b.id, 12)}</span> {b.reason}
                     </li>
                   ))}
