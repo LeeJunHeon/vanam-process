@@ -10,7 +10,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { ops2Db } from "@/lib/ops2/db";
-import { closeOthers } from "@/lib/ops2/hub";
+import { closeOthers, eventEnvelope, publishBrowser, type WireEnvelope } from "@/lib/ops2/hub";
 
 export const LEASE_MS = 30_000;
 const SCHEMA_RETRY_MS = 10 * 60_000;   // 해시가 다른 webSchema 를 받은 뒤 다시 달라고 하지 않는 시간
@@ -144,7 +144,7 @@ export async function claimLease(equipment: string, instance: string, now: Date)
     closeOthers(equipment, instance);                  // 주인이 바뀌었으면(넘겨받음·주인 비우기 뒤) 다른 실행의 SSE 를 닫는다
     if (prev && prev !== instance) {
       const silentSec = prev_seen ? Math.round((now.getTime() - prev_seen.getTime()) / 1000) : null;
-      await ops2Db.ops2Event.create({
+      const ev = await ops2Db.ops2Event.create({
         data: {
           msgId: webId(), equipment, instance, seq: 0, ts: now, receivedAt: now, level: "info",
           code: "INSTANCE_TAKEOVER",
@@ -152,6 +152,7 @@ export async function claimLease(equipment: string, instance: string, now: Date)
           source: "web", kind: "lease", context: { from: prev, to: instance, silentSec },
         },
       });
+      publishBrowser(equipment, [eventEnvelope(ev)]);
     }
     return { ok: true, prev, prevSeen: prev_seen };
   }
@@ -171,8 +172,20 @@ const schemaHold = (g.__ops2SchemaHold ??= new Map<string, number>());
 
 type Ctx = { equipment: string; instance: string; now: Date };
 
-/** 메시지 묶음 하나를 트랜잭션 하나로. 돌려주는 값 = acked(커밋되면 유효) */
-async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<string[]> {
+/** 브라우저로 보낼 envelope — hello 는 webSchema 를 뺀다 */
+function wireOf(e: Envelope): WireEnvelope {
+  let data = e.data;
+  if (e.type === "hello" && "webSchema" in data) {
+    data = { ...data };
+    delete data.webSchema;
+  }
+  return { id: e.id, instance: e.instance, seq: e.seq, ts: e.ts.toISOString(), type: e.type, data };
+}
+
+type Applied = { acked: string[]; wire: WireEnvelope[] };
+
+/** 메시지 묶음 하나를 트랜잭션 하나로. 돌려주는 값 = acked·브라우저로 보낼 envelope(커밋되면 유효) */
+async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
   const { equipment, now } = ctx;
   const ok: Envelope[] = [];
   const bads: Bad[] = [];
@@ -424,10 +437,13 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<string[]> 
   if (Object.keys(devicePatch).length) await tx.ops2Device.update({ where: { equipment }, data: devicePatch });
   await tx.ops2Instance.updateMany({ where: { instance: ctx.instance }, data: { lastSeenAt: now } });
 
-  return [
-    ...ok.filter((e) => e.type !== "state" && e.type !== "hello").map((e) => e.id),
-    ...bads.map((b) => b.ackId).filter((v): v is string => !!v),
-  ];
+  return {
+    acked: [
+      ...ok.filter((e) => e.type !== "state" && e.type !== "hello").map((e) => e.id),
+      ...bads.map((b) => b.ackId).filter((v): v is string => !!v),
+    ],
+    wire: ok.map(wireOf),
+  };
 }
 
 const TX_OPTS = { timeout: 10_000, maxWait: 5_000 };
@@ -443,9 +459,14 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
   const messages = known.size ? all.filter((m) => !(isObj(m) && known.has(m.id as string))) : all;
 
   let acked: string[] = [...known];
+  let wire: WireEnvelope[] = [];
   let fallback = 0;
+  const take = (r: Applied) => {
+    acked.push(...r.acked);
+    wire.push(...r.wire);
+  };
   try {
-    acked.push(...await ops2Db.$transaction((tx) => applyBatch(tx, ctx, messages), TX_OPTS));
+    take(await ops2Db.$transaction((tx) => applyBatch(tx, ctx, messages), TX_OPTS));
   } catch (batchErr) {
     // 데이터 오류일 때만 하나씩 따로. 혼자서도 데이터 오류면 bad_message 로 넣고 ack.
     // 그 밖(연결 끊김·시간 초과·40001·40P01·코드 없음)은 던진다(500 — 장비가 나중에 다시 보낸다).
@@ -453,9 +474,10 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
     if (!isDataError(code)) throw batchErr;
     console.error("[ops2/ingest] 배치 실패 — 하나씩 처리", ctx.equipment, code);
     acked = [...known];
+    wire = [];
     for (const raw of messages) {
       try {
-        acked.push(...await ops2Db.$transaction((tx) => applyBatch(tx, ctx, [raw]), TX_OPTS));
+        take(await ops2Db.$transaction((tx) => applyBatch(tx, ctx, [raw]), TX_OPTS));
       } catch (e) {
         const one = sqlState(e);
         if (!isDataError(one)) throw e;
@@ -470,6 +492,9 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
       }
     }
   }
+
+  // 커밋된 것만 화면으로(이미 받았던 것이 다시 와도 화면이 envelope id 로 거른다)
+  publishBrowser(ctx.equipment, wire);
 
   // needWebSchema 는 hello 가 있는 POST 만: 묶음이 없거나 이 장비의 설정 기준값이 없으면
   let needWebSchema = false;

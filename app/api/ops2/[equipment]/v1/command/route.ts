@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ops2Db } from "@/lib/ops2/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { readLimited } from "@/lib/ops2/body";
-import { COMMAND_TTL_MS, CONFIG_KINDS, expireDue, missingArgs, webCommandDef } from "@/lib/ops2/commands";
+import { COMMAND_TTL_MS, CONFIG_KINDS, expireDue, isOnline, missingArgs, webCommandDef } from "@/lib/ops2/commands";
 import { stripNul } from "@/lib/ops2/ingest";
 import { canRunCommand, operatorEquipments } from "@/lib/ops2/perm";
 import { kick } from "@/lib/ops2/hub";
@@ -13,7 +13,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BODY = 256 * 1024;
-const ONLINE_MS = 10_000;        // 장비 연결: 주인 실행이 있고 마지막 연락이 이만큼 안
 const WAIT_MAX_S = 10;
 const DONE = new Set(["accepted", "rejected", "expired"]);
 const CLIENT_ID = /^[A-Za-z0-9_-]{8,64}$/;
@@ -102,7 +101,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
   }
 
   const now = new Date();
-  if (!device.holderInstance || !device.lastSeenAt || now.getTime() - device.lastSeenAt.getTime() > ONLINE_MS) {
+  if (!isOnline(device, now)) {
     return NextResponse.json({ error: "device_offline" }, { status: 409 });
   }
   await expireDue(equipment, now);

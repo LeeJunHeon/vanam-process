@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ops2Db } from "@/lib/ops2/db";
 import { isAdminSession, requireSession } from "@/lib/auth-helpers";
+import { eventEnvelope, publishBrowser } from "@/lib/ops2/hub";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ eq
     if (!rows.length) return undefined;
     const from = rows[0].holder_instance;
     await tx.ops2Device.update({ where: { equipment }, data: { holderInstance: null, holderSeenAt: null } });
-    await tx.ops2Event.create({
+    const ev = await tx.ops2Event.create({
       data: {
         msgId: `web-${randomUUID().replace(/-/g, "")}`, equipment, instance: from ?? "-", seq: 0, ts: now,
         receivedAt: now, level: "info", code: "INSTANCE_RELEASED",
@@ -32,8 +33,9 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ eq
         source: "web", kind: "lease", context: { from, by: who },
       },
     });
-    return from;
+    return { from, ev };
   });
   if (prev === undefined) return NextResponse.json({ error: "없는 장비입니다." }, { status: 404 });
-  return NextResponse.json({ ok: true, released: prev });
+  publishBrowser(equipment, [eventEnvelope(prev.ev)]);
+  return NextResponse.json({ ok: true, released: prev.from });
 }

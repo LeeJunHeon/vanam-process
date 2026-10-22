@@ -1,7 +1,7 @@
 // 챔버K v2 장비 SSE 연결(/api/ops2/uplink/stream) — 프로세스 하나에 globalThis 하나.
 // 장비별로 실행(instance)마다 연결 하나. 같은 실행이 새로 붙으면 예전 연결은 닫는다.
 // kick(equipment) — 그 장비에 붙은 실행마다 자기 앞의 pending 을 차지해 보낸다(lib/ops2/commands.ts claimPending).
-// W-3 에서 브라우저 구독자도 여기에 더한다.
+// 브라우저 구독자(화면 stream)도 여기 — 아래 publishBrowser.
 import { claimPending, type WireCommand } from "@/lib/ops2/commands";
 
 export type DeviceConn = {
@@ -73,6 +73,67 @@ export async function pump(conn: DeviceConn): Promise<void> {
 
 export function kick(equipment: string): void {
   for (const c of devices.get(equipment)?.values() ?? []) void pump(c);
+}
+
+// ───────────── 브라우저 구독자(/api/ops2/[equipment]/v1/stream) ─────────────
+// ingest 가 커밋한 뒤 그 묶음의 envelope 을 장비별 구독자에게 보낸다. 덩어리는 한 번만 직렬화해 모두에게 같은 바이트.
+// 구독자는 send 가 false 면(끊김·쌓인 것이 상한을 넘은 느린 구독자) 닫는다 — 다시 붙으면 처음 묶음부터.
+
+/** 브라우저로 가는 envelope(장비 envelope 그대로 — ts 는 ISO) */
+export type WireEnvelope = { id: string; instance: string; seq: number; ts: string; type: string; data: unknown };
+
+export type BrowserSub = {
+  equipment: string;
+  /** 덩어리 하나. 끊겼거나 너무 밀렸으면 false */
+  send: (bytes: Uint8Array) => boolean;
+  close: () => void;
+};
+
+const gb = globalThis as unknown as { __ops2Browsers?: Map<string, Set<BrowserSub>> };
+const browsers = (gb.__ops2Browsers ??= new Map());
+const enc = new TextEncoder();
+
+/** 브라우저에 보내는 type — snapshot_summary 는 보내지 않는다 */
+const BROWSER_TYPES = new Set(["hello", "state", "event", "run_start", "run_end", "cmd_result", "config_ack"]);
+
+export function subscribeBrowser(sub: BrowserSub): void {
+  let s = browsers.get(sub.equipment);
+  if (!s) browsers.set(sub.equipment, (s = new Set()));
+  s.add(sub);
+}
+
+export function unsubscribeBrowser(sub: BrowserSub): void {
+  const s = browsers.get(sub.equipment);
+  if (s?.delete(sub) && !s.size) browsers.delete(sub.equipment);
+}
+
+/** "id: <envelope id>\nevent: <type>\ndata: <envelope JSON>\n\n" */
+export function sseEnvelope(env: WireEnvelope): string {
+  return `id: ${env.id}\nevent: ${env.type}\ndata: ${JSON.stringify(env)}\n\n`;
+}
+
+/** 묶음 하나를 그 장비의 브라우저 구독자 모두에게 — state 는 마지막 것만 */
+export function publishBrowser(equipment: string, envs: WireEnvelope[]): void {
+  const subs = browsers.get(equipment);
+  if (!subs?.size) return;
+  const lastState = envs.findLastIndex((e) => e.type === "state");
+  const list = envs.filter((e, i) => BROWSER_TYPES.has(e.type) && (e.type !== "state" || i === lastState));
+  if (!list.length) return;
+  const bytes = enc.encode(list.map(sseEnvelope).join(""));
+  for (const s of [...subs]) if (!s.send(bytes)) s.close();
+}
+
+/** 웹이 만든 사건 행(ops2_event) → event envelope. context 에 source·kind 를 넣는다(장비 사건과 같은 모양) */
+export function eventEnvelope(r: {
+  msgId: string; instance: string; seq: number; ts: Date; level: string; code: string; ruleId: string | null;
+  message: string; source: string | null; kind: string | null; context: unknown;
+}): WireEnvelope {
+  const c = r.context && typeof r.context === "object" && !Array.isArray(r.context) ? (r.context as Record<string, unknown>) : {};
+  return {
+    id: r.msgId, instance: r.instance, seq: r.seq, ts: r.ts.toISOString(), type: "event",
+    data: { level: r.level, code: r.code, ruleId: r.ruleId, message: r.message,
+            context: { ...c, source: c.source ?? r.source, kind: c.kind ?? r.kind } },
+  };
 }
 
 /** 관리 화면용 — 장비별 연결(instance·연결 시각) */
