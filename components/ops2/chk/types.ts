@@ -20,9 +20,15 @@ export type FieldDef = {
   column: string; name: string; type: string; unit: string; label: string; fmt: string; ownQuality?: boolean;
 };
 export type BlockDef = { name: string; label: string; worker: string; quality: string[]; fields: FieldDef[] };
-export type CommandDef = { kind: string; label: string; role?: string; sources?: string[] };
+export type ArgDef = {
+  name: string; type?: string; required?: boolean; min?: number | null; max?: number | null;
+  paramMin?: string | null; paramMax?: string | null;
+};
+export type CommandDef = { kind: string; label: string; role?: string; sources?: string[]; args?: ArgDef[] };
+export type ParamDef = { key: string; label?: string; unit?: string; current?: unknown; default?: unknown };
 export type Bundle = {
   hash: string; version: number;
+  params?: ParamDef[];
   commands?: CommandDef[];
   reasons?: { code: string; label: string; category?: string }[];
   plcButtons?: { target: string; addr: string; label: string }[];
