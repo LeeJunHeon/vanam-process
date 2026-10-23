@@ -8,13 +8,15 @@
 // 명령은 하나씩 따로 보내고 결과 알림도 따로 — 기다리는 동안 막는 것은 같은 명령 종류만(PLC 버튼은 같은 target 만).
 // 정지 쪽(logic.STOP_KINDS)은 막지 않는다 — 다른 명령이나 같은 정지의 결과를 기다리는 중에도(다시 눌러도 해가 없고, 첫 명령이 갔는지
 // 모를 때 바로 다시 누를 수 있게), 화면 stream 이 끊겨도 웹이 장비와 이어져 있으면(hello.web.online) 보낸다.
-// 블록 직접 편집·공정 기록 화면(W-4b), 공정 중 수정·설정(W-5)은 두지 않는다.
+// 블록 편집(Chk2BlockEditor — 레시피 안의 블록 행)·공정 기록(Chk2History — 목록·상세·1분 요약 그래프)은 W-4b.
+// 공정 중 수정·설정(W-5)은 두지 않는다.
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { AlertTriangle, Clock, Eye, LogIn, Radio, WifiOff } from "lucide-react";
 import Chk2Mimic from "./Chk2Mimic";
 import Chk2Status from "./Chk2Status";
 import { BlockCard, HeaterCard, IgCard } from "./Chk2Cards";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
+import Chk2History from "./Chk2History";
 import Chk2Recipes from "./Chk2Recipes";
 import { ConfirmDialog, Notices, SimpleConfirm, type Ask, type Notice } from "./kit";
 import { STALE_SEC_DEFAULT, STOP_KINDS, paramValue, plcFresh } from "./logic";
@@ -294,6 +296,8 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
           <RunList bundle={d.bundle} runs={d.runs} />
         </div>
       </div>
+
+      <Chk2History equipment={equipment} bundle={d.bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
 
       <ConfirmDialog ask={ask} onOk={run} onCancel={cancel} />
     </>
