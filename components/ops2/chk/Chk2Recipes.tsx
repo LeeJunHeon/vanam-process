@@ -1,19 +1,21 @@
 "use client";
 
-// 챔버K v2 레시피 — 공정 레시피(v1 행·딜레이 행)와 히터 레시피(스텝 + 첫 행 가스)를 웹에 저장(ops2_recipe)·편집하고 장비에 보낸다.
-// 웹 검사는 장비와 같은 계산(lib/ops2/chk/recipe.ts — 골든으로 확인), 마지막 판단은 장비. 묶음 version 이 검사 기준과 다르면 안내만.
-// 조작(권한·연결은 W-3 규칙 — can): 적재(RECIPE_LOAD — 웹 검사 오류·저장 안 한 변경이 있으면 막음)·적재 시작·적재 해제,
-// 한 행만 바로 시작(PROCESS_START — 장비처럼 히터 열을 지운 행), 히터 레시피 실행·정지·일시정지/재개·건너뛰기.
-// 시작·실행은 확인창에 요약(빨강). 블록 직접 편집·공정 기록 화면은 W-4b, 공정 중 수정은 W-5.
+// 챔버K v2 레시피 — 공정 레시피(v1 행·딜레이 행·블록 행)와 히터 레시피(스텝 + 첫 행 가스)를 웹에 저장(ops2_recipe)·편집하고 장비에 보낸다.
+// 웹 검사는 장비와 같은 계산(lib/ops2/chk/recipe.ts·blocks.ts — 골든으로 확인), 마지막 판단은 장비. 묶음 version 이 검사 기준과 다르면 안내만.
+// 블록 행은 블록 편집기(Chk2BlockEditor)로, v1 행은 "블록 행으로 만들기"(그 행의 기본 템플릿 — 원래 행은 그대로).
+// 조작(권한·연결은 W-3 규칙 — can): 적재(RECIPE_LOAD {name, rows} — 웹 검사 오류·저장 안 한 변경이 있으면 막음)·적재 시작·적재 해제,
+// 한 행만 바로 시작(PROCESS_START — v1 행은 장비처럼 히터 열을 지운 row, 블록 행은 {blocks, name}),
+// 히터 레시피 실행·정지·일시정지/재개(held 로 맞는 쪽 하나)·건너뛰기. 시작·실행은 확인창에 요약(빨강). 공정 중 수정은 W-5.
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject, type ReactNode } from "react";
 import { AlertTriangle, ArrowLeft, BookOpen, FilePlus2, Pause, Play, Save, SkipForward, Square, Trash2, Upload, X } from "lucide-react";
 import {
   checkEnvOf, checkHeaterRecipe, checkOutdated, checkProcessRecipe, delaySeconds, manualRow, pyTruthy, rowHasContent,
-  GOLDEN_EXPORT_VERSION, type Row,
+  GOLDEN_EXPORT_VERSION, type RecipeCheck, type Row,
 } from "@/lib/ops2/chk/recipe";
 import { fmtKst } from "@/lib/ops2/time";
 import { Card, SimpleConfirm, type Ask, type Notice } from "./kit";
-import { HeaterTable, ProcessTable, toERows, type ERow } from "./Chk2RecipeEditor";
+import { HeaterTable, ProcessTable, isBlockRow, newUid, toERows, type ERow } from "./Chk2RecipeEditor";
+import Chk2BlockEditor, { blockRowLines } from "./Chk2BlockEditor";
 import { RECIPE_ERROR, type RecipeFull, type RecipeItem, type RecipeKind, type useRecipes } from "./useRecipes";
 import type { Bundle, StateData } from "./types";
 
@@ -39,17 +41,19 @@ function rowLine(r: Row): string {
 }
 const heaterLine = (r: Row) => (r.use_heater === true ? `히터 목표 ${v(r.heater_temp)} °C` : "히터 안 씀");
 
-/** 레시피 시작 확인창 요약 — 이름·행 수·첫 공정 행 가스·파워·시간, 히터 목표 */
-function processLines(name: string, rows: Row[]): string[] {
+/** 레시피 시작 확인창 요약 — 이름·행 수(v1·블록·딜레이)·첫 공정 행(v1 행은 가스·파워·시간·히터, 블록 행은 블록 수·장비·시간) */
+function processLines(name: string, rows: Row[], check: RecipeCheck | null): string[] {
   const content = rows.filter(rowHasContent);
-  const delays = content.filter((r) => delaySeconds(r.process_name) !== null).length;
-  const procs = content.filter((r) => delaySeconds(r.process_name) === null);
-  const i = rows.findIndex((r) => rowHasContent(r) && delaySeconds(r.process_name) === null);
+  const isDelay = (r: Row) => !isBlockRow(r) && delaySeconds(r.process_name) !== null;
+  const delays = content.filter(isDelay).length;
+  const blocks = content.filter(isBlockRow).length;
+  const procs = content.filter((r) => !isDelay(r) && !isBlockRow(r));
+  const i = rows.findIndex((r) => rowHasContent(r) && !isDelay(r));
   const heat = procs.filter((r) => r.use_heater === true).length;
-  return [
-    `레시피 '${name}' · ${content.length}행(공정 ${procs.length} · 딜레이 ${delays})`,
-    ...(i >= 0 ? [`첫 공정 행(${i + 1}행): ${rowLine(rows[i])}`, `첫 공정 행 ${heaterLine(rows[i])}${heat ? ` · 히터 쓰는 행 ${heat}개` : ""}`] : []),
-  ];
+  const first = i < 0 ? [] : isBlockRow(rows[i])
+    ? blockRowLines(rows[i], check?.rows[i] ?? null).map((l, k) => (k ? l : `첫 공정 행(${i + 1}행): ${l}`))
+    : [`첫 공정 행(${i + 1}행): ${rowLine(rows[i])}`, `첫 공정 행 ${heaterLine(rows[i])}${heat ? ` · 히터 쓰는 행 ${heat}개` : ""}`];
+  return [`레시피 '${name}' · ${content.length}행(v1 행 ${procs.length} · 블록 행 ${blocks} · 딜레이 ${delays})`, ...first];
 }
 
 function heaterLines(name: string, steps: Row[], gas: Row | null): string[] {
@@ -90,6 +94,8 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
   const [confirm, setConfirm] = useState<{ what: "leave"; then: () => void } | { what: "delete" } | null>(null);
   const [saveAs, setSaveAs] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [blockUid, setBlockUid] = useState<string | null>(null);   // 블록 편집기로 여는 블록 행
+  const [toBlocks, setToBlocks] = useState<number | null>(null);    // "블록 행으로 만들기" 확인
 
   const env = useMemo(() => checkEnvOf(bundle), [bundle]);
   const outdated = checkOutdated(bundle);
@@ -125,11 +131,13 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
     const r = await recipes.get(item.id);
     if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}' — 열지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
     setSaveAs(null);
+    setBlockUid(null);
     setDraft(fromFull(r.data.recipe));
   });
   const create = (kind: RecipeKind) => leave(() => {
     const d = { id: null, kind, name: "", rows: toERows([{}]), gas: {}, updatedAt: null };
     setSaveAs(null);
+    setBlockUid(null);
     setDraft({ ...d, base: snap(d) });
   });
 
@@ -147,7 +155,10 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
     }
     const c = r.data.check;
     setSaveAs(null);
-    setDraft(fromFull(r.data.recipe));
+    const at = blockUid ? draft.rows.findIndex((x) => x.uid === blockUid) : -1;
+    const next = fromFull(r.data.recipe);
+    setBlockUid(at >= 0 ? next.rows[at]?.uid ?? null : null);       // 블록 편집기는 열린 채로
+    setDraft(next);
     notify({ tone: c?.errors ? "warn" : "ok", title: `레시피 '${name}' — 저장함`,
              text: c ? `서버 검사: 오류 ${c.errors} · 경고 ${c.warnings}${c.first ? ` — ${c.first}` : ""}` : "서버 검사 없음(묶음에 열 정의 없음)" });
   };
@@ -183,13 +194,17 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
     if (!draft) return;
     const rows = draft.rows.map((r) => r.data);
     onAsk({ kind: "RECIPE_LOAD", label: "공정 레시피 적재", detail: `'${draft.name}'`, args: { name: draft.name, rows },
-            lines: processLines(draft.name, rows), note: "장비에 행 목록을 올립니다(검사 뒤 적재). 시작은 '적재 시작'." });
+            lines: processLines(draft.name, rows, pCheck), note: "장비에 행 목록을 올립니다(검사 뒤 적재). 시작은 '적재 시작'." });
   };
   const askStartLoaded = async () => {
     let lines = [`장비에 적재된 '${loaded?.name || "이름 없음"}' · ${loaded?.rows ?? "-"}행`, "웹 목록에 같은 이름이 없어 내용을 보여 줄 수 없음"];
     if (loadedWeb) {
       const r = await recipes.get(loadedWeb.id);
-      if (r.ok) lines = [...processLines(loadedWeb.name, r.data.recipe.rows), `웹 레시피 마지막 수정 ${fmtKst(loadedWeb.updatedAt)} — 적재 뒤 고쳤다면 장비 것과 다를 수 있음`];
+      if (r.ok) {
+        const rows = r.data.recipe.rows;
+        lines = [...processLines(loadedWeb.name, rows, env ? checkProcessRecipe(rows, env) : null),
+                 `웹 레시피 마지막 수정 ${fmtKst(loadedWeb.updatedAt)} — 적재 뒤 고쳤다면 장비 것과 다를 수 있음`];
+      }
     }
     onAsk({ kind: "RECIPE_START", label: "적재 레시피 시작", detail: `'${loaded?.name ?? ""}'`, red: true, lines,
             note: "공정을 시작합니다 — 가스·파워·셔터가 움직입니다." });
@@ -198,9 +213,13 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
     const rc = pCheck?.rows[i];
     if (!env || !rc) return "검사 없음";
     if (rc.kind === "delay") return "딜레이 행은 바로 시작할 수 없음";
-    if (rc.kind !== "row") return "내용 없는 행";
-    const m = checkProcessRecipe([manualRow(draft?.rows[i]?.data ?? {})], env);
-    if (m.errors) return `웹 검사 오류 — ${m.rows[0]?.errors[0] ?? m.first}`;
+    if (rc.kind === "blocks") {
+      if (rc.errors.length) return `웹 검사 오류 — ${rc.errors[0]}`;
+    } else {
+      if (rc.kind !== "row") return "내용 없는 행";
+      const m = checkProcessRecipe([manualRow(draft?.rows[i]?.data ?? {})], env);
+      if (m.errors) return `웹 검사 오류 — ${m.rows[0]?.errors[0] ?? m.first}`;
+    }
     if (!can("PROCESS_START")) return "권한·연결 확인(또는 결과 기다리는 중)";
     if (loaded) return "장비에 레시피가 적재돼 있음 — 해제한 뒤";
     return null;
@@ -208,6 +227,13 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
   const askStartRow = (i: number) => {
     const data = draft?.rows[i]?.data;
     if (!data) return;
+    if (isBlockRow(data)) {
+      const name = typeof data.process_name === "string" && data.process_name ? data.process_name : `${draft?.name || "블록 행"} ${i + 1}행`;
+      onAsk({ kind: "PROCESS_START", label: "블록 행 바로 시작", detail: `${i + 1}행 '${name}'`, args: { blocks: data.blocks, name },
+              red: true, lines: [`레시피 '${draft?.name || "(저장 안 함)"}' ${i + 1}행`, ...blockRowLines(data, pCheck?.rows[i] ?? null)],
+              note: "공정을 시작합니다 — 가스·파워·셔터가 움직입니다(블록 순서 그대로)." });
+      return;
+    }
     const row = manualRow(data);
     onAsk({ kind: "PROCESS_START", label: "한 행 바로 시작", detail: `${i + 1}행 '${v(row.process_name)}'`, args: { row }, red: true,
             lines: [`레시피 '${draft?.name || "(저장 안 함)"}' ${i + 1}행`, rowLine(row),
@@ -221,6 +247,24 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
             red: true, lines: heaterLines(draft.name, steps, gas), note: "히터를 켜고 스텝대로 온도를 올립니다." });
   };
 
+  const makeBlocks = () => {
+    const i = toBlocks;
+    setToBlocks(null);
+    const rc = i === null ? null : pCheck?.rows[i];
+    if (i === null || !draft || !rc?.blocks) return;
+    const src = draft.rows[i].data;
+    const name = typeof src.process_name === "string" && src.process_name ? `${src.process_name} (블록)` : "";
+    // 템플릿 블록의 label·stage "" 와 비운 값(null)은 뺀다 — 장비 검사는 stage "" 를 None 이 아닌 틀린 값으로 본다
+    const blocks = rc.blocks.map((b) => ({
+      type: b.type, params: Object.fromEntries(Object.entries(b.params).filter(([, v]) => v !== null && v !== undefined)),
+      ...(b.label ? { label: b.label } : {}), ...(b.stage ? { stage: b.stage } : {}),
+    }));
+    const n: ERow = { uid: newUid(), data: { ...(name ? { process_name: name } : {}), blocks } };
+    setDraft({ ...draft, rows: [...draft.rows.slice(0, i + 1), n, ...draft.rows.slice(i + 1)] });
+    setBlockUid(n.uid);
+  };
+  const blockAt = blockUid && draft?.kind === "process" ? draft.rows.findIndex((r) => r.uid === blockUid) : -1;
+
   const tabs: { kind: RecipeKind; label: string }[] = [{ kind: "process", label: "공정 레시피" }, { kind: "heater", label: "히터 레시피" }];
   const list = (recipes.list ?? []).filter((r) => r.kind === tab);
 
@@ -229,7 +273,7 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
       right={
         <div className="flex rounded-xl bg-gray-100 p-0.5">
           {tabs.map((t) => (
-            <button key={t.kind} onClick={() => t.kind !== tab && leave(() => { setDraft(null); setTab(t.kind); })}
+            <button key={t.kind} onClick={() => t.kind !== tab && leave(() => { setDraft(null); setBlockUid(null); setTab(t.kind); })}
               className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${tab === t.kind ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
               {t.label}
             </button>
@@ -281,20 +325,26 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
                 <>히터 레시피 실행 중 <b className="text-gray-900">&apos;{hr.name || "이름 없음"}&apos;</b>
                   {byName("heater", hr.name) ? <span className="ml-1 rounded bg-blue-50 px-1 text-blue-700">웹 레시피</span>
                     : <span className="ml-1 rounded bg-gray-200 px-1 text-gray-600">웹 목록에 없는 이름</span>}
-                  {" "}· 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"} · {hr.state ?? "-"}</>
+                  {" "}· 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"} · {hr.state ?? "-"}
+                  {hr.held && <span className="ml-1 rounded bg-amber-100 px-1 font-semibold text-amber-800">일시정지 중</span>}</>
               ) : "실행 중인 히터 레시피 없음"}
             </span>
             {hr && (
               <span className="flex flex-wrap gap-1.5">
-                <Btn disabled={!can("HEATER_RECIPE_HOLD")}
-                  onClick={() => onAsk({ kind: "HEATER_RECIPE_HOLD", label: "히터 레시피 일시정지", args: { on: true },
-                                         note: "지금 온도에서 멈춥니다(레시피 시계도 멈춤)." })}>
-                  <Pause size={13} /> 일시정지
-                </Btn>
-                <Btn disabled={!can("HEATER_RECIPE_HOLD")}
-                  onClick={() => onAsk({ kind: "HEATER_RECIPE_HOLD", label: "히터 레시피 재개", args: { on: false } })}>
-                  <Play size={13} /> 재개
-                </Btn>
+                {/* held 가 있으면(묶음 8) 맞는 버튼 하나만, 없으면(옛 장비) 둘 다 */}
+                {hr.held !== true && (
+                  <Btn disabled={!can("HEATER_RECIPE_HOLD")}
+                    onClick={() => onAsk({ kind: "HEATER_RECIPE_HOLD", label: "히터 레시피 일시정지", args: { on: true },
+                                           note: "지금 온도에서 멈춥니다(레시피 시계도 멈춤)." })}>
+                    <Pause size={13} /> 일시정지
+                  </Btn>
+                )}
+                {hr.held !== false && (
+                  <Btn disabled={!can("HEATER_RECIPE_HOLD")}
+                    onClick={() => onAsk({ kind: "HEATER_RECIPE_HOLD", label: "히터 레시피 재개", args: { on: false } })}>
+                    <Play size={13} /> 재개
+                  </Btn>
+                )}
                 <Btn disabled={!can("HEATER_RECIPE_SKIP")}
                   onClick={() => onAsk({ kind: "HEATER_RECIPE_SKIP", label: "히터 레시피 스텝 건너뛰기",
                                          detail: `스텝 ${hr.step ?? "-"} → 다음` })}>
@@ -358,7 +408,7 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
           /* 편집 */
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => leave(() => setDraft(null))} aria-label="목록으로"
+              <button onClick={() => leave(() => { setDraft(null); setBlockUid(null); })} aria-label="목록으로"
                 className="rounded-lg p-1 text-gray-500 hover:bg-gray-100"><ArrowLeft size={16} /></button>
               <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} disabled={readOnly}
                 placeholder="레시피 이름(1~80자)" maxLength={80}
@@ -411,9 +461,14 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
             {pCheck && pCheck.listErrors.length > 0 && (
               <p className="rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700">{pCheck.listErrors.join(" · ")}</p>
             )}
-            {draft.kind === "process" ? (
+            {draft.kind === "process" && blockAt >= 0 ? (
+              <Chk2BlockEditor key={blockUid} row={draft.rows[blockAt].data} rc={pCheck?.rows[blockAt] ?? null}
+                env={env?.blocks ?? null} bundle={bundle} readOnly={readOnly} rowNo={blockAt + 1}
+                startWhy={rowWhy(blockAt)} onStart={() => askStartRow(blockAt)} onClose={() => setBlockUid(null)}
+                onRow={(data) => setDraft((d) => (d ? { ...d, rows: d.rows.map((r) => (r.uid === blockUid ? { ...r, data } : r)) } : d))} />
+            ) : draft.kind === "process" ? (
               <ProcessTable cols={bundle?.recipe?.processColumns ?? []} rows={draft.rows} check={pCheck} bundle={bundle}
-                readOnly={readOnly} canStart={rowWhy} onStart={askStartRow}
+                readOnly={readOnly} canStart={rowWhy} onStart={askStartRow} onEditBlocks={setBlockUid} onToBlocks={setToBlocks}
                 onRows={(f) => setDraft((d) => (d ? { ...d, rows: f(d.rows) } : d))} />
             ) : (
               <HeaterTable stepCols={bundle?.recipe?.heaterStepColumns ?? []} gasCols={bundle?.recipe?.heaterGasColumns ?? []}
@@ -430,6 +485,12 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
         <SimpleConfirm title="저장 안 함" ok="버리고 나가기" danger
           text="저장하지 않은 변경이 있습니다. 버리고 나갈까요?"
           onCancel={() => setConfirm(null)} onOk={() => { const t = confirm.then; setConfirm(null); t(); }} />
+      )}
+      {toBlocks !== null && draft && (
+        <SimpleConfirm title="블록 행으로 만들기" ok="만들고 편집"
+          text={<>{toBlocks + 1}행의 기본 템플릿(블록 {pCheck?.rows[toBlocks]?.blocks?.length ?? "-"}개)으로 새 블록 행을 {toBlocks + 2}행에
+            만듭니다. 원래 행은 그대로입니다. 펼친 단계는 원래 행과 같습니다(장비와 같은 템플릿).</>}
+          onCancel={() => setToBlocks(null)} onOk={makeBlocks} />
       )}
       {confirm?.what === "delete" && draft && (
         <SimpleConfirm title="레시피 삭제" ok="삭제" danger

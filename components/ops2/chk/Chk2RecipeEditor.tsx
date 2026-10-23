@@ -1,11 +1,13 @@
 "use client";
 
 // 챔버K v2 레시피 편집 표 — 열은 묶음 recipe 열 정의 순서·라벨(v1Name)·단위 그대로. bool 은 체크, 숫자 칸은 범위를 칸에.
-// 행마다 웹 검사 결과(오류 빨강·경고 노랑, 장비와 같은 문구)와 기본 템플릿 블록 미리보기(읽기 전용, 펼치기).
+// 행 종류 셋: v1 행·딜레이 행·블록 행({process_name, blocks} — 한 줄 요약, 누르면 블록 편집기 Chk2BlockEditor).
+// 행마다 웹 검사 결과(오류 빨강·경고 노랑, 장비와 같은 문구)와 기본 템플릿 블록·펼친 단계 미리보기(읽기 전용, 펼치기).
 // 값은 칸에서 바로 행 객체로: 빈 칸·체크 해제는 키를 지우고, 숫자 모양이면 숫자, 아니면 글 그대로(검사가 "숫자여야 함").
 import { Fragment, useState, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, MoreVertical, Play, Plus, Timer, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, MoreVertical, Play, Plus, Repeat, Timer, Trash2 } from "lucide-react";
 import { delaySeconds, type Block, type ColDef, type RecipeCheck, type Row } from "@/lib/ops2/chk/recipe";
+import { BlockRowSummary, ExpandedView } from "./Chk2BlockEditor";
 import { colRange, rangeText } from "./logic";
 import type { Bundle } from "./types";
 
@@ -125,14 +127,19 @@ function Messages({ errors, warnings }: { errors: string[]; warnings: string[] }
 
 const colError = (errors: string[], name: string, prefix = "") => errors.find((e) => e.startsWith(`${prefix}${name}: `));
 
-export type RowAction = "up" | "down" | "copy" | "delete" | "delay" | "start";
+export type RowAction = "up" | "down" | "copy" | "delete" | "delay" | "start" | "toBlocks";
 
-/** 공정 레시피 표 — 행(v1 행·딜레이 행) 목록 */
-export function ProcessTable({ cols, rows, check, bundle, readOnly, canStart, onRows, onStart }: {
+export const isBlockRow = (r: Row) => "blocks" in r;
+
+/** 공정 레시피 표 — 행(v1 행·딜레이 행·블록 행) 목록 */
+export function ProcessTable({ cols, rows, check, bundle, readOnly, canStart, onRows, onStart, onEditBlocks, onToBlocks }: {
   cols: ColDef[]; rows: ERow[]; check: RecipeCheck | null; bundle: Bundle | null; readOnly: boolean;
   canStart: (i: number) => string | null;            // 이 행만 바로 시작 — 막는 이유(없으면 null)
   onRows: (f: (rows: ERow[]) => ERow[]) => void; onStart: (i: number) => void;
+  onEditBlocks: (uid: string) => void;               // 블록 행 → 블록 편집기
+  onToBlocks: (i: number) => void;                   // v1 행 → 그 기본 템플릿으로 새 블록 행(확인창은 부르는 쪽)
 }) {
+  const [steps, setSteps] = useState<Record<string, boolean>>({});
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [menu, setMenu] = useState<string | null>(null);
   const [delayText, setDelayText] = useState("delay 30s");
@@ -140,6 +147,7 @@ export function ProcessTable({ cols, rows, check, bundle, readOnly, canStart, on
   const act = (i: number, a: RowAction) => {
     setMenu(null);
     if (a === "start") return onStart(i);
+    if (a === "toBlocks") return onToBlocks(i);
     onRows((l) => {
       const n = [...l];
       if (a === "up" && i > 0) [n[i - 1], n[i]] = [n[i], n[i - 1]];
@@ -172,7 +180,9 @@ export function ProcessTable({ cols, rows, check, bundle, readOnly, canStart, on
               const rc = check?.rows[i];
               const errs = rc?.errors ?? [], warns = rc?.warnings ?? [];
               const isDelay = delaySeconds(r.data.process_name) !== null && rc?.kind === "delay";
-              const blocks = rc?.blocks ?? null;
+              const isBlocks = isBlockRow(r.data);
+              const blocks = isBlocks ? null : rc?.blocks ?? null;
+              const shownErrs = isBlocks && errs.length > 1 ? [...errs.slice(0, 1), `외 ${errs.length - 1}개 — 블록 편집에서`] : errs;
               const why = canStart(i);
               return (
                 <Fragment key={r.uid}>
@@ -191,7 +201,11 @@ export function ProcessTable({ cols, rows, check, bundle, readOnly, canStart, on
                           error={colError(errs, "process_name")} onChange={(v) => setCell(r.uid, "process_name", v)} />
                       </td>
                     )}
-                    {isDelay ? (
+                    {isBlocks ? (
+                      <td colSpan={rest.length} className="px-2 py-1">
+                        <BlockRowSummary row={r.data} rc={rc ?? null} onEdit={() => onEditBlocks(r.uid)} />
+                      </td>
+                    ) : isDelay ? (
                       <td colSpan={rest.length} className="px-2 py-1 text-gray-500">
                         <span className="flex items-center gap-1"><Timer size={12} /> 딜레이 {rc?.clean?.delay_s as number} s — 다음 행까지 기다림</span>
                       </td>
@@ -213,6 +227,12 @@ export function ProcessTable({ cols, rows, check, bundle, readOnly, canStart, on
                             <div className="absolute right-0 top-6 z-[56] w-44 rounded-xl border border-gray-100 bg-white p-1 text-xs shadow-lg">
                               <MenuItem icon={<Play size={13} />} label="이 행만 바로 시작" disabled={!!why} title={why ?? undefined}
                                 tone="rose" onClick={() => act(i, "start")} />
+                              {isBlocks && <MenuItem icon={<Repeat size={13} />} label="블록 편집" onClick={() => { setMenu(null); onEditBlocks(r.uid); }} />}
+                              {!readOnly && !isBlocks && !isDelay && (
+                                <MenuItem icon={<Repeat size={13} />} label="블록 행으로 만들기(아래에)" disabled={!rc?.blocks}
+                                  title={rc?.blocks ? "이 행의 기본 템플릿 블록으로 새 블록 행 — 원래 행은 그대로" : "웹 검사 오류를 고친 뒤"}
+                                  onClick={() => act(i, "toBlocks")} />
+                              )}
                               {!readOnly && (
                                 <>
                                   <MenuItem icon={<ArrowUp size={13} />} label="위로" disabled={i === 0} onClick={() => act(i, "up")} />
@@ -233,7 +253,7 @@ export function ProcessTable({ cols, rows, check, bundle, readOnly, canStart, on
                     <tr>
                       <td />
                       <td colSpan={rest.length + 2} className="px-1 pb-1.5">
-                        <Messages errors={errs} warnings={warns} />
+                        <Messages errors={shownErrs} warnings={warns} />
                         {blocks && (
                           <div className="mt-0.5">
                             <button onClick={() => setOpen((o) => ({ ...o, [r.uid]: !o[r.uid] }))}
@@ -242,6 +262,15 @@ export function ProcessTable({ cols, rows, check, bundle, readOnly, canStart, on
                             </button>
                             {open[r.uid] && (
                               <div className="mt-1 rounded-lg bg-gray-50 p-2"><BlockPreview blocks={blocks} bundle={bundle} /></div>
+                            )}
+                            {rc?.expanded && (
+                              <>
+                                <button onClick={() => setSteps((o) => ({ ...o, [r.uid]: !o[r.uid] }))}
+                                  className="mt-0.5 flex items-center gap-0.5 text-[11px] font-semibold text-blue-600 hover:underline">
+                                  {steps[r.uid] ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 펼친 단계 미리보기
+                                </button>
+                                {steps[r.uid] && <div className="mt-1 rounded-lg bg-gray-50 p-2"><ExpandedView exp={rc.expanded} bundle={bundle} /></div>}
+                              </>
                             )}
                           </div>
                         )}
@@ -262,6 +291,14 @@ export function ProcessTable({ cols, rows, check, bundle, readOnly, canStart, on
           <button onClick={() => onRows((l) => [...l, { uid: newUid(), data: {} }])}
             className="flex items-center gap-1 rounded-lg border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50">
             <Plus size={13} /> 행 추가
+          </button>
+          <button onClick={() => {
+            const n = { uid: newUid(), data: { blocks: [] } as Row };
+            onRows((l) => [...l, n]);
+            onEditBlocks(n.uid);
+          }}
+            className="flex items-center gap-1 rounded-lg border border-indigo-200 px-2 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-50">
+            <Repeat size={13} /> 블록 행 추가
           </button>
           <span className="flex items-center gap-1">
             <input value={delayText} onChange={(e) => setDelayText(e.target.value)} aria-label="딜레이 행 글"

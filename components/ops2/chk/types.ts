@@ -1,5 +1,6 @@
 // 챔버K v2 장비 화면 — 브라우저 API(/api/ops2/[equipment]/v1/*) 모양과 값 표시.
 // 계약: 챔버K v2 common/messages.py(envelope·state), chk/web_schema.py(묶음). 화면은 묶음 정의만 보고 그린다.
+import type { BlockDefs } from "@/lib/ops2/chk/blocks";
 import type { RecipeDefs } from "@/lib/ops2/chk/recipe";
 
 export type Envelope<T = Record<string, unknown>> = {
@@ -19,6 +20,7 @@ export type Hello = {
 
 export type FieldDef = {
   column: string; name: string; type: string; unit: string; label: string; fmt: string; ownQuality?: boolean;
+  summary?: string;                              // 1분 요약 방식 mean·max·min·last·any
 };
 export type BlockDef = { name: string; label: string; worker: string; quality: string[]; fields: FieldDef[] };
 export type ArgDef = {
@@ -27,7 +29,6 @@ export type ArgDef = {
 };
 export type CommandDef = { kind: string; label: string; role?: string; sources?: string[]; args?: ArgDef[] };
 export type ParamDef = { key: string; label?: string; unit?: string; type?: string; current?: unknown; default?: unknown };
-export type BlockTypeDef = { type: string; label: string; params?: { name: string; unit?: string }[] };
 export type Bundle = {
   hash: string; version: number;
   params?: ParamDef[];
@@ -35,9 +36,11 @@ export type Bundle = {
   reasons?: { code: string; label: string; category?: string }[];
   plcButtons?: { target: string; addr: string; label: string }[];
   states?: { name: string; label: string; kind: string }[];
-  blocks?: { defs?: BlockTypeDef[] };
+  blocks?: Partial<BlockDefs>;
+  stopSequence?: { steps?: { no: number; act?: string; must?: boolean; desc?: string }[]; endStopMustKeep?: number[] };
   recipe?: RecipeDefs;
-  snapshot?: { blocks?: BlockDef[] };
+  snapshot?: { tick?: FieldDef[]; process?: FieldDef[]; blocks?: BlockDef[] };
+  events?: { kind: string; label: string }[];
 };
 
 export type Link = { q?: string | null; age?: number | null };
@@ -46,7 +49,7 @@ export type StateData = {
   step?: { no: number; total: number; type?: string | null; label?: string | null; remainS?: number | null } | null;
   remainS?: number | null;
   recipe?: { name?: string; rows?: number; row?: number | null; listActive?: boolean } | null;
-  heaterRecipe?: { name?: string; state?: string; step?: number; steps?: number } | null;
+  heaterRecipe?: { name?: string; state?: string; step?: number; steps?: number; held?: boolean } | null;   // held: 묶음 8(5-10)부터
   heater?: { owner?: string | null; handedOver?: boolean; gas?: string | null };
   alarms?: { ruleId: string; code?: string; since?: string }[];
   links?: Record<string, Link>;

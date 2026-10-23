@@ -4,7 +4,7 @@ import type { ColDef } from "@/lib/ops2/chk/recipe";
 import type { Bundle, Envelope, Link } from "./types";
 
 /** 정지 쪽 명령 — 다른 명령의 결과를 기다리는 중에도 막지 않고, 화면 stream 이 끊겨도 웹이 장비와 이어져 있으면 보낸다 */
-export const STOP_KINDS: readonly string[] = ["PROCESS_STOP", "ALL_STOP", "BUZZ_STOP", "HEATER_STOP"];
+export const STOP_KINDS: readonly string[] = ["PROCESS_STOP", "ALL_STOP", "BUZZ_STOP", "HEATER_STOP", "HEATER_RECIPE_STOP"];
 
 /** 새 state 를 받을지 — 같은 실행이면 seq 가 큰 것만(장비 시계가 뒤로 맞춰져도 멈추지 않게), 실행이 다르면 새것 */
 export function newerState<T>(cur: Envelope<T> | null, next: Envelope<T>): boolean {
