@@ -3,15 +3,18 @@
 // 챔버K v2 장비 화면(메뉴 "CHK v2") — 로그인한 누구나 보고, 조작은 권한대로(hello.web.perms).
 // 브라우저 API /api/ops2/[equipment]/v1/*(노트북 로컬 화면 API 와 같은 모양 — W-7 에서 같은 화면 코드가 둘 다 쓴다).
 // 위: 장비 고르기·연결 띠(마지막 state 3 s 늦음·10 s 끊김 — 끊기면 조작 잠금)·runMode·버전·시계 차·명령 연결.
-// 조작(이번 범위): STOP·ALL STOP·부저 정지, PLC 버튼, 히터 SV·ON·OFF·RESET·가스 해제, 이온 게이지 필라멘트.
+// 조작(이번 범위): STOP·ALL STOP·부저 정지·히터 정지, PLC 버튼, 히터 SV·ON·OFF·RESET·가스 해제, 이온 게이지 필라멘트.
+// 명령은 하나씩 따로 보내고 결과 알림도 따로 — 기다리는 동안 막는 것은 같은 명령 종류만(PLC 버튼은 같은 target 만).
+// 정지 쪽(logic.STOP_KINDS)은 다른 명령을 기다려도 막지 않고, 화면 stream 이 끊겨도 웹이 장비와 이어져 있으면(hello.web.online) 보낸다.
 // 공정 시작·레시피·히터 레시피(W-4), 공정 중 수정·설정(W-5)은 두지 않는다.
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Clock, Eye, Radio, WifiOff } from "lucide-react";
+import { AlertTriangle, Clock, Eye, LogIn, Radio, WifiOff } from "lucide-react";
 import Chk2Mimic from "./Chk2Mimic";
 import Chk2Status from "./Chk2Status";
 import { BlockCard, HeaterCard, IgCard } from "./Chk2Cards";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
 import { ConfirmDialog, Notices, type Ask, type Notice } from "./kit";
+import { STALE_SEC_DEFAULT, STOP_KINDS, paramValue, plcFresh } from "./logic";
 import { reasonLabel } from "./types";
 import { useChk2 } from "./useChk2";
 
@@ -85,7 +88,7 @@ function Chk2Device({ equipment }: { equipment: string }) {
   const d = useChk2(equipment);
   const [now, setNow] = useState(() => Date.now());
   const [ask, setAsk] = useState<Ask | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [inflight, setInflight] = useState<Record<string, number>>({});   // 결과를 기다리는 명령(종류 또는 PLC_BUTTON:target)
   const [notices, setNotices] = useState<Notice[]>([]);
   const [plcPending, setPlcPending] = useState<Record<string, { want: boolean; at: number }>>({});
 
@@ -111,14 +114,20 @@ function Chk2Device({ equipment }: { equipment: string }) {
   const age = d.state ? now + d.offsetMs - (Date.parse(d.state.ts) - skew) : null;
   const ageSec = age === null ? null : Math.max(0, Math.round(age / 1000));
   const connected = age !== null && age <= LOST_MS;
-  const plcQ = st?.links?.plc?.q ?? null;
-  const plcOk = connected && plcQ === "ok";
-  const canOperate = !!perms?.canOperate;
+  const plcLink = st?.links?.plc;
+  const staleSec = typeof paramValue(d.bundle, "HEATER_STALE_SEC") === "number"
+    ? (paramValue(d.bundle, "HEATER_STALE_SEC") as number) : STALE_SEC_DEFAULT;
+  const plcOk = connected && plcFresh(plcLink, staleSec);
+  const canOperate = !!perms?.canOperate && !d.authLost;
+  const webOnline = !!web?.online;
 
-  const can = useCallback(
-    (kind: string) => connected && canOperate && !busy && !!perms?.kinds.includes(kind),
-    [connected, canOperate, busy, perms],
-  );
+  const allowed = (kind: string, key: string) => {
+    if (!canOperate || !perms?.kinds.includes(kind) || inflight[key]) return false;
+    return STOP_KINDS.includes(kind) ? connected || webOnline : connected;
+  };
+  const can = (kind: string) => allowed(kind, kind);
+  const canPlc = (target: string) => allowed("PLC_BUTTON", `PLC_BUTTON:${target}`);
+  const cancel = useCallback(() => setAsk(null), []);
 
   // PLC "전환 중" — 바라는 값이 아직 아니고 10 s 안
   const pending = Object.fromEntries(
@@ -134,15 +143,20 @@ function Chk2Device({ equipment }: { equipment: string }) {
   const run = async () => {
     if (!ask) return;
     const a = ask;
-    setBusy(true);
+    const key = a.plc ? `PLC_BUTTON:${a.plc.target}` : a.kind;
     setAsk(null);
+    setInflight((m) => ({ ...m, [key]: (m[key] ?? 0) + 1 }));
     if (a.plc) {
       const p = a.plc;
       setPlcPending((m) => ({ ...m, [p.target]: { want: p.want, at: Date.now() } }));
     }
     const what = `${a.label}${a.detail ? ` ${a.detail}` : ""}`;
     const r = await d.send(a.kind, a.args ?? {}, what.slice(0, 200));
-    setBusy(false);
+    setInflight((m) => {
+      const next = { ...m };
+      if ((next[key] = (next[key] ?? 1) - 1) <= 0) delete next[key];
+      return next;
+    });
     const b = r.body;
     if (!r.ok) {
       notify({ tone: "bad", title: `${what} — 보내지 못함`,
@@ -151,7 +165,7 @@ function Chk2Device({ equipment }: { equipment: string }) {
       notify({ tone: "ok", title: `${what} — 장비가 받음` });
     } else if (b.status === "rejected") {
       notify({ tone: "bad", title: `${what} — 거부`,
-               text: `${reasonLabel(d.bundle, b.reasonCode)}${b.reasonCode ? ` (${b.reasonCode})` : ""}` });
+               text: `${reasonLabel(d.bundle, b.reasonCode)}${b.reasonCode ? ` (${b.reasonCode})` : ""}${b.detail ? ` — ${b.detail}` : ""}` });
     } else if (b.status === "expired") {
       notify({ tone: "warn", title: `${what} — 만료`, text: reasonLabel(d.bundle, b.reasonCode) });
     } else {
@@ -172,8 +186,9 @@ function Chk2Device({ equipment }: { equipment: string }) {
   const link = (name: string) => st?.links?.[name];
   const mode = d.hello?.runMode;
 
+  const plcAge = typeof plcLink?.age === "number" ? `${plcLink.age.toFixed(1)} s` : "나이 없음";
   const mimicNote = !connected ? "장비 끊김 · 조작 잠금"
-    : plcQ !== "ok" ? `PLC 품질 ${plcQ ?? "-"} · 조작 잠금`
+    : !plcOk ? `PLC 값 ${plcLink?.q ?? "-"} · ${plcAge}(기준 ${staleSec} s) · 조작 잠금`
     : !canOperate ? "조회만" : "노드를 눌러 조작";
 
   return (
@@ -212,13 +227,18 @@ function Chk2Device({ equipment }: { equipment: string }) {
         )}
       </div>
 
+      {d.authLost && (
+        <p className="flex items-center gap-2 rounded-2xl border border-rose-300 bg-rose-50 p-3 text-xs font-bold text-rose-700">
+          <LogIn size={14} /> 로그인이 끊겼습니다 — 새로고침하세요. 조작이 잠겼습니다.
+        </p>
+      )}
       {d.error && <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{d.error}</p>}
       {web && !web.hasSchema && (
         <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
           이 장비의 웹 설정 묶음이 아직 없습니다 — 장비가 연결되면 받아 옵니다.
         </p>
       )}
-      {perms && !canOperate && (
+      {perms && !perms.canOperate && (
         <p className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-3 text-xs font-semibold text-gray-600">
           <Eye size={14} /> 조회만 — 장비 담당자·관리자만 조작
         </p>
@@ -226,6 +246,7 @@ function Chk2Device({ equipment }: { equipment: string }) {
       {d.state && !connected && (
         <p className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
           <AlertTriangle size={14} /> <b>장비 끊김 {ageSec}초</b> — 표시는 마지막 값이며 조작이 잠겼습니다.
+          {webOnline && canOperate && " 웹은 장비와 이어져 있어 정지 명령은 보낼 수 있습니다."}
         </p>
       )}
       <Notices list={notices} onClose={(id) => setNotices((l) => l.filter((n) => n.id !== id))} />
@@ -233,10 +254,11 @@ function Chk2Device({ equipment }: { equipment: string }) {
       <Chk2Status bundle={d.bundle} st={st} connected={connected} lastRun={d.runs[0] ?? null} can={can} onAsk={setAsk} />
 
       <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
-        <Chk2Mimic bundle={d.bundle} snapshot={snap} plcOk={plcOk} canPress={can("PLC_BUTTON")}
+        <Chk2Mimic bundle={d.bundle} snapshot={snap} plcOk={plcOk} canPress={canPlc}
           pending={pending} onAsk={setAsk} note={mimicNote} />
         <div className="flex flex-col gap-3">
-          <HeaterCard def={block("heater")} snap={snap} link={link("heater")} st={st} can={can} locked={!plcOk} onAsk={setAsk} />
+          <HeaterCard bundle={d.bundle} def={block("heater")} snap={snap} link={link("heater")} st={st} can={can}
+            locked={!plcOk} onAsk={setAsk} />
           <IgCard def={block("ig")} snap={snap} link={link("ig")} can={can} onAsk={setAsk} />
         </div>
       </div>
@@ -256,7 +278,7 @@ function Chk2Device({ equipment }: { equipment: string }) {
         </div>
       </div>
 
-      <ConfirmDialog ask={ask} busy={busy} onOk={run} onCancel={() => setAsk(null)} />
+      <ConfirmDialog ask={ask} onOk={run} onCancel={cancel} />
     </>
   );
 }

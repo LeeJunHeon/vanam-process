@@ -3,6 +3,7 @@
 // 챔버K v2 계통도 — v1 ChkMimic 의 그림·색·동작을 v2 데이터로(v1 은 전환 뒤 지운다).
 // 노드 상태 = snapshot plc.<addr>(묶음 plcButtons 의 addr — ion 만 target 과 다르다: ion_remote_on), 버튼 = 묶음 plcButtons.
 // 그리는 순서 배관 → 챔버 → 노드. 램프 켜짐 초록·꺼짐 빨강, PLC 품질이 ok 가 아니면 회색·노드 OFF·조작 잠금.
+// PLC 잠금은 값 나이 기준(logic.plcFresh — 부르는 쪽이 plcOk 로).
 // 누르면 확인창 한 번 → PLC_BUTTON → 실제 값이 바뀔 때까지 "전환 중"(10 s 넘으면 풀기 — 부르는 쪽).
 import { Dot, type Ask } from "./kit";
 import type { Bundle } from "./types";
@@ -20,7 +21,7 @@ type Props = {
   bundle: Bundle | null;
   snapshot?: Record<string, unknown>;
   plcOk: boolean;              // PLC 품질 ok
-  canPress: boolean;           // 연결·권한(PLC_BUTTON)
+  canPress: (target: string) => boolean;   // 연결·권한(PLC_BUTTON)·같은 target 결과 기다리는 중이 아님
   pending: Record<string, boolean>;   // target → 바라는 값
   onAsk: (a: Ask) => void;
   note: string;                // 오른쪽 위 안내(잠금 이유)
@@ -33,11 +34,11 @@ export default function Chk2Mimic({ bundle, snapshot, plcOk, canPress, pending, 
   const isOn = (target: string) => plcOk && raw(target) === true;
   const isPending = (target: string) =>
     plcOk && pending[target] !== undefined && pending[target] !== (raw(target) === true);
-  const active = canPress && plcOk;
+  const active = (t: string) => canPress(t) && plcOk;
 
   const click = (target: string) => {
     const b = btn(target);
-    if (!b || !active) return;
+    if (!b || !active(target)) return;
     const want = !(raw(target) === true);
     onAsk({ kind: "PLC_BUTTON", label: b.label, detail: want ? "→ ON" : "→ OFF", args: { target, on: want },
             danger: DANGER.has(target), plc: { target, want } });
@@ -49,7 +50,7 @@ export default function Chk2Mimic({ bundle, snapshot, plcOk, canPress, pending, 
     const wait = isPending(t);
     const has = !!btn(t);
     return (
-      <g onClick={() => click(t)} style={{ cursor: active && has ? "pointer" : "default" }}
+      <g onClick={() => click(t)} style={{ cursor: active(t) && has ? "pointer" : "default" }}
         className={wait ? "animate-pulse" : undefined}>
         <title>{btn(t)?.label ?? label}</title>
         <rect x={x} y={y} width={w} height={h} rx={7}
@@ -82,7 +83,7 @@ export default function Chk2Mimic({ bundle, snapshot, plcOk, canPress, pending, 
   const bit = (k: string) => snapshot?.[`plc.${k}`] === true;
 
   const toggle = ({ t, label }: { t: string; label: string }) => (
-    <button onClick={() => click(t)} disabled={!active || !btn(t)}
+    <button onClick={() => click(t)} disabled={!active(t) || !btn(t)}
       className={`rounded-lg border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-40 ${
         isPending(t) ? "animate-pulse border-dashed border-blue-500 text-blue-700"
         : isOn(t) ? "border-green-600 bg-green-500 text-green-950" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}>
@@ -94,7 +95,7 @@ export default function Chk2Mimic({ bundle, snapshot, plcOk, canPress, pending, 
     <section className="flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-gray-900">계통도</h3>
-        <span className={`text-[11px] ${!plcOk || !canPress ? "text-rose-600" : "text-gray-400"}`}>{note}</span>
+        <span className={`text-[11px] ${note !== "노드를 눌러 조작" ? "text-rose-600" : "text-gray-400"}`}>{note}</span>
       </div>
 
       <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1.5 rounded-lg bg-gray-50 px-2.5 py-1.5">

@@ -1,11 +1,12 @@
 "use client";
 
 // 챔버K v2 장비 카드 — 값·라벨·단위·자릿수는 묶음 snapshot 정의 그대로. 블록마다 품질 배지(state.links).
-// 히터(SV·ON(값·가스 선택)·OFF·RESET·가스 해제)와 이온 게이지(필라멘트 ON·OFF)는 조작 버튼을 함께.
+// 히터(SV·ON(값·가스 선택)·OFF·히터 정지·RESET·가스 해제 — 입력 칸은 묶음 인자 범위로 미리 막음)와 이온 게이지(필라멘트 ON·OFF)는 조작 버튼을 함께.
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { BigValue, Card, FieldValue, QBadge, type Ask } from "./kit";
-import { GAS_STATE, HEATER_OWNER, type BlockDef, type Link, type StateData } from "./types";
+import { argRange, capRange, checkInput, rangeText, type Range } from "./logic";
+import { GAS_STATE, HEATER_OWNER, type BlockDef, type Bundle, type Link, type StateData } from "./types";
 
 type Common = { def?: BlockDef; snap?: Record<string, unknown>; link?: Link };
 
@@ -60,10 +61,24 @@ export function BlockCard({ def, snap, link, big = [], foldable, children }: Com
   );
 }
 
-const num = (s: string) => (s.trim() === "" ? null : Number(s));
+/** 숫자 입력 칸 + 범위(칸에 "0~700 °C", 밖이면 칸 아래 빨간 글씨) */
+function NumInput({ value, onChange, range, placeholder, disabled, width = "w-24" }: {
+  value: string; onChange: (v: string) => void; range: Range | null; placeholder: string; disabled?: boolean; width?: string;
+}) {
+  const { error } = checkInput(value, range);
+  return (
+    <span className="inline-flex flex-col">
+      <input value={value} onChange={(e) => onChange(e.target.value)} disabled={disabled} inputMode="decimal"
+        placeholder={range ? rangeText(range) : placeholder} title={range ? `범위 ${rangeText(range)}` : undefined}
+        className={`${width} rounded-lg border bg-white px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-400 ${
+          error && !disabled ? "border-rose-400" : "border-gray-200"}`} />
+      {error && !disabled && <span className="mt-0.5 text-[10px] font-semibold text-rose-600">{error}</span>}
+    </span>
+  );
+}
 
-export function HeaterCard({ def, snap, link, st, can, locked, onAsk }: Common & {
-  st: StateData | null; can: (kind: string) => boolean; locked: boolean; onAsk: (a: Ask) => void;
+export function HeaterCard({ bundle, def, snap, link, st, can, locked, onAsk }: Common & {
+  bundle: Bundle | null; st: StateData | null; can: (kind: string) => boolean; locked: boolean; onAsk: (a: Ask) => void;
 }) {
   const [target, setTarget] = useState("");
   const [useAr, setUseAr] = useState(false);
@@ -71,25 +86,34 @@ export function HeaterCard({ def, snap, link, st, can, locked, onAsk }: Common &
   const [useO2, setUseO2] = useState(false);
   const [o2Flow, setO2Flow] = useState("");
   const [wp, setWp] = useState("");
-  const ok = (kind: string) => can(kind) && !locked;        // 히터 명령은 PLC 가 필요 — PLC 품질이 ok 가 아니면 잠금
-  const t = num(target);
-  const tOk = t !== null && Number.isFinite(t);
+  const ok = (kind: string) => can(kind) && !locked;        // 히터 명령은 PLC 가 필요 — PLC 값이 오래되면 잠금
+  // 범위: 묶음 commands[].args(HEATER_MAX_TEMP·MFC 풀스케일), 목표는 PLC 가 보고한 상한(sv_limit)이 더 낮으면 그것까지
+  const svRange = capRange(argRange(bundle, "HEATER_SV", "value"), snap?.["heater.sv_limit"]);
+  const onRange = capRange(argRange(bundle, "HEATER_ON", "value"), snap?.["heater.sv_limit"]);
+  const arRange = argRange(bundle, "HEATER_ON", "ar_flow");
+  const o2Range = argRange(bundle, "HEATER_ON", "o2_flow");
+  const wpRange = argRange(bundle, "HEATER_ON", "wp_mtorr");
+  const tIn = checkInput(target, svRange);
+  const tOn = checkInput(target, onRange);
+  const ar = checkInput(arFlow, arRange);
+  const o2 = checkInput(o2Flow, o2Range);
+  const wpIn = checkInput(wp, wpRange);
   const sv = typeof snap?.["heater.sv"] === "number" ? (snap["heater.sv"] as number) : null;
-  const onValue = tOk ? t : sv;
+  const onValue = tOn.value ?? sv;
+  const gasBad = (useAr && !!ar.error) || (useO2 && !!o2.error) || ((useAr || useO2) && !!wpIn.error);
   const fault = snap?.["heater.fault"] === true;
   const gas = st?.heater?.gas ?? null;
   const owner = st?.heater?.owner;
 
   const onArgs = () => {
     const a: Record<string, unknown> = { value: onValue };
-    if (useAr) { a.use_ar = true; if (num(arFlow) !== null) a.ar_flow = num(arFlow); }
-    if (useO2) { a.use_o2 = true; if (num(o2Flow) !== null) a.o2_flow = num(o2Flow); }
-    if ((useAr || useO2) && num(wp) !== null) a.wp_mtorr = num(wp);
+    if (useAr) { a.use_ar = true; if (ar.value !== null) a.ar_flow = ar.value; }
+    if (useO2) { a.use_o2 = true; if (o2.value !== null) a.o2_flow = o2.value; }
+    if ((useAr || useO2) && wpIn.value !== null) a.wp_mtorr = wpIn.value;
     return a;
   };
   const gasText = [useAr && `Ar ${arFlow || "?"} sccm`, useO2 && `O₂ ${o2Flow || "?"} sccm`, (useAr || useO2) && wp && `WP ${wp} mTorr`]
     .filter(Boolean).join(" · ");
-  const input = "rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs disabled:bg-gray-100 disabled:text-gray-400";
   const btn = "rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40";
 
   return (
@@ -100,36 +124,33 @@ export function HeaterCard({ def, snap, link, st, can, locked, onAsk }: Common &
         {gas && ` · ${GAS_STATE[gas] ?? gas}`}
       </p>
       <div className="mt-2 rounded-xl bg-gray-50 p-3">
-        <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-[11px]">
-          <span className="text-gray-500">목표 온도</span>
-          <span className="flex items-center gap-1.5">
-            <input value={target} onChange={(e) => setTarget(e.target.value)} inputMode="decimal" placeholder="℃"
-              className={`w-24 ${input}`} />
-            <button disabled={!ok("HEATER_SV") || !tOk}
-              onClick={() => onAsk({ kind: "HEATER_SV", label: "히터 목표 온도", detail: `→ ${target} ℃`, args: { value: t } })}
+        <div className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2 text-[11px]">
+          <span className="pt-1.5 text-gray-500">목표 온도</span>
+          <span className="flex items-start gap-1.5">
+            <NumInput value={target} onChange={setTarget} range={svRange} placeholder="℃" width="w-28" />
+            <button disabled={!ok("HEATER_SV") || tIn.value === null || !!tIn.error}
+              onClick={() => onAsk({ kind: "HEATER_SV", label: "히터 목표 온도", detail: `→ ${target} ℃`, args: { value: tIn.value } })}
               className={`${btn} border-gray-200 bg-white text-gray-700`}>
               목표 적용
             </button>
           </span>
-          <span className="text-gray-500">가스(선택)</span>
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-gray-600">
-            <label className="flex items-center gap-1">
+          <span className="pt-1.5 text-gray-500">가스(선택)</span>
+          <span className="flex flex-wrap items-start gap-x-3 gap-y-1.5 text-gray-600">
+            <label className="flex items-center gap-1 pt-1.5">
               <input type="checkbox" checked={useAr} onChange={(e) => setUseAr(e.target.checked)} className="h-3 w-3" /> Ar
             </label>
-            <input value={arFlow} onChange={(e) => setArFlow(e.target.value)} disabled={!useAr} placeholder="sccm"
-              inputMode="decimal" className={`w-16 ${input}`} />
-            <label className="flex items-center gap-1">
+            <NumInput value={arFlow} onChange={setArFlow} range={arRange} placeholder="sccm" disabled={!useAr} width="w-20" />
+            <label className="flex items-center gap-1 pt-1.5">
               <input type="checkbox" checked={useO2} onChange={(e) => setUseO2(e.target.checked)} className="h-3 w-3" /> O₂
             </label>
-            <input value={o2Flow} onChange={(e) => setO2Flow(e.target.value)} disabled={!useO2} placeholder="sccm"
-              inputMode="decimal" className={`w-16 ${input}`} />
-            <span className="text-gray-400">압력</span>
-            <input value={wp} onChange={(e) => setWp(e.target.value)} disabled={!useAr && !useO2} placeholder="mTorr"
-              inputMode="decimal" className={`w-16 ${input}`} />
+            <NumInput value={o2Flow} onChange={setO2Flow} range={o2Range} placeholder="sccm" disabled={!useO2} width="w-20" />
+            <span className="pt-1.5 text-gray-400">압력</span>
+            <NumInput value={wp} onChange={setWp} range={wpRange ? { ...wpRange, unit: wpRange.unit || "mTorr" } : null}
+              placeholder="mTorr" disabled={!useAr && !useO2} width="w-20" />
           </span>
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-200/70 pt-3">
-          <button disabled={!ok("HEATER_ON") || onValue === null}
+          <button disabled={!ok("HEATER_ON") || onValue === null || !!tOn.error || gasBad}
             onClick={() => onAsk({ kind: "HEATER_ON", label: "히터 켜기", args: onArgs(),
                                    detail: `→ ${onValue} ℃${gasText ? ` · ${gasText}` : ""}` })}
             className={`${btn} border-green-600 bg-green-500 text-green-950`}>
@@ -139,6 +160,12 @@ export function HeaterCard({ def, snap, link, st, can, locked, onAsk }: Common &
             onClick={() => onAsk({ kind: "HEATER_OFF", label: "히터 끄기" })}
             className={`${btn} border-gray-300 bg-white text-gray-700`}>
             OFF
+          </button>
+          <button disabled={!can("HEATER_STOP")}
+            onClick={() => onAsk({ kind: "HEATER_STOP", label: "히터 정지", stop: true,
+                                   note: "히터 레시피를 멈추고 RUN 을 끕니다. 공정이 히터를 쓰는 중이면 공정도 멈춥니다." })}
+            className={`${btn} border-rose-300 bg-white text-rose-600`}>
+            히터 정지
           </button>
           {fault && (
             <button disabled={!ok("HEATER_RESET")}
@@ -154,7 +181,7 @@ export function HeaterCard({ def, snap, link, st, can, locked, onAsk }: Common &
               가스 해제
             </button>
           )}
-          <span className="ml-auto text-[10px] text-gray-400">ON 은 목표 칸이 비면 지금 목표(sv)로</span>
+          <span className="ml-auto text-[10px] text-gray-400">ON 은 목표 칸이 비면 지금 목표(sv)로 · 히터 정지는 공정·레시피 소유여도 멈춤</span>
         </div>
       </div>
     </BlockCard>

@@ -41,17 +41,19 @@ export default function Chk2Status({ bundle, st, connected, lastRun, can, onAsk 
   const stopBar = (
     <div className="flex shrink-0 flex-wrap gap-2">
       <button disabled={!can("BUZZ_STOP")}
-        onClick={() => onAsk({ kind: "BUZZ_STOP", label: "부저 정지" })}
+        onClick={() => onAsk({ kind: "BUZZ_STOP", label: "부저 정지", stop: true, note: "울리는 부저를 끕니다." })}
         className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40">
         <BellOff size={14} /> 부저 정지
       </button>
       <button disabled={!can("PROCESS_STOP")}
-        onClick={() => onAsk({ kind: "PROCESS_STOP", label: "공정 STOP", detail: "(공정이 없으면 남은 출력만 정리)" })}
+        onClick={() => onAsk({ kind: "PROCESS_STOP", label: "공정 STOP", stop: true,
+                               note: "진행 중인 공정을 정지 순서대로 멈춥니다. 공정이 없으면 지난 공정이 남긴 출력만 정리합니다." })}
         className="flex items-center gap-1 rounded-xl border border-rose-300 bg-white px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 disabled:opacity-40">
         <Square size={14} /> STOP
       </button>
       <button disabled={!can("ALL_STOP")}
-        onClick={() => onAsk({ kind: "ALL_STOP", label: "ALL STOP", detail: "(공정과 무관하게 전부 끔)", danger: true })}
+        onClick={() => onAsk({ kind: "ALL_STOP", label: "ALL STOP", stop: true,
+                               note: "공정과 출력을 모두 끕니다(공정 여부와 무관 — 펌프·밸브 코일, 히터, 파워, 가스)." })}
         className="flex items-center gap-1 rounded-xl bg-rose-600 px-3 py-2 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-40">
         <OctagonX size={14} /> ALL STOP
       </button>

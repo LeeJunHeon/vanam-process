@@ -1,7 +1,7 @@
 "use client";
 
 // 챔버K v2 장비 화면 공통 조각 — v1 OpsKit(OpsCard·확인창) 모양을 v2 쪽에 새로(v1 은 전환 뒤 지운다).
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
 import { Q_TONE, fmtValue, type FieldDef, type Link } from "./types";
 
@@ -81,14 +81,22 @@ export type Ask = {
   label: string;          // 무엇을
   detail?: string;        // 어떻게(→ ON 등)
   args?: Record<string, unknown>;
-  danger?: boolean;
+  danger?: boolean;        // 도어·벤트 — 사람 확인 문구
+  stop?: boolean;          // 정지 쪽 — 정지 문구(note), 열리면 실행에 포커스
+  note?: string;           // 정지가 하는 일
   plc?: { target: string; want: boolean };   // PLC 버튼 — "전환 중" 표시
 };
 
-/** 확인창 한 번 — 실행하면 onOk */
-export function ConfirmDialog({ ask, busy, onOk, onCancel }: {
-  ask: Ask | null; busy: boolean; onOk: () => void; onCancel: () => void;
-}) {
+/** 확인창 한 번 — 실행하면 onOk. Esc 취소, 정지 쪽은 열리면 실행 버튼에 포커스(Enter 실행) */
+export function ConfirmDialog({ ask, onOk, onCancel }: { ask: Ask | null; onOk: () => void; onCancel: () => void }) {
+  const okRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!ask) return;
+    if (ask.stop) okRef.current?.focus();
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [ask, onCancel]);
   if (!ask) return null;
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
@@ -98,6 +106,11 @@ export function ConfirmDialog({ ask, busy, onOk, onCancel }: {
           <span className="font-semibold">{ask.label}</span>
           {ask.detail && <span> {ask.detail}</span>} — 명령을 장비에 보냅니다.
         </p>
+        {ask.note && (
+          <p className={`mt-2 rounded-lg p-2 text-[11px] leading-relaxed ${ask.stop ? "bg-amber-50 text-amber-800" : "bg-gray-50 text-gray-600"}`}>
+            {ask.note}
+          </p>
+        )}
         {ask.danger && (
           <p className="mt-2 rounded-lg bg-rose-50 p-2 text-[11px] leading-relaxed text-rose-600">
             물리적 위험이 있는 조작입니다. 장비 주변에 사람이 없는지 반드시 확인하세요.
@@ -109,9 +122,9 @@ export function ConfirmDialog({ ask, busy, onOk, onCancel }: {
             className="rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50">
             취소
           </button>
-          <button onClick={onOk} disabled={busy}
-            className={`rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 ${
-              ask.danger ? "bg-rose-600" : "bg-blue-600"}`}>
+          <button ref={okRef} onClick={onOk}
+            className={`rounded-xl px-3 py-1.5 text-xs font-semibold text-white outline-offset-2 focus:outline-2 focus:outline-blue-500 ${
+              ask.danger || ask.stop ? "bg-rose-600" : "bg-blue-600"}`}>
             실행
           </button>
         </div>
