@@ -1,17 +1,23 @@
 // 챔버K v2 웹 레시피 검사 — 장비와 같은 계산(TS). 마지막 판단은 장비(RECIPE_INVALID 등).
-// 옮긴 것(챔버K rewrite/v2 1859152, EXPORT_VERSION 7):
+// 옮긴 것(챔버K rewrite/v2 1859152, EXPORT_VERSION 7 — 2029ce5·8 골든으로 다시 확인):
 //   recipe.check_process_row(딜레이 행·zeroIsEmpty 포함)·check_heater_recipe, process_steps.row_to_params, blocks.template_blocks,
-//   process_engine._check_rows(행 목록 — 빈 행 건너뛰기·"{i}행: 첫 오류").
+//   process_engine._check_rows·_check_row(행 목록 — 빈 행 건너뛰기·"{i}행: 첫 오류", 블록 행은 blocks.ts).
 // 열 정의는 묶음 recipe.processColumns·heaterStepColumns·heaterGasColumns, 설정값은 묶음 params current(없으면 default).
 // igEnabled = IG_ENABLED, rfpulsePresent = RFPULSE_ENABLED(process_engine._start_row 와 같게 — 설정값으로).
 // 골든(lib/ops2/chk/golden/web_template_cases.json)을 npm run ops2:golden 이 이 파일로 확인한다.
 // 오류·경고 문구는 파이썬 f-string 그대로 — 숫자 모양(repr·:g·.Nf, 반올림은 짝수 쪽)도 파이썬과 같게 만든다.
 // JSON 으로 오면 900.0 과 900 이 같은 숫자가 되므로, 정수 값을 파이썬 float 로 찍을 이름(설정의 float 파라미터,
 // 골든 행의 "900.0")은 floats 로 따로 받는다. 웹이 보내는 행은 JSON.stringify 라 정수 값은 장비에서도 int 다.
-// 이 파일은 아무것도 가져오지 않는다 — node 가 타입만 지우고 바로 실행한다(골든 시험).
+// 가져오는 것은 같은 폴더의 py.ts·blocks.ts 뿐 — node 가 타입만 지우고 바로 실행한다(골든 시험).
+import {
+  PyValueError, empty, pyFixed, pyFloat, pyFloatOr0, pyG, pyInt, pyNum, pyRound, pyStrRepr, pyTruthy,
+} from "./py";
+import { blockEnvOf, checkBlocks, expandBlocks, pulseEdgeViolation, usesOf, type BlockEnv, type ExpBlock, type Uses } from "./blocks";
+
+export { pyFixed, pyFloatRepr, pyG, pyNum, pyRound, pyTruthy } from "./py";
 
 /** 이 검사가 맞춘 묶음 버전(골든과 같음) — 묶음 version 이 다르면 화면이 "장비 판단만 믿을 것" 안내 */
-export const GOLDEN_EXPORT_VERSION = 7;
+export const GOLDEN_EXPORT_VERSION = 8;
 /** 챔버K recipe.DELAY_RE.pattern(IGNORECASE) — 골든 시험이 묶음 delayPattern 과 같은지 본다 */
 export const DELAY_PATTERN = String.raw`^\s*delay\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$`;
 const DELAY_RE = new RegExp(DELAY_PATTERN, "i");
@@ -30,130 +36,10 @@ export type RecipeDefs = {
 export type Row = Record<string, unknown>;
 export type Cfg = Readonly<Record<string, unknown>>;
 /** 검사 환경 — floats: 정수 값이라도 파이썬 float 로 찍을 이름(설정 키·행 열 이름) */
-export type CheckEnv = { defs: RecipeDefs; cfg: Cfg; floats: ReadonlySet<string> };
+export type CheckEnv = { defs: RecipeDefs; cfg: Cfg; floats: ReadonlySet<string>; blocks?: BlockEnv | null };
 export type Block = { type: string; params: Record<string, unknown>; label: string; stage: string };
 
-// ───────────── 파이썬 숫자 모양 ─────────────
-/** 유한한 double 의 정확한 십진 값 = n × 10^e (n ≥ 0) */
-function exact(x: number): { n: bigint; e: number } {
-  const dv = new DataView(new ArrayBuffer(8));
-  dv.setFloat64(0, Math.abs(x));
-  const bits = dv.getBigUint64(0);
-  const be = Number((bits >> BigInt(52)) & BigInt(0x7ff));
-  const frac = bits & ((BigInt(1) << BigInt(52)) - BigInt(1));
-  const m = be === 0 ? frac : frac | (BigInt(1) << BigInt(52));
-  const k = be === 0 ? -1074 : be - 1075;
-  if (k >= 0) return { n: m << BigInt(k), e: 0 };
-  return { n: m * BigInt(5) ** BigInt(-k), e: k };
-}
-
-/** |x| 를 10^q 단위 정수로 반올림(같은 거리면 짝수 — 파이썬 format·round 와 같게) */
-function roundAt(x: number, q: number): bigint {
-  const { n, e } = exact(x);
-  if (e >= q) return n * BigInt(10) ** BigInt(e - q);
-  const d = BigInt(10) ** BigInt(q - e);
-  const r = n / d, rem = n % d;
-  const twice = rem * BigInt(2);
-  if (twice > d || (twice === d && r % BigInt(2) === BigInt(1))) return r + BigInt(1);
-  return r;
-}
-
-const neg = (x: number) => x < 0 || Object.is(x, -0);
-
-/** f"{x:.{n}f}" */
-export function pyFixed(x: number, n: number): string {
-  if (!Number.isFinite(x)) return Number.isNaN(x) ? "nan" : x > 0 ? "inf" : "-inf";
-  const s = roundAt(x, -n).toString().padStart(n + 1, "0");
-  const body = n > 0 ? `${s.slice(0, s.length - n)}.${s.slice(s.length - n)}` : s;
-  return (neg(x) ? "-" : "") + body;
-}
-
-/** f"{x:g}"(정밀도 6) */
-export function pyG(x: number, p = 6): string {
-  if (!Number.isFinite(x)) return Number.isNaN(x) ? "nan" : x > 0 ? "inf" : "-inf";
-  const sign = neg(x) ? "-" : "";
-  if (x === 0) return `${sign}0`;
-  const { n, e } = exact(x);
-  let E = n.toString().length + e - 1;                 // 맨 앞 자리의 10 지수
-  let r = roundAt(x, E - p + 1);
-  if (r.toString().length > p) {                       // 올림으로 자리가 늘었다(9.999995 → 10.0000)
-    E += 1;
-    r = roundAt(x, E - p + 1);
-  }
-  const digits = r.toString().padStart(p, "0");
-  if (E >= -4 && E < p) {
-    const s = pyFixed(Math.abs(x), Math.max(p - 1 - E, 0));
-    return sign + (s.includes(".") ? s.replace(/\.?0+$/, "") : s);
-  }
-  const mant = (digits[0] + (digits.length > 1 ? `.${digits.slice(1)}` : "")).replace(/\.?0+$/, "");
-  return `${sign}${mant}e${E < 0 ? "-" : "+"}${String(Math.abs(E)).padStart(2, "0")}`;
-}
-
-/** repr(float) — 가장 짧은 자리(JS 와 같음), 모양만 파이썬(1e-05·900.0·1e+16) */
-export function pyFloatRepr(x: number): string {
-  if (!Number.isFinite(x)) return Number.isNaN(x) ? "nan" : x > 0 ? "inf" : "-inf";
-  const sign = neg(x) ? "-" : "";
-  if (x === 0) return `${sign}0.0`;
-  const [m, ex] = Math.abs(x).toExponential().split("e");
-  const D = m.replace(".", ""), E = Number(ex);
-  if (E >= -4 && E < 16) {
-    if (E < 0) return `${sign}0.${"0".repeat(-E - 1)}${D}`;
-    const ip = D.length > E + 1 ? D.slice(0, E + 1) : D.padEnd(E + 1, "0");
-    const fp = D.length > E + 1 ? D.slice(E + 1) : "0";
-    return `${sign}${ip}.${fp}`;
-  }
-  return `${sign}${D[0]}${D.length > 1 ? `.${D.slice(1)}` : ""}e${E < 0 ? "-" : "+"}${String(Math.abs(E)).padStart(2, "0")}`;
-}
-
-/** f"{v}" — 숫자는 float 면 repr(float), 아니면 int */
-export function pyNum(v: number, isFloat: boolean): string {
-  if (isFloat || !Number.isInteger(v)) return pyFloatRepr(v);
-  return BigInt(v).toString();
-}
-
-function pyStrRepr(s: string): string {
-  const q = s.includes("'") && !s.includes('"') ? '"' : "'";
-  const body = s.replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
-    .split(q).join(`\\${q}`);
-  return `${q}${body}${q}`;
-}
-
-/** round(x) — 짝수 쪽 */
-export function pyRound(x: number): number {
-  const f = Math.floor(x), d = x - f;
-  if (d > 0.5) return f + 1;
-  if (d < 0.5) return f;
-  return f % 2 === 0 ? f : f + 1;
-}
-
-/** bool(v) */
-export function pyTruthy(v: unknown): boolean {
-  if (v === null || v === undefined || v === false || v === "" || v === 0) return false;
-  if (Array.isArray(v)) return v.length > 0;
-  if (typeof v === "object") return Object.keys(v as object).length > 0;
-  return true;
-}
-
-/** float(v) — 숫자·bool·숫자 글만. 파이썬이 ValueError 를 내는 값은 오류 */
-class PyValueError extends Error {}
-function pyFloat(v: unknown): number {
-  if (typeof v === "number") return v;
-  if (typeof v === "boolean") return v ? 1 : 0;
-  if (typeof v === "string" && /^\s*[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?\s*$/.test(v)) return Number(v);
-  throw new PyValueError(`float(${typeof v === "string" ? pyStrRepr(v) : String(v)})`);
-}
-/** float(v or 0) */
-const pyFloatOr0 = (v: unknown) => (pyTruthy(v) ? pyFloat(v) : 0);
-/** int(v) — float 는 0 쪽으로 자름 */
-function pyInt(v: unknown): number {
-  if (typeof v === "boolean") return v ? 1 : 0;
-  if (typeof v === "number") return Math.trunc(v);
-  if (typeof v === "string" && /^\s*[+-]?\d+\s*$/.test(v)) return Number(v);
-  throw new PyValueError(`int(${String(v)})`);
-}
-
 // ───────────── 행 검사(recipe.py) ─────────────
-const empty = (v: unknown) => v === null || v === undefined || (typeof v === "string" && v.trim() === "");
 const emptyCol = (c: ColDef, v: unknown) => empty(v) || (!!c.zeroIsEmpty && typeof v === "number" && v === 0);
 
 export function delaySeconds(name: unknown): number | null {
@@ -206,14 +92,6 @@ function checkCols(cols: ColDef[], row: Row, env: CheckEnv): string[] {
 /** 레시피 rf_pulse_freq(kHz) → 장비 Hz = int(round(kHz × 1000)) */
 export function pulseFreqHz(khz: unknown): number | null {
   return empty(khz) ? null : pyRound(pyFloat(khz) * 1000.0);
-}
-
-function pulseEdgeViolation(freqHz: number, duty: number, minEdge: number): string | null {
-  if (minEdge <= 0 || freqHz <= 0) return null;
-  const on = duty / 100.0 / freqHz * 1e6;
-  const off = (100.0 - duty) / 100.0 / freqHz * 1e6;
-  if (on >= minEdge - 1e-6 && off >= minEdge - 1e-6) return null;
-  return `${pyG(freqHz)} Hz·${pyG(duty)}% → ON ${pyFixed(on, 1)} µs / OFF ${pyFixed(off, 1)} µs < ${pyG(minEdge)} µs`;
 }
 
 export type RowResult = { clean: Row | null; errors: string[]; warnings: string[] };
@@ -410,7 +288,7 @@ type BundleLike = {
   recipe?: Partial<RecipeDefs>;
 } | null | undefined;
 
-/** 묶음의 열 정의와 설정값(current, 없으면 default). 열 정의가 없으면 null(검사 안 함) */
+/** 묶음의 열 정의와 설정값(current, 없으면 default). 열 정의가 없으면 null(검사 안 함). 블록 규칙 표가 없으면 blocks null */
 export function checkEnvOf(b: unknown): CheckEnv | null {
   const bundle = b as BundleLike;
   const rc = bundle?.recipe;
@@ -424,7 +302,7 @@ export function checkEnvOf(b: unknown): CheckEnv | null {
     cfg[p.key] = p.current ?? p.default ?? null;
     if (p.type === "float") floats.add(p.key);
   }
-  return { defs: rc as RecipeDefs, cfg, floats };
+  return { defs: rc as RecipeDefs, cfg, floats, blocks: blockEnvOf(bundle, cfg) };
 }
 
 /** 묶음 version 이 이 검사가 맞춘 것과 다른가 — 화면 안내(검사는 그대로, 막지 않음) */
@@ -438,7 +316,9 @@ export type RowCheck = {
   kind: "empty" | "delay" | "row" | "blocks" | "bad";
   errors: string[]; warnings: string[];
   clean: Row | null;
-  blocks: Block[] | null;               // 기본 템플릿(오류가 없는 v1 행만)
+  blocks: Block[] | null;               // v1 행은 기본 템플릿, 블록 행은 정리된 블록(오류가 없을 때만)
+  expanded: ExpBlock[] | null;          // 펼친 단계(blocks.expand)
+  uses: Uses | null;                    // 쓰는 장비(blocks.uses_of)
 };
 export type RecipeCheck = {
   rows: RowCheck[];
@@ -450,6 +330,23 @@ export type RecipeCheck = {
 /** 빈 행 — 장비 _check_rows 와 같게 값이 모두 None·""·False(0 도 == False)면 건너뜀 */
 export function rowHasContent(r: Row): boolean {
   return Object.values(r).some((v) => !(v === null || v === undefined || v === "" || v === false || v === 0));
+}
+
+/** 블록 행 {process_name?, blocks} — process_engine._check_row 의 블록 행 부분 + 펼친 단계. 웹 블록 검사가 없으면(묶음 7 이하) 경고만 */
+export function checkBlockRow(row: Row, env: CheckEnv): Omit<RowCheck, "kind"> {
+  const none = { clean: null, blocks: null, expanded: null, uses: null };
+  if (Object.keys(row).some((k) => k !== "process_name" && k !== "blocks")
+      || !(row.process_name === undefined || row.process_name === null || typeof row.process_name === "string")) {
+    return { ...none, errors: ["블록 행은 process_name(문자열)·blocks 만"], warnings: [] };
+  }
+  const be = env.blocks;
+  if (!be) return { ...none, errors: [], warnings: ["블록 행 — 이 묶음에는 블록 규칙 표가 없어 웹 검사 없음(장비가 검사)"] };
+  const r = checkBlocks(row.blocks, be);
+  if (!r.clean) return { ...none, errors: r.errors, warnings: r.warnings };
+  return {
+    errors: [], warnings: r.warnings, clean: { process_name: row.process_name || "", blocks: r.clean }, blocks: r.clean,
+    expanded: expandBlocks(r.clean, be, pyTruthy(env.cfg.RFPULSE_ENABLED)), uses: usesOf(r.clean),
+  };
 }
 
 /** process_engine._check_rows + 행마다 기본 템플릿 — 장비는 첫 오류에서 멈추지만 화면은 모든 행을 본다 */
@@ -464,25 +361,32 @@ export function checkProcessRecipe(rows: unknown, env: CheckEnv): RecipeCheck {
   list.forEach((r, j) => {
     const i = j + 1;
     if (!r || typeof r !== "object" || Array.isArray(r)) {
-      out.push({ kind: "bad", errors: ["객체가 아님"], warnings: [], clean: null, blocks: null });
+      out.push({ kind: "bad", errors: ["객체가 아님"], warnings: [], clean: null, blocks: null, expanded: null, uses: null });
       first ??= `${i}행: 객체가 아님`;
       return;
     }
     const row = r as Row;
     if (!rowHasContent(row)) {
-      out.push({ kind: "empty", errors: [], warnings: [], clean: null, blocks: null });
+      out.push({ kind: "empty", errors: [], warnings: [], clean: null, blocks: null, expanded: null, uses: null });
       return;
     }
     content += 1;
     if ("blocks" in row) {
-      out.push({ kind: "blocks", errors: [], warnings: ["블록 행 — 웹 검사 없음(장비가 검사)"], clean: null, blocks: null });
+      const b = checkBlockRow(row, env);
+      if (b.errors.length) first ??= `${i}행: ${b.errors[0]}`;
+      out.push({ kind: "blocks", ...b });
       return;
     }
     const c = checkProcessRow(row, env);
     let blocks: Block[] | null = null;
+    let expanded: ExpBlock[] | null = null, uses: Uses | null = null;
     if (c.clean && c.clean.delay_s === undefined) {
       try {
         blocks = templateBlocks(rowToParams(c.clean, env.cfg), env.cfg, ig, rfp);
+        if (env.blocks) {
+          expanded = expandBlocks(blocks, env.blocks, rfp);
+          uses = usesOf(blocks);
+        }
       } catch (e) {
         if (!(e instanceof PyValueError)) throw e;
         c.errors.push(`값 형식: ${e.message} — 장비가 처리하지 못하는 값`);
@@ -490,7 +394,7 @@ export function checkProcessRecipe(rows: unknown, env: CheckEnv): RecipeCheck {
     }
     if (c.errors.length) first ??= `${i}행: ${c.errors[0]}`;
     out.push({ kind: c.clean?.delay_s !== undefined ? "delay" : "row", errors: c.errors, warnings: c.warnings,
-               clean: c.errors.length ? null : c.clean, blocks });
+               clean: c.errors.length ? null : c.clean, blocks, expanded, uses });
   });
   if (list.length && !content) listErrors.push("내용 있는 행이 없음");
   if (!first && listErrors.length) first = listErrors[0];
