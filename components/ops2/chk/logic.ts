@@ -1,5 +1,6 @@
 // 챔버K v2 장비 화면의 판단(순수 함수) — React·DB 없이 node 로 바로 시험할 수 있게 타입만 가져온다.
 // state 순서, PLC 잠금, 명령 인자 범위(W-4·W-5 입력 칸도 쓴다), 정지 쪽 명령.
+import type { ColDef } from "@/lib/ops2/chk/recipe";
 import type { Bundle, Envelope, Link } from "./types";
 
 /** 정지 쪽 명령 — 다른 명령의 결과를 기다리는 중에도 막지 않고, 화면 stream 이 끊겨도 웹이 장비와 이어져 있으면 보낸다 */
@@ -47,6 +48,14 @@ export function argRange(b: Bundle | null, kind: string, name: string): Range | 
     max: hi.length ? Math.min(...hi) : null,
     unit: (unitKey && b?.params?.find((p) => p.key === unitKey)?.unit) || "",
   };
+}
+
+/** 레시피 열 범위 — 묶음 recipe 열의 min·max·paramMin·paramMax(값은 params current, 없으면 default). 숫자 열이 아니면 null */
+export function colRange(b: Bundle | null, c: ColDef): Range | null {
+  if (c.type !== "float" && c.type !== "int") return null;
+  const lo = c.paramMin ? num(paramValue(b, c.paramMin)) : num(c.min);
+  const hi = c.paramMax ? num(paramValue(b, c.paramMax)) : num(c.max);
+  return { min: lo, max: hi, unit: c.unit ?? "" };
 }
 
 /** 상한을 더 낮춘 범위(예: PLC 가 보고한 목표 상한) — cap 이 0 보다 클 때만 */

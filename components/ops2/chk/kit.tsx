@@ -84,6 +84,8 @@ export type Ask = {
   danger?: boolean;        // 도어·벤트 — 사람 확인 문구
   stop?: boolean;          // 정지 쪽 — 정지 문구(note), 열리면 실행에 포커스
   note?: string;           // 정지가 하는 일
+  red?: boolean;           // 물리 동작(공정·히터 레시피 시작) — 실행 버튼 빨강
+  lines?: string[];        // 무엇을 하는지 요약(레시피 이름·행 수·첫 행 가스·파워·시간, 히터 목표)
   plc?: { target: string; want: boolean };   // PLC 버튼 — "전환 중" 표시
 };
 
@@ -106,6 +108,11 @@ export function ConfirmDialog({ ask, onOk, onCancel }: { ask: Ask | null; onOk: 
           <span className="font-semibold">{ask.label}</span>
           {ask.detail && <span> {ask.detail}</span>} — 명령을 장비에 보냅니다.
         </p>
+        {ask.lines && ask.lines.length > 0 && (
+          <ul className="mt-2 space-y-0.5 rounded-lg bg-gray-50 p-2 text-[11px] leading-relaxed text-gray-700">
+            {ask.lines.map((l, i) => <li key={i}>{l}</li>)}
+          </ul>
+        )}
         {ask.note && (
           <p className={`mt-2 rounded-lg p-2 text-[11px] leading-relaxed ${ask.stop ? "bg-amber-50 text-amber-800" : "bg-gray-50 text-gray-600"}`}>
             {ask.note}
@@ -124,8 +131,36 @@ export function ConfirmDialog({ ask, onOk, onCancel }: { ask: Ask | null; onOk: 
           </button>
           <button ref={okRef} onClick={onOk}
             className={`rounded-xl px-3 py-1.5 text-xs font-semibold text-white outline-offset-2 focus:outline-2 focus:outline-blue-500 ${
-              ask.danger || ask.stop ? "bg-rose-600" : "bg-blue-600"}`}>
+              ask.danger || ask.stop || ask.red ? "bg-rose-600" : "bg-blue-600"}`}>
             실행
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 화면 안 확인(장비 명령이 아닌 것 — 레시피 지우기·저장 안 하고 나가기). Esc 취소 */
+export function SimpleConfirm({ title, text, ok, danger, onOk, onCancel }: {
+  title: string; text: ReactNode; ok: string; danger?: boolean; onOk: () => void; onCancel: () => void;
+}) {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [onCancel]);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-4">
+        <p className="text-sm font-bold text-gray-900">{title}</p>
+        <div className="mt-2 text-sm text-gray-700">{text}</div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onCancel} className="rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50">
+            취소
+          </button>
+          <button onClick={onOk}
+            className={`rounded-xl px-3 py-1.5 text-xs font-semibold text-white ${danger ? "bg-rose-600" : "bg-blue-600"}`}>
+            {ok}
           </button>
         </div>
       </div>

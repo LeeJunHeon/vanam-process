@@ -5,6 +5,7 @@
 import { AlertTriangle, BellOff, OctagonX, Square } from "lucide-react";
 import { Card, type Ask } from "./kit";
 import { fmtKst } from "@/lib/ops2/time";
+import type { RecipeItem } from "./useRecipes";
 import {
   GAS_STATE, HEATER_OWNER, RUN_RESULT, reasonLabel, stateLabel, type Bundle, type RunRow, type StateData,
 } from "./types";
@@ -22,14 +23,19 @@ function leftText(left: Record<string, unknown>): string {
   }).join(" · ");
 }
 
-export default function Chk2Status({ bundle, st, connected, lastRun, can, onAsk }: {
+export default function Chk2Status({ bundle, st, connected, lastRun, can, onAsk, webRecipes }: {
   bundle: Bundle | null;
   st: StateData | null;
   connected: boolean;
   lastRun: RunRow | null;
   can: (kind: string) => boolean;
   onAsk: (a: Ask) => void;
+  webRecipes?: RecipeItem[] | null;              // 적재된 이름이 웹의 어느 레시피인지
 }) {
+  const webMark = (kind: string, name?: string | null) => !webRecipes || !name ? null
+    : webRecipes.some((r) => r.kind === kind && r.name === name)
+      ? <span className="ml-1 rounded bg-blue-50 px-1 text-[10px] text-blue-700">웹 레시피</span>
+      : <span className="ml-1 rounded bg-gray-100 px-1 text-[10px] text-gray-500">웹 목록에 없는 이름</span>;
   const kind = bundle?.states?.find((s) => s.name === st?.procState)?.kind;
   const step = st?.step;
   const stepType = step?.type ? bundle?.blocks?.defs?.find((d) => d.type === step.type)?.label ?? step.type : null;
@@ -96,7 +102,7 @@ export default function Chk2Status({ bundle, st, connected, lastRun, can, onAsk 
           )}
           {st.recipe && (
             <p className="mt-0.5 text-[11px] text-gray-500">
-              레시피 {st.recipe.name || "이름 없음"} · 행 {st.recipe.row ?? "-"}/{st.recipe.rows ?? "-"}
+              레시피 {st.recipe.name || "이름 없음"}{webMark("process", st.recipe.name)} · 행 {st.recipe.row ?? "-"}/{st.recipe.rows ?? "-"}
               {st.recipe.listActive && " · 리스트 진행 중"}
             </p>
           )}
@@ -111,7 +117,7 @@ export default function Chk2Status({ bundle, st, connected, lastRun, can, onAsk 
             히터 {owner ? `${HEATER_OWNER[owner] ?? owner} 소유` : "소유 없음"}
             {st.heater?.handedOver && " · 공정에서 넘겨받음"}
             {st.heater?.gas && st.heater.gas !== "IDLE" && ` · ${GAS_STATE[st.heater.gas] ?? st.heater.gas}`}
-            {st.heaterRecipe && ` · 히터 레시피 ${st.heaterRecipe.name ?? ""} ${st.heaterRecipe.step ?? "-"}/${st.heaterRecipe.steps ?? "-"} (${st.heaterRecipe.state ?? ""})`}
+            {st.heaterRecipe && <> · 히터 레시피 {st.heaterRecipe.name ?? ""}{webMark("heater", st.heaterRecipe.name)} {st.heaterRecipe.step ?? "-"}/{st.heaterRecipe.steps ?? "-"} ({st.heaterRecipe.state ?? ""})</>}
           </p>
         </div>
         {stopBar}

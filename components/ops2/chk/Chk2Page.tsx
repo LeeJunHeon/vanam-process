@@ -3,20 +3,24 @@
 // 챔버K v2 장비 화면(메뉴 "CHK v2") — 로그인한 누구나 보고, 조작은 권한대로(hello.web.perms).
 // 브라우저 API /api/ops2/[equipment]/v1/*(노트북 로컬 화면 API 와 같은 모양 — W-7 에서 같은 화면 코드가 둘 다 쓴다).
 // 위: 장비 고르기·연결 띠(마지막 state 3 s 늦음·10 s 끊김 — 끊기면 조작 잠금)·runMode·버전·시계 차·명령 연결.
-// 조작(이번 범위): STOP·ALL STOP·부저 정지·히터 정지, PLC 버튼, 히터 SV·ON·OFF·RESET·가스 해제, 이온 게이지 필라멘트.
+// 조작: STOP·ALL STOP·부저 정지·히터 정지, PLC 버튼, 히터 SV·ON·OFF·RESET·가스 해제, 이온 게이지 필라멘트,
+// 레시피(W-4a — Chk2Recipes: 저장·편집·웹 검사, 적재·시작·해제, 한 행 시작, 히터 레시피 실행·정지·일시정지·건너뛰기).
 // 명령은 하나씩 따로 보내고 결과 알림도 따로 — 기다리는 동안 막는 것은 같은 명령 종류만(PLC 버튼은 같은 target 만).
-// 정지 쪽(logic.STOP_KINDS)은 다른 명령을 기다려도 막지 않고, 화면 stream 이 끊겨도 웹이 장비와 이어져 있으면(hello.web.online) 보낸다.
-// 공정 시작·레시피·히터 레시피(W-4), 공정 중 수정·설정(W-5)은 두지 않는다.
-import { useCallback, useEffect, useState } from "react";
+// 정지 쪽(logic.STOP_KINDS)은 막지 않는다 — 다른 명령이나 같은 정지의 결과를 기다리는 중에도(다시 눌러도 해가 없고, 첫 명령이 갔는지
+// 모를 때 바로 다시 누를 수 있게), 화면 stream 이 끊겨도 웹이 장비와 이어져 있으면(hello.web.online) 보낸다.
+// 블록 직접 편집·공정 기록 화면(W-4b), 공정 중 수정·설정(W-5)은 두지 않는다.
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { AlertTriangle, Clock, Eye, LogIn, Radio, WifiOff } from "lucide-react";
 import Chk2Mimic from "./Chk2Mimic";
 import Chk2Status from "./Chk2Status";
 import { BlockCard, HeaterCard, IgCard } from "./Chk2Cards";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
-import { ConfirmDialog, Notices, type Ask, type Notice } from "./kit";
+import Chk2Recipes from "./Chk2Recipes";
+import { ConfirmDialog, Notices, SimpleConfirm, type Ask, type Notice } from "./kit";
 import { STALE_SEC_DEFAULT, STOP_KINDS, paramValue, plcFresh } from "./logic";
 import { reasonLabel } from "./types";
 import { useChk2 } from "./useChk2";
+import { useRecipes } from "./useRecipes";
 
 const STORE_KEY = "vanam-process:chk2-device";
 const LATE_MS = 3_000;
@@ -41,6 +45,8 @@ type Device = { equipment: string; label: string | null; runMode: string | null 
 export default function Chk2Page() {
   const [devices, setDevices] = useState<Device[] | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
+  const [switchTo, setSwitchTo] = useState<string | null>(null);   // 저장 안 한 레시피가 있을 때 바꾸려는 장비
+  const dirtyRef = useRef(false);                              // 레시피 편집 중 저장 안 한 변경(Chk2Recipes 가 적는다)
 
   useEffect(() => {
     void (async () => {
@@ -55,6 +61,7 @@ export default function Chk2Page() {
   }, []);
 
   const pick = (e: string) => {
+    if (dirtyRef.current) return setSwitchTo(e);
     setPicked(e);
     try { window.localStorage.setItem(STORE_KEY, e); } catch { /* 저장 실패는 무시 */ }
   };
@@ -79,13 +86,19 @@ export default function Chk2Page() {
           등록된 v2 장비가 없습니다. 장비 관리(v2)에서 장비를 등록하세요.
         </p>
       )}
-      {picked && <Chk2Device key={picked} equipment={picked} />}
+      {picked && <Chk2Device key={picked} equipment={picked} dirtyRef={dirtyRef} />}
+      {switchTo && (
+        <SimpleConfirm title="저장 안 함" ok="버리고 바꾸기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 장비를 바꿀까요?"
+          onCancel={() => setSwitchTo(null)}
+          onOk={() => { dirtyRef.current = false; setSwitchTo(null); pick(switchTo); }} />
+      )}
     </div>
   );
 }
 
-function Chk2Device({ equipment }: { equipment: string }) {
+function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: MutableRefObject<boolean> }) {
   const d = useChk2(equipment);
+  const recipes = useRecipes(equipment);
   const [now, setNow] = useState(() => Date.now());
   const [ask, setAsk] = useState<Ask | null>(null);
   const [inflight, setInflight] = useState<Record<string, number>>({});   // 결과를 기다리는 명령(종류 또는 PLC_BUTTON:target)
@@ -122,8 +135,9 @@ function Chk2Device({ equipment }: { equipment: string }) {
   const webOnline = !!web?.online;
 
   const allowed = (kind: string, key: string) => {
-    if (!canOperate || !perms?.kinds.includes(kind) || inflight[key]) return false;
-    return STOP_KINDS.includes(kind) ? connected || webOnline : connected;
+    if (!canOperate || !perms?.kinds.includes(kind)) return false;
+    if (STOP_KINDS.includes(kind)) return connected || webOnline;
+    return !inflight[key] && connected;
   };
   const can = (kind: string) => allowed(kind, kind);
   const canPlc = (target: string) => allowed("PLC_BUTTON", `PLC_BUTTON:${target}`);
@@ -251,7 +265,8 @@ function Chk2Device({ equipment }: { equipment: string }) {
       )}
       <Notices list={notices} onClose={(id) => setNotices((l) => l.filter((n) => n.id !== id))} />
 
-      <Chk2Status bundle={d.bundle} st={st} connected={connected} lastRun={d.runs[0] ?? null} can={can} onAsk={setAsk} />
+      <Chk2Status bundle={d.bundle} st={st} connected={connected} lastRun={d.runs[0] ?? null} can={can} onAsk={setAsk}
+        webRecipes={recipes.list} />
 
       <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
         <Chk2Mimic bundle={d.bundle} snapshot={snap} plcOk={plcOk} canPress={canPlc}
@@ -269,6 +284,8 @@ function Chk2Device({ equipment }: { equipment: string }) {
         <BlockCard def={block("rf")} snap={snap} link={link("rf")} big={["fwd_w", "ref_w"]} />
         <BlockCard def={block("rfp")} snap={snap} link={link("rfp")} big={["fwd_w", "ref_w"]} foldable />
       </div>
+
+      <Chk2Recipes bundle={d.bundle} st={st} recipes={recipes} can={can} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef} />
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <EventFeed bundle={d.bundle} feed={d.feed} />

@@ -1,5 +1,6 @@
 // 챔버K v2 장비 화면 — 브라우저 API(/api/ops2/[equipment]/v1/*) 모양과 값 표시.
 // 계약: 챔버K v2 common/messages.py(envelope·state), chk/web_schema.py(묶음). 화면은 묶음 정의만 보고 그린다.
+import type { RecipeDefs } from "@/lib/ops2/chk/recipe";
 
 export type Envelope<T = Record<string, unknown>> = {
   id: string; instance: string; seq: number; ts: string; type: string; data: T;
@@ -25,7 +26,8 @@ export type ArgDef = {
   paramMin?: string | null; paramMax?: string | null;
 };
 export type CommandDef = { kind: string; label: string; role?: string; sources?: string[]; args?: ArgDef[] };
-export type ParamDef = { key: string; label?: string; unit?: string; current?: unknown; default?: unknown };
+export type ParamDef = { key: string; label?: string; unit?: string; type?: string; current?: unknown; default?: unknown };
+export type BlockTypeDef = { type: string; label: string; params?: { name: string; unit?: string }[] };
 export type Bundle = {
   hash: string; version: number;
   params?: ParamDef[];
@@ -33,7 +35,8 @@ export type Bundle = {
   reasons?: { code: string; label: string; category?: string }[];
   plcButtons?: { target: string; addr: string; label: string }[];
   states?: { name: string; label: string; kind: string }[];
-  blocks?: { defs?: { type: string; label: string }[] };
+  blocks?: { defs?: BlockTypeDef[] };
+  recipe?: RecipeDefs;
   snapshot?: { blocks?: BlockDef[] };
 };
 
