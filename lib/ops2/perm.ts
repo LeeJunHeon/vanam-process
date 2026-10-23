@@ -27,6 +27,11 @@ export function canRunCommand(actor: Actor, equipment: string, cmdRole: unknown,
   return false;
 }
 
+/** 레시피 저장·고치기·지우기 — 관리자 또는 그 장비 담당자(보기는 누구나) */
+export function canEditRecipes(actor: Actor, equipment: string, operators: readonly string[]): boolean {
+  return isAdminRole(actor.role) || isOperatorOf(actor, equipment, operators);
+}
+
 /** 그 사람의 담당 기준 장비 ID 목록(DB) */
 export async function operatorEquipments(db: Pick<PrismaClient, "ops2Operator">, employeeId?: number | null): Promise<string[]> {
   if (employeeId == null) return [];

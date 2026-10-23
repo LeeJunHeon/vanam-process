@@ -563,3 +563,24 @@ model Ops2Operator {
   @@map("ops2_operator")
   @@schema("process")
 }
+
+// v2 레시피(웹이 원본 — v1 ops_recipe 와 따로). base_equipment 는 기준 장비 ID(CHK2-SIM 도 CHK2 레시피를 쓴다).
+// kind: process(rows = v1 행·딜레이 행 목록) / heater(rows = 스텝 목록, gas = 첫 행 가스 설정).
+// bundle_version = 저장할 때 장비 묶음 EXPORT_VERSION
+model Ops2Recipe {
+  id            String   @id
+  baseEquipment String   @map("base_equipment")
+  kind          String
+  name          String
+  rows          Json     @default("[]")
+  gas           Json?
+  bundleVersion Int?     @map("bundle_version")
+  createdBy     String   @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedBy     String   @map("updated_by")
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([baseEquipment, kind, name])
+  @@map("ops2_recipe")
+  @@schema("process")
+}

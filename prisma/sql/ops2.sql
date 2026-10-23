@@ -214,6 +214,23 @@ CREATE TABLE IF NOT EXISTS "process"."ops2_operator" (
     CONSTRAINT "ops2_operator_pkey" PRIMARY KEY ("equipment","employee_id")
 );
 
+-- CreateTable (W-4a)
+CREATE TABLE IF NOT EXISTS "process"."ops2_recipe" (
+    "id" TEXT NOT NULL,
+    "base_equipment" TEXT NOT NULL,
+    "kind" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "rows" JSONB NOT NULL DEFAULT '[]',
+    "gas" JSONB,
+    "bundle_version" INTEGER,
+    "created_by" TEXT NOT NULL,
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_by" TEXT NOT NULL,
+    "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "ops2_recipe_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE INDEX IF NOT EXISTS "ops2_instance_equipment_first_seen_at_idx" ON "process"."ops2_instance"("equipment", "first_seen_at");
 
@@ -255,6 +272,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS "ops2_config_version_ack_msg_id_key" ON "proce
 
 -- CreateIndex
 CREATE INDEX IF NOT EXISTS "ops2_operator_employee_id_idx" ON "process"."ops2_operator"("employee_id");
+
+-- CreateIndex (W-4a)
+CREATE UNIQUE INDEX IF NOT EXISTS "ops2_recipe_base_equipment_kind_name_key" ON "process"."ops2_recipe"("base_equipment", "kind", "name");
 
 -- 장비 등록. token_hash 는 비워 둔다(비어 있으면 그 장비의 연결은 모두 401) —
 -- node scripts/ops2-token.mjs <장비ID> 가 보여 주는 UPDATE 로 넣는다.
