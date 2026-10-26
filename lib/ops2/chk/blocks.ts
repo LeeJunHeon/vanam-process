@@ -1,5 +1,5 @@
 // 챔버K v2 웹 블록 검사 — 장비와 같은 계산(TS). 마지막 판단은 장비(RECIPE_INVALID·DEVICE_DISABLED·IG_DISABLED).
-// 옮긴 것(챔버K rewrite/v2 2029ce5, EXPORT_VERSION 8):
+// 옮긴 것(챔버K rewrite/v2 2029ce5, EXPORT_VERSION 8 — d0bb5a1·9 의 label·stage 빈 글·type 필요·valueRules.uses 반영):
 //   blocks.check_blocks(_check_one·_check_param·_when — 값 사이·꺼진 장비 규칙 표 valueRules 를 묶음에서 읽어 해석,
 //   repeat 안쪽·중첩 한도·정지 순서 번호·_as_type 숫자 형식 정리), blocks.expand(_expand_list·_expand_block — 펼친 단계,
 //   자동 끝 정지), blocks.uses_of, process_steps.build_gas_pre_steps·build_gas_intro_steps, recipe.pulse_edge_violation,
@@ -22,7 +22,7 @@ export type BlockDef = {
   type: string; label: string; params: BParamDef[]; stage: string; stages: string[];
   watch: Record<string, boolean> | null; container: boolean; steps: string; v1?: string; desc: string;
 };
-export type ValueRule = { id: string; blocks: string[]; kind: string; when: string; key: string; msg: string };
+export type ValueRule = { id: string; blocks: string[]; kind: string; when: string; key: string; msg: string; uses?: string[] };
 export type BlockDefs = {
   defs: BlockDef[];
   watchItems: { item: string; rule: string; label: string }[];
@@ -106,6 +106,14 @@ function when(env: BlockEnv, w: string, out: Record<string, unknown>): boolean {
   return true;
 }
 
+/** BRule.uses — 조건·문구가 쓰는 블록 값 이름(묶음 9 에 있음, 없으면 같은 방법으로 셈) */
+function ruleUses(r: ValueRule): string[] {
+  if (Array.isArray(r.uses)) return r.uses;
+  const names = [...r.msg.matchAll(/{(w+)}/g)].map((m) => m[1])
+    .concat(r.when.split("·").filter(Boolean).map((c) => c.split(/=true|:num|^=|∉|<heaterRampMin/)[0].replace(/^0</, "")));
+  return [...new Set(names.filter((n) => n !== "edge"))];
+}
+
 /** BRule.msg.format(**out) — 값은 정의 형식대로 */
 function fmtMsg(msg: string, vals: Record<string, unknown>, d: BlockDef | null): string {
   return msg.replace(/\{(\w+)\}/g, (_m, k: string) =>
@@ -164,7 +172,7 @@ function checkOne(env: BlockEnv, b: unknown, path: string, depth: number, errs: 
   }
   const d = typeof b.type === "string" ? env.byType.get(b.type) : undefined;
   if (!d) {
-    errs.push(`블록 ${path}: 모르는 종류 ${pyRepr(b.type)}`);
+    errs.push(empty(b.type) ? `블록 ${path}: type 필요` : `블록 ${path}: 모르는 종류 ${pyRepr(b.type)}`);
     return null;
   }
   const pre = `블록 ${path}(${d.type})`;
@@ -178,23 +186,30 @@ function checkOne(env: BlockEnv, b: unknown, path: string, depth: number, errs: 
   const known = new Set(d.params.map((p) => p.name));
   for (const k of Object.keys(params)) if (!known.has(k)) errs.push(`${pre}: ${k}: 모르는 값`);
   const out: Record<string, unknown> = {};
+  const bad = new Set<string>();                         // 빠졌거나(필수) 틀린 값 — 이 값을 쓰는 값 사이 규칙은 건너뛴다
   for (const p of d.params) {
     const v = Object.hasOwn(params, p.name) ? params[p.name] : undefined;
     if (empty(v)) {
-      if (p.required) errs.push(`${pre}: ${p.name}: 값 필요`);
+      if (p.required) {
+        errs.push(`${pre}: ${p.name}: 값 필요`);
+        bad.add(p.name);
+      }
       out[p.name] = p.default;
       continue;
     }
     const e = checkParam(env, p, v);
-    if (e) errs.push(`${pre}: ${p.name}: ${e}`);
+    if (e) {
+      errs.push(`${pre}: ${p.name}: ${e}`);
+      bad.add(p.name);
+    }
     out[p.name] = v;
   }
-  const label = b.label;
+  const label = empty(b.label) ? null : b.label;          // 빈 글·공백만 = 값 없음(장비 5-11)
   const max = env.defs.limits.labelMax;
   if (label !== undefined && label !== null && (typeof label !== "string" || [...label].length > max)) {
     errs.push(`${pre}: label 은 ${max}자 이하 문자열`);
   }
-  const stage = b.stage;
+  const stage = empty(b.stage) ? null : b.stage;
   const stages = [d.stage, ...d.stages];
   if (stage !== undefined && stage !== null && !stages.includes(stage as string)) {
     errs.push(`${pre}: stage 는 ${pyRepr(stages)} 중 하나`);
@@ -203,7 +218,7 @@ function checkOne(env: BlockEnv, b: unknown, path: string, depth: number, errs: 
     type: d.type, params: out, label: pyTruthy(label) ? (label as string) : "", stage: pyTruthy(stage) ? (stage as string) : "",
   };
   for (const r of env.defs.valueRules) {                 // 값 사이(같은 블록 안) — 순서 규칙이 아니라 값의 짝
-    if (!r.blocks.includes(d.type) || !when(env, r.when, out)) continue;
+    if (!r.blocks.includes(d.type) || ruleUses(r).some((n) => bad.has(n)) || !when(env, r.when, out)) continue;
     if (r.kind === "need" && empty(out[r.key])) {
       errs.push(`${pre}: ${fmtMsg(r.msg, out, d)}`);
     } else if (r.kind === "device" && !pyTruthy(r.key in env.cfg ? env.cfg[r.key] : true)) {

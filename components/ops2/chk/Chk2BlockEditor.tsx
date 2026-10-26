@@ -128,7 +128,7 @@ function Choice({ value, options, placeholder, error, readOnly, onChange, title 
   value: unknown; options: { v: string; label: string }[]; placeholder: string; error?: string; readOnly: boolean;
   onChange: (v: unknown) => void; title?: string;
 }) {
-  const known = value === undefined || value === null || (typeof value === "string" && options.some((o) => o.v === value));
+  const known = value === undefined || value === null || value === "" || (typeof value === "string" && options.some((o) => o.v === value));
   return (
     <select value={known ? (value as string | undefined) ?? "" : "__raw"} disabled={readOnly} title={error ?? title}
       onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value === "__raw" ? value : e.target.value)}

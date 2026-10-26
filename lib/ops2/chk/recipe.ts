@@ -17,7 +17,7 @@ import { blockEnvOf, checkBlocks, expandBlocks, pulseEdgeViolation, usesOf, type
 export { pyFixed, pyFloatRepr, pyG, pyNum, pyRound, pyTruthy } from "./py";
 
 /** 이 검사가 맞춘 묶음 버전(골든과 같음) — 묶음 version 이 다르면 화면이 "장비 판단만 믿을 것" 안내 */
-export const GOLDEN_EXPORT_VERSION = 8;
+export const GOLDEN_EXPORT_VERSION = 9;
 /** 챔버K recipe.DELAY_RE.pattern(IGNORECASE) — 골든 시험이 묶음 delayPattern 과 같은지 본다 */
 export const DELAY_PATTERN = String.raw`^\s*delay\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$`;
 const DELAY_RE = new RegExp(DELAY_PATTERN, "i");
@@ -111,7 +111,8 @@ export function checkProcessRow(row: Row, env: CheckEnv): RowResult {
   if (errs.length) return { clean: null, errors: errs, warnings: warns };
   const cfg = env.cfg;
   const r: Row = { ...row };
-  for (const c of cols) if (c.zeroIsEmpty && c.name in r && emptyCol(c, r[c.name])) delete r[c.name];
+  // 0(zeroIsEmpty)·""·공백만·None → 없는 값과 같은 정리 결과(장비 5-11 — process_name 은 그대로)
+  for (const c of cols) if (c.name !== "process_name" && c.name in r && emptyCol(c, r[c.name])) delete r[c.name];
   try {
     if (!(r.ar === true || r.o2 === true)) errs.push("가스: Ar 또는 O2 중 하나 이상");
     const pt = pyFloatOr0(r.process_time), sd = pyFloatOr0(r.shutter_delay);

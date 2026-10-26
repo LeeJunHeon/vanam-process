@@ -254,12 +254,8 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
     if (i === null || !draft || !rc?.blocks) return;
     const src = draft.rows[i].data;
     const name = typeof src.process_name === "string" && src.process_name ? `${src.process_name} (블록)` : "";
-    // 템플릿 블록의 label·stage "" 와 비운 값(null)은 뺀다 — 장비 검사는 stage "" 를 None 이 아닌 틀린 값으로 본다
-    const blocks = rc.blocks.map((b) => ({
-      type: b.type, params: Object.fromEntries(Object.entries(b.params).filter(([, v]) => v !== null && v !== undefined)),
-      ...(b.label ? { label: b.label } : {}), ...(b.stage ? { stage: b.stage } : {}),
-    }));
-    const n: ERow = { uid: newUid(), data: { ...(name ? { process_name: name } : {}), blocks } };
+    // 장비 template_blocks 그대로(label·stage "" 는 장비 5-11 부터 값 없음으로 통과)
+    const n: ERow = { uid: newUid(), data: { ...(name ? { process_name: name } : {}), blocks: JSON.parse(JSON.stringify(rc.blocks)) } };
     setDraft({ ...draft, rows: [...draft.rows.slice(0, i + 1), n, ...draft.rows.slice(i + 1)] });
     setBlockUid(n.uid);
   };

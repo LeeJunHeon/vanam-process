@@ -1,6 +1,6 @@
 {
- "_출처": {"챔버K":"rewrite/v2 2029ce5 (2029ce5cc1b0a1149a585d0e4b0645a0419b23f8)","file":"v2/tests/golden/web_block_cases.json","exportVersion":8,"bundleHash":"b8ea04b040fdadc835d65ec2d7003eab765806930af391272ba66c17793a677b","설명":"cases 는 챔버K 파일 그대로(손으로 고치지 않음). _묶음 은 같은 커밋의 web_schema.definitions() 중 웹 블록 검사(lib/ops2/chk/blocks.ts)가 묶음에서 읽는 것과 cfg 키의 파라미터 형식. npm run ops2:golden 이 확인"},
- "_묶음": {"blocks":{"defs":[{"type":"pre_clean","label":"시작 전 정리","params":[{"name":"dc","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"DC 출력 OFF"},{"name":"rf","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"RF 출력 OFF(즉시 0)"},{"name":"rfpulse","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"RF Pulse OFF(RFPULSE_ENABLED 일 때만)"},{"name":"settle_sec","type":"float","unit":"s","default":"cfg:PRE_POWER_OFF_SETTLE_SEC","required":false,"min":0.0,"max":30.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"OFF 뒤 대기(정수 초로 반올림)"}],"stage":"PRE_CLEAN","stages":[],"watch":null,"container":false,"steps":"DC_POWER_STOP · RF_POWER_STOP · RF_PULSE_STOP · DELAY","v1":"pc:514-519","desc":"이전 공정 잔류 출력 정리"},{"type":"gas_prep","label":"가스 준비","params":[{"name":"ar","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"o2","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""}],"stage":"GAS_PRE","stages":[],"watch":null,"container":false,"steps":"채널별 FLOW_OFF · MFC 밸브 열기","v1":"pc:522 build_gas_pre_steps","desc":""},{"type":"heater_ramp","label":"히터 승온","params":[{"name":"target_c","type":"float","unit":"°C","default":null,"required":true,"min":0.0,"max":null,"paramMin":null,"paramMax":"HEATER_MAX_TEMP","paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"ramp_c_per_min","type":"float","unit":"°C/min","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"HEATER_RECIPE_RAMP_MAX_C_PER_MIN","paramScale":1.0,"minExclusive":false,"enum":null,"desc":"비우거나 0 이면 HEATER_RAMP_RATE_C_PER_MIN, 6 미만은 6(래더 분해능)"}],"stage":"HEATER_RAMP","stages":[],"watch":null,"container":false,"steps":"HEATER_RAMP(D00020) · HEATER_SET(감속 접근·RUN)","v1":"pc:534-545","desc":"HEATER_ENABLED 가 꺼져 있으면 시작 거부(DEVICE_DISABLED)"},{"type":"heater_wait","label":"히터 도달·유지 대기","params":[],"stage":"HEATER_RAMP","stages":["HEATER_HOLD_WAIT"],"watch":null,"container":false,"steps":"HEATER_WAIT — ±HEATER_SOAK_TOLERANCE 를 HEATER_SOAK_TIME_SEC, 유지 모드 진입","v1":"pc:546-550, 1295-1530","desc":"지금 히터 목표(마지막 승온 블록·공정 중 수정)에 도달·유지할 때까지. 목표가 없으면 경고 뒤 다음"},{"type":"base_wait","label":"베이스 압력 대기(IG)","params":[{"name":"target_torr","type":"float","unit":"Torr","default":null,"required":true,"min":null,"max":null,"paramMin":"BASE_PRESSURE_MIN_TORR","paramMax":"BASE_PRESSURE_MAX_TORR","paramScale":1.0,"minExclusive":false,"enum":null,"desc":""}],"stage":"BASE_WAIT","stages":[],"watch":null,"container":false,"steps":"IG_FILAMENT_ON · IG_BASE_WAIT · IG_FILAMENT_OFF","v1":"pc:1036-1273","desc":"IG_ENABLED 가 꺼져 있으면 시작 거부(DEVICE_DISABLED)"},{"type":"gas_intro","label":"가스 도입","params":[{"name":"ar","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"ar_flow","type":"float","unit":"sccm","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"MFC_AR_FS_SCCM","paramScale":1.0,"minExclusive":true,"enum":null,"desc":"ar 이면 필요. 상한 = Ar 풀스케일"},{"name":"o2","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"o2_flow","type":"float","unit":"sccm","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"MFC_O2_FS_SCCM","paramScale":1.0,"minExclusive":true,"enum":null,"desc":"o2 이면 필요. 상한 = O2 풀스케일"},{"name":"zero","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"MFC·압력 영점"}],"stage":"GAS_INTRO","stages":[],"watch":null,"container":false,"steps":"MFC_ZEROING · PS_ZEROING · 차단밸브 열기 · FLOW_SET · FLOW_ON(유량 안정화)","v1":"pc:560 build_gas_intro_steps","desc":""},{"type":"pressure","label":"압력 설정","params":[{"name":"sp","type":"int","unit":"","default":null,"required":true,"min":1,"max":4,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"설정점 번호"},{"name":"value","type":"float","unit":"mTorr","default":null,"required":false,"min":0.0,"max":1000.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":"비우면 SP2·SP3·SP4 는 SP2_MTORR·SP3_MTORR·SP4_MTORR, SP1 은 필요(레시피 작업 압력)"},{"name":"set","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"S{n} 쓰기(되읽기)"},{"name":"select","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"D{n} 선택(R7 확인)"},{"name":"wait","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"도달 대기"},{"name":"tol_ratio","type":"float","unit":"비율","default":"cfg:PRESSURE_WAIT_TOL_RATIO","required":false,"min":0.01,"max":0.5,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"stable_sec","type":"float","unit":"s","default":"cfg:PRESSURE_WAIT_STABLE_SEC","required":false,"min":0.0,"max":600.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"timeout_sec","type":"float","unit":"s","default":null,"required":false,"min":0.0,"max":7200.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":"비우면 SP1 은 SP1_TIMEOUT_SEC, 그 밖은 PRESSURE_STAGE_TIMEOUT_SEC"},{"name":"on_timeout","type":"enum","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["continue","abort"],"desc":"비우면 SP1 은 abort(SP1_TIMEOUT), 그 밖은 continue(경고)"}],"stage":"PRESSURE_SP1","stages":["PRESSURE_SP2","PRESSURE_SP3","PRESSURE_SP4","GAS_STABILIZE"],"watch":null,"container":false,"steps":"SPn_SET · SPn_ON · WAIT_PRESSURE","v1":"pc:565-630","desc":"stage 를 비우면 PRESSURE_SP{n}"},{"type":"valve","label":"MFC 밸브","params":[{"name":"action","type":"enum","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["open","close","hold"],"desc":"O 열기 / C 닫기 / H 그 자리 정지 [MFC p.74]"}],"stage":"VALVE","stages":[],"watch":null,"container":false,"steps":"VALVE_OPEN(R6 확인) · VALVE_CLOSE(R6 확인) · VALVE_HOLD","v1":"MFC.py:1172-1211(O·C)","desc":""},{"type":"shutter","label":"셔터","params":[{"name":"action","type":"enum","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["open","close"],"desc":""},{"name":"targets","type":"list","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["g1","g2","ms"],"desc":"g1·g2·ms 중 하나 이상(이 순서로)"}],"stage":"SHUTTER","stages":["GUN_SHUTTER","MAIN"],"watch":null,"container":false,"steps":"PLC_CMD(S1·S2·MS) — 쓰기 뒤 0.8 s","v1":"pc:582-597","desc":""},{"type":"power_on","label":"파워 켜기","params":[{"name":"dc_power","type":"float","unit":"W","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"DC_MAX_POWER","paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"rf_power","type":"float","unit":"W","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"RF_MAX_POWER","paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"rfp_power","type":"float","unit":"W","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"RFPULSE_MAX_POWER","paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"rfp_freq_khz","type":"float","unit":"kHz","default":null,"required":false,"min":null,"max":null,"paramMin":"RFPULSE_PULSE_FREQ_MIN_HZ","paramMax":"RFPULSE_PULSE_FREQ_MAX_HZ","paramScale":0.001,"minExclusive":false,"enum":null,"desc":"장비에는 Hz = round(kHz × 1000). 비우면 장비값 유지"},{"name":"rfp_duty","type":"int","unit":"%","default":null,"required":false,"min":null,"max":null,"paramMin":"RFPULSE_DUTY_MIN","paramMax":"RFPULSE_DUTY_MAX","paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"wait","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"목표 도달까지 기다림"},{"name":"timeout_sec","type":"float","unit":"s","default":null,"required":false,"min":0.0,"max":14400.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":"비우면 process_states.FORMULAS['POWER_WAIT']"}],"stage":"POWER_WAIT","stages":[],"watch":null,"container":false,"steps":"POWER_WAIT(도달 대기) 또는 POWER_START(켜기만)","v1":"pc:941-997","desc":"DC·RF·RF Pulse 중 값이 있는 것을 함께 시작. 이미 켜진 장비는 다시 켜지 않고 목표만 바꾼다"},{"type":"power_off","label":"파워 끄기","params":[{"name":"dc","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"rf","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"RF 는 램프다운 뒤 OFF"},{"name":"rfpulse","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""}],"stage":"POWER_OFF","stages":[],"watch":null,"container":false,"steps":"DC_POWER_STOP · RF_RAMP_OFF · RF_PULSE_STOP","v1":"pc:1924-1981","desc":""},{"type":"gas_off","label":"가스 끄기","params":[{"name":"ar","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"o2","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"close_valves","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"차단밸브 닫기"}],"stage":"GAS_OFF","stages":[],"watch":null,"container":false,"steps":"FLOW_OFF · 차단밸브 닫기","v1":"heater_atmosphere 해제 순서","desc":""},{"type":"heater_off","label":"히터 끄기","params":[],"stage":"HEATER_OFF","stages":[],"watch":null,"container":false,"steps":"HEATER_OFF(RUN=0·램프 원복)","v1":"pc _heater_off","desc":""},{"type":"wait","label":"대기","params":[{"name":"sec","type":"float","unit":"s","default":null,"required":true,"min":0.0,"max":604800.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"watch","type":"watch","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"이탈 감시 켜기/끄기 {dc, rf, rfp, flow, pressure} — 빈 항목은 블록 기본값"}],"stage":"WAIT","stages":["GAS_STABILIZE","DC_DELAY","SHUTTER_DELAY"],"watch":{"dc":false,"rf":true,"rfp":true,"flow":false,"pressure":false},"container":false,"steps":"DELAY","v1":"pc:565-579·632-657","desc":"공정 중 수정 process.skip_wait 로 바로 끝낼 수 있다"},{"type":"main","label":"메인","params":[{"name":"sec","type":"float","unit":"s","default":null,"required":true,"min":0.0,"max":604800.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"close","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"끝에 메인 셔터 닫기(기본 템플릿은 정지 순서가 닫는다)"},{"name":"watch","type":"watch","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"이탈 감시 켜기/끄기 {dc, rf, rfp, flow, pressure} — 빈 항목은 블록 기본값"}],"stage":"MAIN","stages":[],"watch":{"dc":true,"rf":true,"rfp":true,"flow":true,"pressure":true},"container":false,"steps":"PLC_CMD MS 열기 · DELAY · [MS 닫기]","v1":"pc:659-680","desc":"공정 중 수정 process.main_remaining 으로 남은 시간을 바꾼다"},{"type":"cond_wait","label":"조건 대기","params":[{"name":"field","type":"enum","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["mfc.pressure_mtorr","mfc.ar_sccm","mfc.o2_sccm","heater.pv","heater.pv2","ig.ion_torr","dc.p","dc.v","dc.i","rf.fwd_w","rf.ref_w","rfp.fwd_w","rfp.ref_w"],"desc":""},{"name":"op","type":"enum","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["le","ge","near"],"desc":""},{"name":"value","type":"float","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"tol","type":"float","unit":"","default":0.0,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"near 의 허용(같은 단위)"},{"name":"stable_sec","type":"float","unit":"s","default":0.0,"required":false,"min":0.0,"max":3600.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"조건이 이 시간 이어지면 통과"},{"name":"timeout_sec","type":"float","unit":"s","default":null,"required":true,"min":0.0,"max":604800.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"on_timeout","type":"enum","unit":"","default":"abort","required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["continue","abort"],"desc":"abort = COND_WAIT_TIMEOUT 중단, continue = 경고 뒤 다음"},{"name":"watch","type":"watch","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"이탈 감시 켜기/끄기 {dc, rf, rfp, flow, pressure} — 빈 항목은 블록 기본값"}],"stage":"COND_WAIT","stages":[],"watch":{"dc":false,"rf":true,"rfp":true,"flow":false,"pressure":false},"container":false,"steps":"COND_WAIT","v1":"v2","desc":"값을 모르는 tick(stale·fail)은 판정을 바꾸지 않는다(judge.Persist)"},{"type":"repeat","label":"반복","params":[{"name":"count","type":"int","unit":"회","default":null,"required":true,"min":1,"max":100,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""}],"stage":"","stages":[],"watch":null,"container":true,"steps":"안의 블록을 count 번(중첩 가능)","v1":"v2","desc":""},{"type":"end_stop","label":"정상 끝 정지","params":[{"name":"skip","type":"steps","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"건너뛸 정지 순서 단계 번호(safety_rules.STOP_SEQUENCE) — 1·2·3·9·10·11·12 만(필라멘트·셔터·히터·가스). 파워 끄기 4·5·6·7·8·13 은 뺄 수 없음(사용자 결정 2026-10-21)"}],"stage":"STOPPING","stages":[],"watch":null,"container":false,"steps":"SafetyEngine.end_row — 지금 행 끝 정지 순서(표 순서 고정, skip 만 뺀다)","v1":"pc:1785-2019","desc":"기본 템플릿의 마지막. 중간에 두면 정지 순서 뒤 다음 블록으로. 목록 끝이 이 블록이 아니면 자동으로 덧붙는다"}],"watchItems":[{"item":"dc","rule":"S31C","label":"DC 파워 이탈"},{"item":"rf","rule":"S33B","label":"RF 파워 이탈"},{"item":"rfp","rule":"S34A","label":"RF Pulse 순방향 이탈"},{"item":"flow","rule":"S38A","label":"가스 유량 이탈(경고)"},{"item":"pressure","rule":"S38B","label":"압력 이탈(경고)"}],"watchDefault":{"dc":false,"rf":true,"rfp":true,"flow":false,"pressure":false},"watchMain":{"dc":true,"rf":true,"rfp":true,"flow":true,"pressure":true},"condFields":[{"field":"mfc.pressure_mtorr","label":"챔버 압력","unit":"mTorr"},{"field":"mfc.ar_sccm","label":"Ar 유량","unit":"sccm"},{"field":"mfc.o2_sccm","label":"O2 유량","unit":"sccm"},{"field":"heater.pv","label":"히터 온도(TC1)","unit":"°C"},{"field":"heater.pv2","label":"히터 온도(TC2)","unit":"°C"},{"field":"ig.ion_torr","label":"이온 게이지 압력","unit":"Torr"},{"field":"dc.p","label":"DC 파워","unit":"W"},{"field":"dc.v","label":"DC 전압","unit":"V"},{"field":"dc.i","label":"DC 전류","unit":"A"},{"field":"rf.fwd_w","label":"RF 순방향","unit":"W"},{"field":"rf.ref_w","label":"RF 반사","unit":"W"},{"field":"rfp.fwd_w","label":"RF Pulse 순방향","unit":"W"},{"field":"rfp.ref_w","label":"RF Pulse 반사","unit":"W"}],"condOps":[{"op":"le","label":"≤ 값"},{"op":"ge","label":"≥ 값"},{"op":"near","label":"값 ± 허용"}],"shutters":[{"target":"g1","label":"Gun Shutter 1"},{"target":"g2","label":"Gun Shutter 2"},{"target":"ms","label":"Main Shutter"}],"limits":{"repeatMax":100,"maxDepth":4,"maxExpandedSteps":3000,"labelMax":60},"rules":"값 범위·꺼진 장비만 검사 — 순서·조합 규칙 없음(사용자 결정 2026-10-20)","blockKeys":["type","params","label","stage","blocks"],"empty":"빈 값 = null 또는 공백뿐인 문자열(숫자 0 은 빈 값 아님). params 가 없거나 거짓 값([]·\"\")이면 {}","valueRules":[{"id":"need_ar_flow","blocks":["gas_intro"],"kind":"need","when":"ar=true","key":"ar_flow","msg":"ar_flow: ar 이면 값 필요"},{"id":"need_o2_flow","blocks":["gas_intro"],"kind":"need","when":"o2=true","key":"o2_flow","msg":"o2_flow: o2 이면 값 필요"},{"id":"need_sp_value","blocks":["pressure"],"kind":"need","when":"set=true·sp∉spDefaultKey","key":"value","msg":"value: SP{sp} 는 값 필요"},{"id":"heater_disabled","blocks":["heater_ramp","heater_wait","heater_off"],"kind":"device","when":"","key":"HEATER_ENABLED","msg":"히터: HEATER_ENABLED=false"},{"id":"ig_disabled_base","blocks":["base_wait"],"kind":"device","when":"","key":"IG_ENABLED","msg":"base_pressure: 이온 게이지가 꺼져 있음(IG_ENABLED=false)"},{"id":"ig_disabled_cond","blocks":["cond_wait"],"kind":"device","when":"field^=ig.","key":"IG_ENABLED","msg":"조건 값 {field}: 이온 게이지가 꺼져 있음(IG_ENABLED=false)"},{"id":"rfpulse_disabled","blocks":["power_on"],"kind":"device","when":"rfp_power:num","key":"RFPULSE_ENABLED","msg":"RF Pulse: RFPULSE_ENABLED=false"},{"id":"pulse_edge","blocks":["power_on"],"kind":"pulse_edge","when":"rfp_freq_khz:num·rfp_duty:num","key":"RFPULSE_PULSE_MIN_EDGE_US","msg":"RF Pulse: {edge}"},{"id":"ramp_below_min","blocks":["heater_ramp"],"kind":"warn","when":"0<ramp_c_per_min<heaterRampMin","key":"","msg":"ramp_c_per_min {ramp_c_per_min} < 6 → 6 (래더 분해능)"}],"spDefaultKey":{"2":"SP2_MTORR","3":"SP3_MTORR","4":"SP4_MTORR"},"pressureStage":"stage 를 비우면 PRESSURE_SP{sp}","heaterRampMin":6.0,"pulseEdge":{"param":"RFPULSE_PULSE_MIN_EDGE_US","freqHz":"round(rfp_freq_khz × 1000)","rule":"ON = duty/100/Hz×1e6 µs, OFF = (100−duty)/100/Hz×1e6 µs — 둘 다 ≥ 최소 − 1e-6. 최소 ≤ 0 이거나 Hz ≤ 0 이면 검사 안 함"},"autoEndStopLabel":"자동 끝 정지"},"stopSequence":{"steps":[{"no":1},{"no":2},{"no":3},{"no":4},{"no":5},{"no":6},{"no":7},{"no":8},{"no":9},{"no":10},{"no":11},{"no":12},{"no":13}],"endStopMustKeep":[4,5,6,7,8,13]},"paramTypes":{"BASE_PRESSURE_MAX_TORR":"float","BASE_PRESSURE_MIN_TORR":"float","DC_MAX_POWER":"float","HEATER_ENABLED":"bool","HEATER_MAX_TEMP":"float","HEATER_RAMP_RATE_C_PER_MIN":"float","HEATER_RECIPE_RAMP_MAX_C_PER_MIN":"float","HEATER_SOAK_TIME_SEC":"int","HEATER_SOAK_TOLERANCE":"float","IG_ENABLED":"bool","MFC_AR_FS_SCCM":"float","MFC_O2_FS_SCCM":"float","PRESSURE_STAGE_TIMEOUT_SEC":"float","PRESSURE_WAIT_STABLE_SEC":"float","PRESSURE_WAIT_TOL_RATIO":"float","PRE_POWER_OFF_SETTLE_SEC":"float","RFPULSE_DUTY_MAX":"int","RFPULSE_DUTY_MIN":"int","RFPULSE_ENABLED":"bool","RFPULSE_MAX_POWER":"float","RFPULSE_PULSE_FREQ_MAX_HZ":"int","RFPULSE_PULSE_FREQ_MIN_HZ":"int","RFPULSE_PULSE_MIN_EDGE_US":"float","RF_MAX_POWER":"float","SP1_TIMEOUT_SEC":"float","SP2_MTORR":"float","SP3_MTORR":"float","SP4_MTORR":"float"}},
+ "_출처": {"챔버K":"rewrite/v2 d0bb5a1 (d0bb5a12c3791d5d22551d13b74a40bd9bcb8ef6)","file":"v2/tests/golden/web_block_cases.json","exportVersion":9,"bundleHash":"847c8ea7b5094df8a57404903bb60d046f000d4a83c3b36e497218936d68e2ff","설명":"cases 는 챔버K 파일 그대로(손으로 고치지 않음). _묶음 은 같은 커밋의 web_schema.definitions() 중 웹 블록 검사(lib/ops2/chk/blocks.ts)가 묶음에서 읽는 것과 cfg 키의 파라미터 형식. npm run ops2:golden 이 확인"},
+ "_묶음": {"blocks":{"defs":[{"type":"pre_clean","label":"시작 전 정리","params":[{"name":"dc","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"DC 출력 OFF"},{"name":"rf","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"RF 출력 OFF(즉시 0)"},{"name":"rfpulse","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"RF Pulse OFF(RFPULSE_ENABLED 일 때만)"},{"name":"settle_sec","type":"float","unit":"s","default":"cfg:PRE_POWER_OFF_SETTLE_SEC","required":false,"min":0.0,"max":30.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"OFF 뒤 대기(정수 초로 반올림)"}],"stage":"PRE_CLEAN","stages":[],"watch":null,"container":false,"steps":"DC_POWER_STOP · RF_POWER_STOP · RF_PULSE_STOP · DELAY","v1":"pc:514-519","desc":"이전 공정 잔류 출력 정리"},{"type":"gas_prep","label":"가스 준비","params":[{"name":"ar","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"o2","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""}],"stage":"GAS_PRE","stages":[],"watch":null,"container":false,"steps":"채널별 FLOW_OFF · MFC 밸브 열기","v1":"pc:522 build_gas_pre_steps","desc":""},{"type":"heater_ramp","label":"히터 승온","params":[{"name":"target_c","type":"float","unit":"°C","default":null,"required":true,"min":0.0,"max":null,"paramMin":null,"paramMax":"HEATER_MAX_TEMP","paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"ramp_c_per_min","type":"float","unit":"°C/min","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"HEATER_RECIPE_RAMP_MAX_C_PER_MIN","paramScale":1.0,"minExclusive":false,"enum":null,"desc":"비우거나 0 이면 HEATER_RAMP_RATE_C_PER_MIN, 6 미만은 6(래더 분해능)"}],"stage":"HEATER_RAMP","stages":[],"watch":null,"container":false,"steps":"HEATER_RAMP(D00020) · HEATER_SET(감속 접근·RUN)","v1":"pc:534-545","desc":"HEATER_ENABLED 가 꺼져 있으면 시작 거부(DEVICE_DISABLED)"},{"type":"heater_wait","label":"히터 도달·유지 대기","params":[],"stage":"HEATER_RAMP","stages":["HEATER_HOLD_WAIT"],"watch":null,"container":false,"steps":"HEATER_WAIT — ±HEATER_SOAK_TOLERANCE 를 HEATER_SOAK_TIME_SEC, 유지 모드 진입","v1":"pc:546-550, 1295-1530","desc":"지금 히터 목표(마지막 승온 블록·공정 중 수정)에 도달·유지할 때까지. 목표가 없으면 경고 뒤 다음"},{"type":"base_wait","label":"베이스 압력 대기(IG)","params":[{"name":"target_torr","type":"float","unit":"Torr","default":null,"required":true,"min":null,"max":null,"paramMin":"BASE_PRESSURE_MIN_TORR","paramMax":"BASE_PRESSURE_MAX_TORR","paramScale":1.0,"minExclusive":false,"enum":null,"desc":""}],"stage":"BASE_WAIT","stages":[],"watch":null,"container":false,"steps":"IG_FILAMENT_ON · IG_BASE_WAIT · IG_FILAMENT_OFF","v1":"pc:1036-1273","desc":"IG_ENABLED 가 꺼져 있으면 시작 거부(DEVICE_DISABLED)"},{"type":"gas_intro","label":"가스 도입","params":[{"name":"ar","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"ar_flow","type":"float","unit":"sccm","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"MFC_AR_FS_SCCM","paramScale":1.0,"minExclusive":true,"enum":null,"desc":"ar 이면 필요. 상한 = Ar 풀스케일"},{"name":"o2","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"o2_flow","type":"float","unit":"sccm","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"MFC_O2_FS_SCCM","paramScale":1.0,"minExclusive":true,"enum":null,"desc":"o2 이면 필요. 상한 = O2 풀스케일"},{"name":"zero","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"MFC·압력 영점"}],"stage":"GAS_INTRO","stages":[],"watch":null,"container":false,"steps":"MFC_ZEROING · PS_ZEROING · 차단밸브 열기 · FLOW_SET · FLOW_ON(유량 안정화)","v1":"pc:560 build_gas_intro_steps","desc":""},{"type":"pressure","label":"압력 설정","params":[{"name":"sp","type":"int","unit":"","default":null,"required":true,"min":1,"max":4,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"설정점 번호"},{"name":"value","type":"float","unit":"mTorr","default":null,"required":false,"min":0.0,"max":1000.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":"비우면 SP2·SP3·SP4 는 SP2_MTORR·SP3_MTORR·SP4_MTORR, SP1 은 필요(레시피 작업 압력)"},{"name":"set","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"S{n} 쓰기(되읽기)"},{"name":"select","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"D{n} 선택(R7 확인)"},{"name":"wait","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"도달 대기"},{"name":"tol_ratio","type":"float","unit":"비율","default":"cfg:PRESSURE_WAIT_TOL_RATIO","required":false,"min":0.01,"max":0.5,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"stable_sec","type":"float","unit":"s","default":"cfg:PRESSURE_WAIT_STABLE_SEC","required":false,"min":0.0,"max":600.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"timeout_sec","type":"float","unit":"s","default":null,"required":false,"min":0.0,"max":7200.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":"비우면 SP1 은 SP1_TIMEOUT_SEC, 그 밖은 PRESSURE_STAGE_TIMEOUT_SEC"},{"name":"on_timeout","type":"enum","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["continue","abort"],"desc":"비우면 SP1 은 abort(SP1_TIMEOUT), 그 밖은 continue(경고)"}],"stage":"PRESSURE_SP1","stages":["PRESSURE_SP2","PRESSURE_SP3","PRESSURE_SP4","GAS_STABILIZE"],"watch":null,"container":false,"steps":"SPn_SET · SPn_ON · WAIT_PRESSURE","v1":"pc:565-630","desc":"stage 를 비우면 PRESSURE_SP{n}"},{"type":"valve","label":"MFC 밸브","params":[{"name":"action","type":"enum","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["open","close","hold"],"desc":"O 열기 / C 닫기 / H 그 자리 정지 [MFC p.74]"}],"stage":"VALVE","stages":[],"watch":null,"container":false,"steps":"VALVE_OPEN(R6 확인) · VALVE_CLOSE(R6 확인) · VALVE_HOLD","v1":"MFC.py:1172-1211(O·C)","desc":""},{"type":"shutter","label":"셔터","params":[{"name":"action","type":"enum","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["open","close"],"desc":""},{"name":"targets","type":"list","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["g1","g2","ms"],"desc":"g1·g2·ms 중 하나 이상(이 순서로)"}],"stage":"SHUTTER","stages":["GUN_SHUTTER","MAIN"],"watch":null,"container":false,"steps":"PLC_CMD(S1·S2·MS) — 쓰기 뒤 0.8 s","v1":"pc:582-597","desc":""},{"type":"power_on","label":"파워 켜기","params":[{"name":"dc_power","type":"float","unit":"W","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"DC_MAX_POWER","paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"rf_power","type":"float","unit":"W","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"RF_MAX_POWER","paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"rfp_power","type":"float","unit":"W","default":null,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":"RFPULSE_MAX_POWER","paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"rfp_freq_khz","type":"float","unit":"kHz","default":null,"required":false,"min":null,"max":null,"paramMin":"RFPULSE_PULSE_FREQ_MIN_HZ","paramMax":"RFPULSE_PULSE_FREQ_MAX_HZ","paramScale":0.001,"minExclusive":false,"enum":null,"desc":"장비에는 Hz = round(kHz × 1000). 비우면 장비값 유지"},{"name":"rfp_duty","type":"int","unit":"%","default":null,"required":false,"min":null,"max":null,"paramMin":"RFPULSE_DUTY_MIN","paramMax":"RFPULSE_DUTY_MAX","paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"wait","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"목표 도달까지 기다림"},{"name":"timeout_sec","type":"float","unit":"s","default":null,"required":false,"min":0.0,"max":14400.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":"비우면 process_states.FORMULAS['POWER_WAIT']"}],"stage":"POWER_WAIT","stages":[],"watch":null,"container":false,"steps":"POWER_WAIT(도달 대기) 또는 POWER_START(켜기만)","v1":"pc:941-997","desc":"DC·RF·RF Pulse 중 값이 있는 것을 함께 시작. 이미 켜진 장비는 다시 켜지 않고 목표만 바꾼다"},{"type":"power_off","label":"파워 끄기","params":[{"name":"dc","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"rf","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"RF 는 램프다운 뒤 OFF"},{"name":"rfpulse","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""}],"stage":"POWER_OFF","stages":[],"watch":null,"container":false,"steps":"DC_POWER_STOP · RF_RAMP_OFF · RF_PULSE_STOP","v1":"pc:1924-1981","desc":""},{"type":"gas_off","label":"가스 끄기","params":[{"name":"ar","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"o2","type":"bool","unit":"","default":false,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"close_valves","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"차단밸브 닫기"}],"stage":"GAS_OFF","stages":[],"watch":null,"container":false,"steps":"FLOW_OFF · 차단밸브 닫기","v1":"heater_atmosphere 해제 순서","desc":""},{"type":"heater_off","label":"히터 끄기","params":[],"stage":"HEATER_OFF","stages":[],"watch":null,"container":false,"steps":"HEATER_OFF(RUN=0·램프 원복)","v1":"pc _heater_off","desc":""},{"type":"wait","label":"대기","params":[{"name":"sec","type":"float","unit":"s","default":null,"required":true,"min":0.0,"max":604800.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"watch","type":"watch","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"이탈 감시 켜기/끄기 {dc, rf, rfp, flow, pressure} — 빈 항목은 블록 기본값"}],"stage":"WAIT","stages":["GAS_STABILIZE","DC_DELAY","SHUTTER_DELAY"],"watch":{"dc":false,"rf":true,"rfp":true,"flow":false,"pressure":false},"container":false,"steps":"DELAY","v1":"pc:565-579·632-657","desc":"공정 중 수정 process.skip_wait 로 바로 끝낼 수 있다"},{"type":"main","label":"메인","params":[{"name":"sec","type":"float","unit":"s","default":null,"required":true,"min":0.0,"max":604800.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"close","type":"bool","unit":"","default":true,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"끝에 메인 셔터 닫기(기본 템플릿은 정지 순서가 닫는다)"},{"name":"watch","type":"watch","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"이탈 감시 켜기/끄기 {dc, rf, rfp, flow, pressure} — 빈 항목은 블록 기본값"}],"stage":"MAIN","stages":[],"watch":{"dc":true,"rf":true,"rfp":true,"flow":true,"pressure":true},"container":false,"steps":"PLC_CMD MS 열기 · DELAY · [MS 닫기]","v1":"pc:659-680","desc":"공정 중 수정 process.main_remaining 으로 남은 시간을 바꾼다"},{"type":"cond_wait","label":"조건 대기","params":[{"name":"field","type":"enum","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["mfc.pressure_mtorr","mfc.ar_sccm","mfc.o2_sccm","heater.pv","heater.pv2","ig.ion_torr","dc.p","dc.v","dc.i","rf.fwd_w","rf.ref_w","rfp.fwd_w","rfp.ref_w"],"desc":""},{"name":"op","type":"enum","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["le","ge","near"],"desc":""},{"name":"value","type":"float","unit":"","default":null,"required":true,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""},{"name":"tol","type":"float","unit":"","default":0.0,"required":false,"min":0.0,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"near 의 허용(같은 단위)"},{"name":"stable_sec","type":"float","unit":"s","default":0.0,"required":false,"min":0.0,"max":3600.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"조건이 이 시간 이어지면 통과"},{"name":"timeout_sec","type":"float","unit":"s","default":null,"required":true,"min":0.0,"max":604800.0,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":true,"enum":null,"desc":""},{"name":"on_timeout","type":"enum","unit":"","default":"abort","required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":["continue","abort"],"desc":"abort = COND_WAIT_TIMEOUT 중단, continue = 경고 뒤 다음"},{"name":"watch","type":"watch","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"이탈 감시 켜기/끄기 {dc, rf, rfp, flow, pressure} — 빈 항목은 블록 기본값"}],"stage":"COND_WAIT","stages":[],"watch":{"dc":false,"rf":true,"rfp":true,"flow":false,"pressure":false},"container":false,"steps":"COND_WAIT","v1":"v2","desc":"값을 모르는 tick(stale·fail)은 판정을 바꾸지 않는다(judge.Persist)"},{"type":"repeat","label":"반복","params":[{"name":"count","type":"int","unit":"회","default":null,"required":true,"min":1,"max":100,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":""}],"stage":"","stages":[],"watch":null,"container":true,"steps":"안의 블록을 count 번(중첩 가능)","v1":"v2","desc":""},{"type":"end_stop","label":"정상 끝 정지","params":[{"name":"skip","type":"steps","unit":"","default":null,"required":false,"min":null,"max":null,"paramMin":null,"paramMax":null,"paramScale":1.0,"minExclusive":false,"enum":null,"desc":"건너뛸 정지 순서 단계 번호(safety_rules.STOP_SEQUENCE) — 1·2·3·9·10·11·12 만(필라멘트·셔터·히터·가스). 파워 끄기 4·5·6·7·8·13 은 뺄 수 없음(사용자 결정 2026-10-21)"}],"stage":"STOPPING","stages":[],"watch":null,"container":false,"steps":"SafetyEngine.end_row — 지금 행 끝 정지 순서(표 순서 고정, skip 만 뺀다)","v1":"pc:1785-2019","desc":"기본 템플릿의 마지막. 중간에 두면 정지 순서 뒤 다음 블록으로. 목록 끝이 이 블록이 아니면 자동으로 덧붙는다"}],"watchItems":[{"item":"dc","rule":"S31C","label":"DC 파워 이탈"},{"item":"rf","rule":"S33B","label":"RF 파워 이탈"},{"item":"rfp","rule":"S34A","label":"RF Pulse 순방향 이탈"},{"item":"flow","rule":"S38A","label":"가스 유량 이탈(경고)"},{"item":"pressure","rule":"S38B","label":"압력 이탈(경고)"}],"watchDefault":{"dc":false,"rf":true,"rfp":true,"flow":false,"pressure":false},"watchMain":{"dc":true,"rf":true,"rfp":true,"flow":true,"pressure":true},"condFields":[{"field":"mfc.pressure_mtorr","label":"챔버 압력","unit":"mTorr"},{"field":"mfc.ar_sccm","label":"Ar 유량","unit":"sccm"},{"field":"mfc.o2_sccm","label":"O2 유량","unit":"sccm"},{"field":"heater.pv","label":"히터 온도(TC1)","unit":"°C"},{"field":"heater.pv2","label":"히터 온도(TC2)","unit":"°C"},{"field":"ig.ion_torr","label":"이온 게이지 압력","unit":"Torr"},{"field":"dc.p","label":"DC 파워","unit":"W"},{"field":"dc.v","label":"DC 전압","unit":"V"},{"field":"dc.i","label":"DC 전류","unit":"A"},{"field":"rf.fwd_w","label":"RF 순방향","unit":"W"},{"field":"rf.ref_w","label":"RF 반사","unit":"W"},{"field":"rfp.fwd_w","label":"RF Pulse 순방향","unit":"W"},{"field":"rfp.ref_w","label":"RF Pulse 반사","unit":"W"}],"condOps":[{"op":"le","label":"≤ 값"},{"op":"ge","label":"≥ 값"},{"op":"near","label":"값 ± 허용"}],"shutters":[{"target":"g1","label":"Gun Shutter 1"},{"target":"g2","label":"Gun Shutter 2"},{"target":"ms","label":"Main Shutter"}],"limits":{"repeatMax":100,"maxDepth":4,"maxExpandedSteps":3000,"labelMax":60},"rules":"값 범위·꺼진 장비만 검사 — 순서·조합 규칙 없음(사용자 결정 2026-10-20)","blockKeys":["type","params","label","stage","blocks"],"empty":"빈 값 = null 또는 공백뿐인 문자열(숫자 0 은 빈 값 아님). params 가 없거나 거짓 값([]·\"\")이면 {}. label·stage 도 빈 값이면 없는 것과 같다(정리된 블록은 \"\")","valueRules":[{"id":"need_ar_flow","blocks":["gas_intro"],"kind":"need","when":"ar=true","key":"ar_flow","msg":"ar_flow: ar 이면 값 필요","uses":["ar"]},{"id":"need_o2_flow","blocks":["gas_intro"],"kind":"need","when":"o2=true","key":"o2_flow","msg":"o2_flow: o2 이면 값 필요","uses":["o2"]},{"id":"need_sp_value","blocks":["pressure"],"kind":"need","when":"set=true·sp∉spDefaultKey","key":"value","msg":"value: SP{sp} 이면 값 필요","uses":["sp","set"]},{"id":"heater_disabled","blocks":["heater_ramp","heater_wait","heater_off"],"kind":"device","when":"","key":"HEATER_ENABLED","msg":"히터: HEATER_ENABLED=false","uses":[]},{"id":"ig_disabled_base","blocks":["base_wait"],"kind":"device","when":"","key":"IG_ENABLED","msg":"base_pressure: 이온 게이지가 꺼져 있음(IG_ENABLED=false)","uses":[]},{"id":"ig_disabled_cond","blocks":["cond_wait"],"kind":"device","when":"field^=ig.","key":"IG_ENABLED","msg":"조건 값 {field}: 이온 게이지가 꺼져 있음(IG_ENABLED=false)","uses":["field"]},{"id":"rfpulse_disabled","blocks":["power_on"],"kind":"device","when":"rfp_power:num","key":"RFPULSE_ENABLED","msg":"RF Pulse: RFPULSE_ENABLED=false","uses":["rfp_power"]},{"id":"pulse_edge","blocks":["power_on"],"kind":"pulse_edge","when":"rfp_freq_khz:num·rfp_duty:num","key":"RFPULSE_PULSE_MIN_EDGE_US","msg":"RF Pulse: {edge}","uses":["rfp_freq_khz","rfp_duty"]},{"id":"ramp_below_min","blocks":["heater_ramp"],"kind":"warn","when":"0<ramp_c_per_min<heaterRampMin","key":"","msg":"ramp_c_per_min {ramp_c_per_min} < 6 → 6 (래더 분해능)","uses":["ramp_c_per_min"]}],"spDefaultKey":{"2":"SP2_MTORR","3":"SP3_MTORR","4":"SP4_MTORR"},"pressureStage":"stage 를 비우면 PRESSURE_SP{sp}","heaterRampMin":6.0,"pulseEdge":{"param":"RFPULSE_PULSE_MIN_EDGE_US","freqHz":"round(rfp_freq_khz × 1000)","rule":"ON = duty/100/Hz×1e6 µs, OFF = (100−duty)/100/Hz×1e6 µs — 둘 다 ≥ 최소 − 1e-6. 최소 ≤ 0 이거나 Hz ≤ 0 이면 검사 안 함"},"autoEndStopLabel":"자동 끝 정지"},"stopSequence":{"steps":[{"no":1},{"no":2},{"no":3},{"no":4},{"no":5},{"no":6},{"no":7},{"no":8},{"no":9},{"no":10},{"no":11},{"no":12},{"no":13}],"endStopMustKeep":[4,5,6,7,8,13]},"paramTypes":{"BASE_PRESSURE_MAX_TORR":"float","BASE_PRESSURE_MIN_TORR":"float","DC_MAX_POWER":"float","HEATER_ENABLED":"bool","HEATER_MAX_TEMP":"float","HEATER_RAMP_RATE_C_PER_MIN":"float","HEATER_RECIPE_RAMP_MAX_C_PER_MIN":"float","HEATER_SOAK_TIME_SEC":"int","HEATER_SOAK_TOLERANCE":"float","IG_ENABLED":"bool","MFC_AR_FS_SCCM":"float","MFC_O2_FS_SCCM":"float","PRESSURE_STAGE_TIMEOUT_SEC":"float","PRESSURE_WAIT_STABLE_SEC":"float","PRESSURE_WAIT_TOL_RATIO":"float","PRE_POWER_OFF_SETTLE_SEC":"float","RFPULSE_DUTY_MAX":"int","RFPULSE_DUTY_MIN":"int","RFPULSE_ENABLED":"bool","RFPULSE_MAX_POWER":"float","RFPULSE_PULSE_FREQ_MAX_HZ":"int","RFPULSE_PULSE_FREQ_MIN_HZ":"int","RFPULSE_PULSE_MIN_EDGE_US":"float","RF_MAX_POWER":"float","SP1_TIMEOUT_SEC":"float","SP2_MTORR":"float","SP3_MTORR":"float","SP4_MTORR":"float"}},
  "_설명": "블록 검사 골든(v2.tools.make_web_block_golden 이 만든다 — 손으로 고치지 않음). 웹 W-4b TS 계산 확인용. 모양은 생성기 머리말",
  "cases": [
   {
@@ -8434,6 +8434,276 @@
    ]
   },
   {
+   "name": "label_stage_blank",
+   "covers": [
+    "format.blankLabelStage"
+   ],
+   "blocks": [
+    {
+     "type": "wait",
+     "params": {
+      "sec": 1
+     },
+     "label": "",
+     "stage": ""
+    },
+    {
+     "type": "pressure",
+     "params": {
+      "sp": 2
+     },
+     "label": "  ",
+     "stage": " "
+    },
+    {
+     "type": "repeat",
+     "params": {
+      "count": 1
+     },
+     "label": "",
+     "stage": "",
+     "blocks": [
+      {
+       "type": "valve",
+       "params": {
+        "action": "open"
+       },
+       "label": "\t",
+       "stage": ""
+      }
+     ]
+    },
+    {
+     "type": "end_stop",
+     "params": {},
+     "label": "",
+     "stage": ""
+    }
+   ],
+   "cfg": {
+    "BASE_PRESSURE_MAX_TORR": 0.001,
+    "BASE_PRESSURE_MIN_TORR": 1e-09,
+    "DC_MAX_POWER": 500.0,
+    "HEATER_ENABLED": true,
+    "HEATER_MAX_TEMP": 700.0,
+    "HEATER_RAMP_RATE_C_PER_MIN": 12.0,
+    "HEATER_RECIPE_RAMP_MAX_C_PER_MIN": 60.0,
+    "HEATER_SOAK_TIME_SEC": 60,
+    "HEATER_SOAK_TOLERANCE": 2.0,
+    "IG_ENABLED": true,
+    "MFC_AR_FS_SCCM": 100.0,
+    "MFC_O2_FS_SCCM": 100.0,
+    "PRESSURE_STAGE_TIMEOUT_SEC": 180.0,
+    "PRESSURE_WAIT_STABLE_SEC": 6.0,
+    "PRESSURE_WAIT_TOL_RATIO": 0.1,
+    "PRE_POWER_OFF_SETTLE_SEC": 1.0,
+    "RFPULSE_DUTY_MAX": 99,
+    "RFPULSE_DUTY_MIN": 1,
+    "RFPULSE_ENABLED": false,
+    "RFPULSE_MAX_POWER": 600.0,
+    "RFPULSE_PULSE_FREQ_MAX_HZ": 30000,
+    "RFPULSE_PULSE_FREQ_MIN_HZ": 1,
+    "RFPULSE_PULSE_MIN_EDGE_US": 16.0,
+    "RF_MAX_POWER": 600.0,
+    "SP1_TIMEOUT_SEC": 300.0,
+    "SP2_MTORR": 5.0,
+    "SP3_MTORR": 15.0,
+    "SP4_MTORR": 30.0
+   },
+   "igEnabled": true,
+   "rfpulsePresent": false,
+   "clean": [
+    {
+     "type": "wait",
+     "params": {
+      "sec": 1.0,
+      "watch": null
+     },
+     "label": "",
+     "stage": ""
+    },
+    {
+     "type": "pressure",
+     "params": {
+      "sp": 2,
+      "value": null,
+      "set": true,
+      "select": true,
+      "wait": true,
+      "tol_ratio": "cfg:PRESSURE_WAIT_TOL_RATIO",
+      "stable_sec": "cfg:PRESSURE_WAIT_STABLE_SEC",
+      "timeout_sec": null,
+      "on_timeout": null
+     },
+     "label": "",
+     "stage": ""
+    },
+    {
+     "type": "repeat",
+     "params": {
+      "count": 1
+     },
+     "label": "",
+     "stage": "",
+     "blocks": [
+      {
+       "type": "valve",
+       "params": {
+        "action": "open"
+       },
+       "label": "",
+       "stage": ""
+      }
+     ]
+    },
+    {
+     "type": "end_stop",
+     "params": {
+      "skip": null
+     },
+     "label": "",
+     "stage": ""
+    }
+   ],
+   "errors": [],
+   "warnings": [],
+   "uses": {
+    "dc": false,
+    "rf": false,
+    "rfp": false,
+    "heater": false,
+    "ig": false,
+    "ar": false,
+    "o2": false
+   },
+   "expanded": [
+    {
+     "no": "1",
+     "type": "wait",
+     "label": "",
+     "stage": "WAIT",
+     "iter": null,
+     "auto": false,
+     "params": {
+      "sec": 1.0,
+      "watch": null
+     },
+     "watch": {
+      "dc": false,
+      "rf": true,
+      "rfp": true,
+      "flow": false,
+      "pressure": false
+     },
+     "steps": [
+      {
+       "action": "DELAY",
+       "message": "대기 1s",
+       "sec": 1,
+       "spec": {
+        "skippable": true
+       }
+      }
+     ]
+    },
+    {
+     "no": "2",
+     "type": "pressure",
+     "label": "",
+     "stage": "PRESSURE_SP2",
+     "iter": null,
+     "auto": false,
+     "params": {
+      "sp": 2,
+      "value": null,
+      "set": true,
+      "select": true,
+      "wait": true,
+      "tol_ratio": 0.1,
+      "stable_sec": 6.0,
+      "timeout_sec": null,
+      "on_timeout": null
+     },
+     "steps": [
+      {
+       "action": "MFC_CMD",
+       "message": "SP2: SP2_SET=5.00 설정",
+       "params": [
+        "SP2_SET",
+        {
+         "value": 5.0
+        }
+       ]
+      },
+      {
+       "action": "MFC_CMD",
+       "message": "SP2: SP2_ON",
+       "params": [
+        "SP2_ON",
+        {}
+       ]
+      },
+      {
+       "action": "MFC_CMD",
+       "message": "SP2: 압력 도달 대기 (target=5.00, ±10%, timeout=180s)",
+       "params": [
+        "WAIT_PRESSURE",
+        {
+         "target": 5.0,
+         "tolerance_ratio": 0.1,
+         "stable_sec": 6.0,
+         "timeout_sec": 180.0,
+         "fail_on_timeout": false
+        }
+       ]
+      }
+     ]
+    },
+    {
+     "no": "3.1#1",
+     "type": "valve",
+     "label": "",
+     "stage": "VALVE",
+     "iter": "1",
+     "auto": false,
+     "params": {
+      "action": "open"
+     },
+     "steps": [
+      {
+       "action": "MFC_CMD",
+       "message": "MFC Valve Open",
+       "params": [
+        "VALVE_OPEN",
+        {}
+       ]
+      }
+     ]
+    },
+    {
+     "no": "4",
+     "type": "end_stop",
+     "label": "",
+     "stage": "STOPPING",
+     "iter": null,
+     "auto": false,
+     "params": {
+      "skip": null
+     },
+     "steps": [
+      {
+       "action": "END_STOP",
+       "message": "정상 끝 정지 순서",
+       "internal": true,
+       "spec": {
+        "skip": []
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
    "name": "empty_values_are_defaults",
    "covers": [
     "defaults"
@@ -8974,6 +9244,15 @@
     },
     {
      "params": {}
+    },
+    {
+     "type": " ",
+     "params": {}
+    },
+    {
+     "type": [
+      "wait"
+     ]
     }
    ],
    "cfg": {
@@ -9011,7 +9290,9 @@
    "clean": null,
    "errors": [
     "블록 1: 모르는 종류 'nope'",
-    "블록 2: 모르는 종류 None"
+    "블록 2: type 필요",
+    "블록 3: type 필요",
+    "블록 4: 모르는 종류 ['wait']"
    ],
    "warnings": [],
    "uses": null,
@@ -9275,8 +9556,7 @@
     "블록 5(shutter): targets: 값 필요",
     "블록 6(main): sec: 값 필요",
     "블록 7(repeat): count: 값 필요",
-    "블록 8(pressure): sp: 값 필요",
-    "블록 8(pressure): value: SPNone 는 값 필요"
+    "블록 8(pressure): sp: 값 필요"
    ],
    "warnings": [],
    "uses": null,
@@ -10788,7 +11068,7 @@
    "rfpulsePresent": false,
    "clean": null,
    "errors": [
-    "블록 1(pressure): value: SP1 는 값 필요"
+    "블록 1(pressure): value: SP1 이면 값 필요"
    ],
    "warnings": [],
    "uses": null,
