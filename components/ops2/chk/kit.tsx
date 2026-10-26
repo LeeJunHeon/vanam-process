@@ -87,6 +87,7 @@ export type Ask = {
   red?: boolean;           // 물리 동작(공정·히터 레시피 시작) — 실행 버튼 빨강
   lines?: string[];        // 무엇을 하는지 요약(레시피 이름·행 수·첫 행 가스·파워·시간, 히터 목표)
   plc?: { target: string; want: boolean };   // PLC 버튼 — "전환 중" 표시
+  key?: string;            // 결과를 기다리는 동안 막는 단위(없으면 kind — 공정 중 수정은 항목마다)
 };
 
 /** 확인창 한 번 — 실행하면 onOk. Esc 취소, 정지 쪽은 열리면 실행 버튼에 포커스(Enter 실행) */

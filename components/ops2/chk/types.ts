@@ -28,9 +28,23 @@ export type ArgDef = {
   paramMin?: string | null; paramMax?: string | null;
 };
 export type CommandDef = { kind: string; label: string; role?: string; sources?: string[]; args?: ArgDef[] };
-export type ParamDef = { key: string; label?: string; unit?: string; type?: string; current?: unknown; default?: unknown };
+export type ParamDef = {
+  key: string; label?: string; unit?: string; type?: string; current?: unknown; default?: unknown; pending?: unknown;
+  group?: string; min?: number | null; max?: number | null; enum?: unknown[] | null; pattern?: string | null;
+  safety?: string; apply?: string; scope?: string; role?: string; webLocked?: boolean; desc?: string; note?: string;
+  v1Key?: string | null; v1Source?: string | null; v1Default?: unknown; pendingConfirm?: boolean;
+};
+/** 공정 중 수정 항목(묶음 adjust.items — blocks.ADJUST_ITEMS) */
+export type AdjustItemDef = {
+  device: string; item: string; key: string; apply?: string; whenLive?: string; rules?: string[]; settle?: boolean;
+  param: { name: string; type: string; unit?: string; required?: boolean; min?: number | null; max?: number | null;
+           paramMin?: string | null; paramMax?: string | null; paramScale?: number; minExclusive?: boolean; desc?: string };
+};
 export type Bundle = {
   hash: string; version: number;
+  paramSchemaHash?: string;
+  deviceConfigVersion?: number | null;           // schema API — current 를 덮은 장비 설정 버전
+  webConfigVersion?: number | null;              // 그 버전의 웹 행이 있으면 같은 값, 없으면 null(묶음 current 그대로)
   params?: ParamDef[];
   commands?: CommandDef[];
   reasons?: { code: string; label: string; category?: string }[];
@@ -41,6 +55,8 @@ export type Bundle = {
   recipe?: RecipeDefs;
   snapshot?: { tick?: FieldDef[]; process?: FieldDef[]; blocks?: BlockDef[] };
   events?: { kind: string; label: string }[];
+  crossRules?: { id: string; keys: string[]; desc: string }[];
+  adjust?: { command?: string; items?: AdjustItemDef[]; settleParam?: string };
 };
 
 export type Link = { q?: string | null; age?: number | null };
@@ -54,6 +70,7 @@ export type StateData = {
   alarms?: { ruleId: string; code?: string; since?: string }[];
   links?: Record<string, Link>;
   configVersion?: number;
+  configPending?: { idle?: Record<string, unknown>; restart?: Record<string, unknown> } | null;
   snapshot?: Record<string, unknown>;
   left?: Record<string, unknown>;
   stopping?: string | null;
@@ -73,6 +90,21 @@ export type RunRow = {
   runId: string; name: string | null; recipeName: string | null; startedBy: string | null; stepNo: number | null;
   startedAt: string | null; endedAt: string | null; result: string | null; reasonCode: string | null;
 };
+
+const ADJ_RESULT: Record<string, string> = {
+  applied: "바로 적용", scheduled: "다음 블록부터", confirmed: "장비 확인", failed: "장비 적용 실패", rejected: "거부",
+};
+
+/** 공정 중 수정 사건(PROCESS_ADJUST — context.data {device, item, old, new, by, result, reason}) 한 줄. 아니면 null */
+export function adjustText(b: Bundle | null, code: unknown, context: unknown): string | null {
+  if (code !== "PROCESS_ADJUST" || !context || typeof context !== "object") return null;
+  const d = (context as { data?: Record<string, unknown> }).data;
+  if (!d) return null;
+  const v = (x: unknown) => (x === null || x === undefined ? "—" : String(x));
+  const r = String(d.result ?? "");
+  return `공정 중 수정 — ${v(d.by)} · ${v(d.device)}.${v(d.item)} ${v(d.old)} → ${v(d.new)} · ${ADJ_RESULT[r] ?? r}`
+    + `${d.reason ? ` (${reasonLabel(b, String(d.reason))})` : ""}${d.block ? ` · 블록 ${v(d.block)}` : ""}`;
+}
 
 /** 웹이 붙이는 사유(묶음 reasons 에 없는 것) */
 const WEB_REASONS: Record<string, string> = {

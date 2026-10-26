@@ -5,7 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "./kit";
 import { fmtKst } from "@/lib/ops2/time";
 import {
-  CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, type Bundle, type CmdRow, type RunRow,
+  CMD_STATUS, RUN_RESULT, adjustText, commandLabel, reasonLabel, type Bundle, type CmdRow, type RunRow,
 } from "./types";
 import type { FeedItem } from "./useChk2";
 
@@ -16,6 +16,8 @@ function line(b: Bundle | null, e: FeedItem): { level: string; code: string; tex
   const d = e.data;
   if (e.type === "event") {
     const code = s(d.code);
+    const adj = adjustText(b, d.code, d.context);
+    if (adj) return { level: s(d.level) || "info", code, text: adj };
     const label = reasonLabel(b, code);
     const msg = s(d.message);
     return { level: s(d.level) || "info", code, text: [d.ruleId && `[${s(d.ruleId)}]`, label !== code && label, msg].filter(Boolean).join(" ") };

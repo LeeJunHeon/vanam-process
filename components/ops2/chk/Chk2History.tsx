@@ -10,12 +10,13 @@ import type { ExpBlock } from "@/lib/ops2/chk/blocks";
 import { Card } from "./kit";
 import { ExpandedView, fmtSec } from "./Chk2BlockEditor";
 import Chk2SummaryChart, { type PickField, type SummaryRow } from "./Chk2SummaryChart";
-import { CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, type Bundle } from "./types";
+import { CMD_STATUS, RUN_RESULT, adjustText, commandLabel, reasonLabel, type Bundle } from "./types";
 
 type RunItem = {
   runId: string; name: string | null; recipeName: string | null; startedBy: string | null; stepNo: number | null;
   startedAt: string | null; endedAt: string | null; result: string | null; reasonCode: string | null;
   configVersion: number | null; durationS: number | null;
+  noStart?: boolean;                             // run_start 가 오지 않은 run(끝 시각으로 정렬)
 };
 type RunFull = RunItem & { instance: string; params: Record<string, unknown> | null; blocks: unknown; summary: unknown };
 type EventRow = {
@@ -118,7 +119,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
         </button>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:grid-cols-4">
-        {[["시작", fmtKst(r.startedAt)], ["끝", fmtKst(r.endedAt)], ["소요", r.startedAt && r.endedAt ? fmtSec((Date.parse(r.endedAt) - Date.parse(r.startedAt)) / 1000) : "-"],
+        {[["시작", r.startedAt ? fmtKst(r.startedAt) : "시작 기록 없음"], ["끝", fmtKst(r.endedAt)], ["소요", r.startedAt && r.endedAt ? fmtSec((Date.parse(r.endedAt) - Date.parse(r.startedAt)) / 1000) : "-"],
           ["누가", r.startedBy ?? "-"], ["행 번호", r.stepNo ?? "-"], ["설정 버전", r.configVersion ?? "-"],
           ["run id", r.runId], ["실행(instance)", r.instance]].map(([k, v]) => (
           <div key={String(k)} className="min-w-0"><dt className="text-gray-400">{k}</dt><dd className="truncate font-semibold text-gray-700" title={String(v)}>{String(v)}</dd></div>
@@ -172,14 +173,16 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
               <tbody>
                 {events.map((e) => {
                   const label = reasonLabel(bundle, e.code);
+                  const adj = adjustText(bundle, e.code, e.context);
                   return (
                     <tr key={e.msgId} className="border-t border-gray-50 align-top">
                       <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-gray-400">{fmtKst(e.ts).slice(6)}</td>
                       <td className="px-1 py-1"><span className={`rounded px-1 text-[10px] font-semibold ${LEVEL_TONE[e.level] ?? LEVEL_TONE.info}`}>{e.level}</span></td>
                       <td className="px-1.5 py-1 text-gray-700">
                         {e.ruleId && <span className="font-mono text-[10px] text-gray-400">[{e.ruleId}] </span>}
-                        {label !== e.code && <b className="font-semibold">{label} </b>}
-                        {e.message}
+                        {adj ? <b className="font-semibold text-blue-700">{adj}</b> : <>
+                          {label !== e.code && <b className="font-semibold">{label} </b>}
+                          {e.message}</>}
                         <span className="ml-1 font-mono text-[10px] text-gray-300">{e.code}</span>
                       </td>
                     </tr>
@@ -296,7 +299,9 @@ export default memo(function Chk2History({ equipment, bundle, refreshKey }: { eq
               <tbody>
                 {(list ?? []).map((r) => (
                   <tr key={r.runId} onClick={() => setOpen(r.runId)} className="cursor-pointer border-t border-gray-100 hover:bg-blue-50/40">
-                    <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-gray-600">{fmtKst(r.startedAt)}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-gray-600">
+                      {r.startedAt ? fmtKst(r.startedAt) : <span className="rounded bg-gray-100 px-1 text-[10px] text-gray-500">시작 기록 없음</span>}
+                    </td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-gray-500">{fmtKst(r.endedAt)}</td>
                     <td className="px-2 py-1.5">
                       <span className="font-semibold text-gray-900">{r.name ?? "-"}</span>

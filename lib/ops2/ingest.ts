@@ -389,39 +389,86 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
       }
     }
     if (creates.size) await tx.ops2Command.createMany({ data: [...creates.values()], skipDuplicates: true });
+    // CONFIG_APPLY 가 명령 검사(조건)에서 거부되면 config_ack 가 오지 않는다 — 그 명령의 버전 행에 거부를 적는다
+    // (ackAt 은 비워 둔다: 같은 배치의 config_ack 가 있으면 그것이 덮는다)
+    for (const e of results) {
+      const d = e.data;
+      if (d.kind !== "CONFIG_APPLY" || d.status !== "rejected" || !str(d.cmdId)) continue;
+      await tx.ops2ConfigVersion.updateMany({
+        where: { equipment, cmdId: str(d.cmdId)!, ackStatus: null },
+        data: { ackStatus: "rejected", reasonCode: str(d.reasonCode), errors: str(d.detail) ? json([str(d.detail)]) : undefined },
+      });
+    }
   }
 
-  // ── 설정 결과: (장비, 버전) 행이 있으면 ack 칸, 없으면 사건 CONFIG_ACK ──
+  // ── 설정 결과(config_ack) — (장비, 버전) 행에 ack 칸(W-5) ──
+  // - 행이 있으면 마지막 ack 로(장비 시각이 더 이른 ack 는 건너뜀). 같은 버전 두 번째 ack(pending_idle → kind idle applied)는
+  //   상태를 바꾸고 appliedKeys 는 합치고 changes 는 덮지 않고 이어 붙인다.
+  // - 행이 없는 버전(되돌리기 — 장비가 지금 + 1 로 새로 매김, 노트북에서 생긴 버전)은 values 가 실려 오면 행을 만든다
+  //   (kind = ack kind, createdBy = by). values 가 없으면 지금처럼 사건 CONFIG_ACK 만(warn).
+  // - 되돌리기가 웹의 거부·미응답 버전과 같은 번호를 쓰면(웹 번호가 장비보다 앞서 있을 때) 장비 값으로 그 행을 고쳐 쓴다.
+  // 결과마다 사건 CONFIG_ACK 도 남긴다(사건 표·공정 기록에서 보이게).
   if (acks.length) {
     const versions = [...new Set(acks.map((e) => int(e.data.version)).filter((v): v is number => v !== null))];
-    const have = new Map((await tx.ops2ConfigVersion.findMany({
-      where: { equipment, version: { in: versions } }, select: { version: true, ackMsgId: true },
+    type Have = { version: number; ackMsgId: string | null; ackAt: Date | null; ackStatus: string | null; kind: string;
+                  changes: unknown; appliedKeys: unknown; cmdId: string | null };
+    const have = new Map<number, Have>((await tx.ops2ConfigVersion.findMany({
+      where: { equipment, version: { in: versions } },
+      select: { version: true, ackMsgId: true, ackAt: true, ackStatus: true, kind: true, changes: true, appliedKeys: true, cmdId: true },
     })).map((r) => [r.version, r]));
-    const loose: Prisma.Ops2EventCreateManyInput[] = [];
-    for (const e of acks) {
+    const evs: Prisma.Ops2EventCreateManyInput[] = [];
+    const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
+    for (const e of [...acks].sort((a, b) => a.ts.getTime() - b.ts.getTime() || a.seq - b.seq)) {
       const d = e.data;
       const v = int(d.version);
+      const kind = str(d.kind) ?? "apply";
+      const ackCols = {
+        ackStatus: d.status as string, ackAt: e.ts, reasonCode: str(d.reasonCode), ackMsgId: e.id,
+        errors: Array.isArray(d.errors) && d.errors.length ? json(d.errors) : undefined,
+        pendingKeys: Array.isArray(d.pendingKeys) ? json(d.pendingKeys) : undefined,
+        overriddenKeys: Array.isArray(d.overriddenKeys) && d.overriddenKeys.length ? json(d.overriddenKeys) : undefined,
+      };
       const cur = v === null ? undefined : have.get(v);
-      if (cur) {
-        if (cur.ackMsgId === e.id) continue;
-        cur.ackMsgId = e.id;
+      let note = "";
+      if (cur && cur.ackMsgId === e.id) continue;                       // 같은 ack 다시
+      const rewrite = cur && kind === "rollback" && isObj(d.values)
+        && (cur.ackStatus === "rejected" || (cur.ackStatus === null && cur.kind !== "rollback"));
+      if (cur && !rewrite) {
+        if (cur.ackAt && e.ts < cur.ackAt) continue;                     // 늦게 온 옛 ack
+        const seenCh = new Set<string>();                               // 웹이 적은 바꿈과 장비 changes 가 겹치면 하나만
+        const changes = [...list(cur.changes), ...list(d.changes)].filter((c) => {
+          const k = JSON.stringify(isObj(c) ? [c.key, c.old, c.new] : c);
+          return !seenCh.has(k) && !!seenCh.add(k);
+        });
+        const applied = [...new Set([...list(cur.appliedKeys), ...list(d.appliedKeys)].map(String))];
         await tx.ops2ConfigVersion.update({
           where: { equipment_version: { equipment, version: v! } },
-          data: { ackStatus: d.status as string, ackAt: e.ts, reasonCode: str(d.reasonCode), ackMsgId: e.id,
-                  errors: Array.isArray(d.errors) ? json(d.errors) : undefined,
-                  appliedKeys: Array.isArray(d.appliedKeys) ? json(d.appliedKeys) : undefined,
-                  pendingKeys: Array.isArray(d.pendingKeys) ? json(d.pendingKeys) : undefined,
-                  overriddenKeys: Array.isArray(d.overriddenKeys) ? json(d.overriddenKeys) : undefined,
-                  changes: Array.isArray(d.changes) ? json(d.changes) : undefined },
+          data: { ...ackCols, appliedKeys: json(applied), changes: changes.length ? json(changes) : undefined },
         });
+        Object.assign(cur, { ackMsgId: e.id, ackAt: e.ts, ackStatus: d.status as string, changes, appliedKeys: applied });
+      } else if (v !== null && isObj(d.values)) {
+        const row = {
+          kind, paramValues: json(d.values), createdBy: str(d.by) ?? "device", createdAt: e.ts, cmdId: null,
+          note: rewrite ? `장비 되돌리기가 웹 버전 ${v}(${cur!.ackStatus ?? "응답 없음"})와 같은 번호 — 장비 값으로 고쳐 씀` : null,
+          ...ackCols, appliedKeys: json(list(d.appliedKeys)), changes: list(d.changes).length ? json(d.changes) : undefined,
+        };
+        await tx.ops2ConfigVersion.upsert({
+          where: { equipment_version: { equipment, version: v } },
+          create: { equipment, version: v, ...row },
+          update: row,
+        });
+        have.set(v, { version: v, ackMsgId: e.id, ackAt: e.ts, ackStatus: d.status as string, kind, changes: d.changes,
+                      appliedKeys: d.appliedKeys, cmdId: null });
+        note = rewrite ? " — 웹 버전 행을 장비 값으로 고침" : " — 웹에 없던 버전, 행을 만듦";
       } else {
-        loose.push({ msgId: e.id, equipment, instance: e.instance, seq: e.seq, ts: e.ts, receivedAt: now,
-                     level: d.status === "rejected" ? "warn" : "info", code: "CONFIG_ACK",
-                     message: `설정 버전 ${v ?? "?"} ${String(d.status)}${d.reasonCode ? ` (${String(d.reasonCode)})` : ""}`,
-                     source: "config", kind: str(d.kind), context: json(d) });
+        note = " — 웹에 그 버전 행이 없고 값도 없어 사건으로만";
       }
+      evs.push({ msgId: e.id, equipment, instance: e.instance, seq: e.seq, ts: e.ts, receivedAt: now,
+                 level: d.status === "rejected" || note.includes("사건으로만") ? "warn" : "info", code: "CONFIG_ACK",
+                 message: `설정 버전 ${v ?? "?"} ${kind} ${String(d.status)}${d.reasonCode ? ` (${String(d.reasonCode)})` : ""}${note}`,
+                 source: "config", kind, context: json(d) });
     }
-    if (loose.length) await tx.ops2Event.createMany({ data: loose, skipDuplicates: true });
+    if (evs.length) await tx.ops2Event.createMany({ data: evs, skipDuplicates: true });
   }
 
   // ── 최신 state(배치의 마지막 것) ──

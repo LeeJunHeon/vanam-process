@@ -9,13 +9,15 @@
 // 정지 쪽(logic.STOP_KINDS)은 막지 않는다 — 다른 명령이나 같은 정지의 결과를 기다리는 중에도(다시 눌러도 해가 없고, 첫 명령이 갔는지
 // 모를 때 바로 다시 누를 수 있게), 화면 stream 이 끊겨도 웹이 장비와 이어져 있으면(hello.web.online) 보낸다.
 // 블록 편집(Chk2BlockEditor — 레시피 안의 블록 행)·공정 기록(Chk2History — 목록·상세·1분 요약 그래프)은 W-4b.
-// 공정 중 수정·설정(W-5)은 두지 않는다.
+// 공정 중 값 수정(Chk2Adjust — PROCESS_ADJUST, 항목마다 결과를 기다림)·설정(Chk2Config — 관리자 적용·되돌리기, 이력)은 W-5.
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { AlertTriangle, Clock, Eye, LogIn, Radio, WifiOff } from "lucide-react";
 import Chk2Mimic from "./Chk2Mimic";
 import Chk2Status from "./Chk2Status";
 import { BlockCard, HeaterCard, IgCard } from "./Chk2Cards";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
+import Chk2Adjust from "./Chk2Adjust";
+import Chk2Config from "./Chk2Config";
 import Chk2History from "./Chk2History";
 import Chk2Recipes from "./Chk2Recipes";
 import { ConfirmDialog, Notices, SimpleConfirm, type Ask, type Notice } from "./kit";
@@ -159,7 +161,7 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
   const run = async () => {
     if (!ask) return;
     const a = ask;
-    const key = a.plc ? `PLC_BUTTON:${a.plc.target}` : a.kind;
+    const key = a.key ?? (a.plc ? `PLC_BUTTON:${a.plc.target}` : a.kind);
     setAsk(null);
     setInflight((m) => ({ ...m, [key]: (m[key] ?? 0) + 1 }));
     if (a.plc) {
@@ -270,6 +272,8 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
       <Chk2Status bundle={d.bundle} st={st} connected={connected} lastRun={d.runs[0] ?? null} can={can} onAsk={setAsk}
         webRecipes={recipes.list} />
 
+      <Chk2Adjust equipment={equipment} bundle={d.bundle} st={st} feed={d.feed} canKey={allowed} onAsk={setAsk} />
+
       <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
         <Chk2Mimic bundle={d.bundle} snapshot={snap} plcOk={plcOk} canPress={canPlc}
           pending={pending} onAsk={setAsk} note={mimicNote} />
@@ -296,6 +300,9 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
           <RunList bundle={d.bundle} runs={d.runs} />
         </div>
       </div>
+
+      <Chk2Config equipment={equipment} bundle={d.bundle} st={st} perms={perms ?? null} connected={connected}
+        reloadSchema={d.loadSchema} notify={notify} />
 
       <Chk2History equipment={equipment} bundle={d.bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
 

@@ -6,6 +6,7 @@
 // 그때는 닫고 1→2→5→10 s 간격으로 새로 연다(열리면 간격 처음으로). hello 가 401 이면 로그인이 끊긴 것: 다시 붙기를 멈춘다.
 // 묶음: 가지고 있는 묶음의 hash 와 hello 의 webSchemaHash 가 다르면 schema 를 읽는다(409 면 다음 hello 때 다시) —
 // 새 묶음을 받기 전까지는 가지고 있던 묶음을 그대로 쓴다. hello(웹 연결·권한)는 10 s 마다도 다시 읽는다.
+// 묶음 params current 는 장비 설정 버전의 값(schema API) — state.configVersion 이 바뀌면(설정 적용·되돌리기) 다시 읽는다.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { newerState } from "./logic";
 import type { Bundle, CmdRow, Envelope, EventData, Hello, RunRow, StateData } from "./types";
@@ -192,5 +193,14 @@ export function useChk2(equipment: string) {
     }
   }, [equipment, loadCommands]);
 
-  return { hello, bundle, state, feed, commands, runs, streamUp, offsetMs, error, authLost, send };
+  // 장비 설정 버전이 바뀌면 묶음(current)을 다시 — 같은 버전은 한 번만
+  const cfgVer = state?.data.configVersion;
+  const askedVer = useRef<number | null>(null);
+  useEffect(() => {
+    if (typeof cfgVer !== "number" || !bundle || bundle.deviceConfigVersion === cfgVer || askedVer.current === cfgVer) return;
+    askedVer.current = cfgVer;
+    void loadSchema();
+  }, [cfgVer, bundle, loadSchema]);
+
+  return { hello, bundle, state, feed, commands, runs, streamUp, offsetMs, error, authLost, send, loadSchema };
 }
