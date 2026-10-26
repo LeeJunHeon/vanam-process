@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import type { Session } from "next-auth";
 import { auth } from "@/auth";
-
-const disableAuth = process.env.DISABLE_AUTH === "true";
+// 로컬 우회 (개발 모드 + DISABLE_AUTH=true 일 때만)
+import { DEV_AUTH_BYPASS } from "@/lib/dev-auth-bypass";
 
 function devSession(): Session {
   // 로컬 우회용 가짜 CEO
@@ -20,7 +20,7 @@ function devSession(): Session {
 export async function requireSession(): Promise<
   { ok: true; session: Session } | { ok: false; response: NextResponse }
 > {
-  if (disableAuth) return { ok: true, session: devSession() };
+  if (DEV_AUTH_BYPASS) return { ok: true, session: devSession() };
   const session = await auth();
   if (!session?.user)
     return {
