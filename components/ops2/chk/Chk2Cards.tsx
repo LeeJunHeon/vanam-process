@@ -7,6 +7,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { BigValue, Card, FieldValue, QBadge, type Ask } from "./kit";
 import { argRange, capRange, checkInput, rangeText, type Range } from "./logic";
 import { GAS_STATE, HEATER_OWNER, type BlockDef, type Bundle, type Link, type StateData } from "./types";
+import { useChk2Mode } from "./mode";
 
 type Common = { def?: BlockDef; snap?: Record<string, unknown>; link?: Link };
 
@@ -77,6 +78,11 @@ function NumInput({ value, onChange, range, placeholder, disabled, width = "w-24
   );
 }
 
+/** 노트북 로컬 화면에서 숨긴 조작 — 한 줄 안내 */
+function WebOnlyNote({ what }: { what: string }) {
+  return <p className="mt-2 rounded-lg bg-gray-50 px-2 py-1 text-[10px] text-gray-500">{what}은 웹에서만</p>;
+}
+
 export function HeaterCard({ bundle, def, snap, link, st, can, locked, onAsk }: Common & {
   bundle: Bundle | null; st: StateData | null; can: (kind: string) => boolean; locked: boolean; onAsk: (a: Ask) => void;
 }) {
@@ -115,6 +121,8 @@ export function HeaterCard({ bundle, def, snap, link, st, can, locked, onAsk }: 
   const gasText = [useAr && `Ar ${arFlow || "?"} sccm`, useO2 && `O₂ ${o2Flow || "?"} sccm`, (useAr || useO2) && wp && `WP ${wp} mTorr`]
     .filter(Boolean).join(" · ");
   const btn = "rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold disabled:opacity-40";
+  const m = useChk2Mode();
+  const full = !m.webOnly("HEATER_ON");                       // 노트북 화면은 히터 정지만
 
   return (
     <BlockCard def={def} snap={snap} link={link} big={["pv", "pv2", "sv"]}>
@@ -124,7 +132,7 @@ export function HeaterCard({ bundle, def, snap, link, st, can, locked, onAsk }: 
         {gas && ` · ${GAS_STATE[gas] ?? gas}`}
       </p>
       <div className="mt-2 rounded-xl bg-gray-50 p-3">
-        <div className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2 text-[11px]">
+        {full && <div className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2 text-[11px]">
           <span className="pt-1.5 text-gray-500">목표 온도</span>
           <span className="flex items-start gap-1.5">
             <NumInput value={target} onChange={setTarget} range={svRange} placeholder="℃" width="w-28" />
@@ -148,41 +156,42 @@ export function HeaterCard({ bundle, def, snap, link, st, can, locked, onAsk }: 
             <NumInput value={wp} onChange={setWp} range={wpRange ? { ...wpRange, unit: wpRange.unit || "mTorr" } : null}
               placeholder="mTorr" disabled={!useAr && !useO2} width="w-20" />
           </span>
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-gray-200/70 pt-3">
-          <button disabled={!ok("HEATER_ON") || onValue === null || !!tOn.error || gasBad}
+        </div>}
+        <div className={`flex flex-wrap items-center gap-2 ${full ? "mt-3 border-t border-gray-200/70 pt-3" : ""}`}>
+          {full && <button disabled={!ok("HEATER_ON") || onValue === null || !!tOn.error || gasBad}
             onClick={() => onAsk({ kind: "HEATER_ON", label: "히터 켜기", args: onArgs(),
                                    detail: `→ ${onValue} ℃${gasText ? ` · ${gasText}` : ""}` })}
             className={`${btn} border-green-600 bg-green-500 text-green-950`}>
             ON
-          </button>
-          <button disabled={!ok("HEATER_OFF")}
+          </button>}
+          {full && <button disabled={!ok("HEATER_OFF")}
             onClick={() => onAsk({ kind: "HEATER_OFF", label: "히터 끄기" })}
             className={`${btn} border-gray-300 bg-white text-gray-700`}>
             OFF
-          </button>
+          </button>}
           <button disabled={!can("HEATER_STOP")}
             onClick={() => onAsk({ kind: "HEATER_STOP", label: "히터 정지", stop: true,
                                    note: "히터 레시피를 멈추고 RUN 을 끕니다. 공정이 히터를 쓰는 중이면 공정도 멈춥니다." })}
             className={`${btn} border-rose-300 bg-white text-rose-600`}>
             히터 정지
           </button>
-          {fault && (
+          {fault && full && (
             <button disabled={!ok("HEATER_RESET")}
               onClick={() => onAsk({ kind: "HEATER_RESET", label: "히터 이상 리셋", detail: "(원인을 먼저 확인)", danger: true })}
               className={`${btn} border-rose-300 bg-white text-rose-600`}>
               이상 리셋
             </button>
           )}
-          {gas && gas !== "IDLE" && (
+          {gas && gas !== "IDLE" && !m.webOnly("HEATER_GAS_RELEASE") && (
             <button disabled={!can("HEATER_GAS_RELEASE")}
               onClick={() => onAsk({ kind: "HEATER_GAS_RELEASE", label: "히터 가스 해제" })}
               className={`${btn} border-blue-300 bg-white text-blue-700`}>
               가스 해제
             </button>
           )}
-          <span className="ml-auto text-[10px] text-gray-400">ON 은 목표 칸이 비면 지금 목표(sv)로 · 히터 정지는 공정·레시피 소유여도 멈춤</span>
+          <span className="ml-auto text-[10px] text-gray-400">{full ? "ON 은 목표 칸이 비면 지금 목표(sv)로 · " : ""}히터 정지는 공정·레시피 소유여도 멈춤</span>
         </div>
+        {!full && <WebOnlyNote what="목표 온도·ON·OFF·이상 리셋·가스 해제" />}
       </div>
     </BlockCard>
   );
@@ -190,9 +199,10 @@ export function HeaterCard({ bundle, def, snap, link, st, can, locked, onAsk }: 
 
 export function IgCard({ def, snap, link, can, onAsk }: Common & { can: (kind: string) => boolean; onAsk: (a: Ask) => void }) {
   const on = snap?.["ig.filament"] === true;
+  const m = useChk2Mode();
   return (
     <BlockCard def={def} snap={snap} link={link} big={["ion_torr", "a_torr", "b_torr"]}>
-      <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-2">
+      {m.webOnly("IG_FILAMENT") ? <WebOnlyNote what={`필라멘트 ${on ? "ON" : "OFF"} — 조작`} /> : <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-gray-50 pt-2">
         <span className="text-[11px] text-gray-500">필라멘트</span>
         {([true, false] as const).map((want) => (
           <button key={String(want)} disabled={!can("IG_FILAMENT")}
@@ -205,7 +215,7 @@ export function IgCard({ def, snap, link, can, onAsk }: Common & { can: (kind: s
           </button>
         ))}
         <span className="ml-auto text-[10px] text-gray-400">공정 중에는 공정이 다룬다(유휴에서만)</span>
-      </div>
+      </div>}
     </BlockCard>
   );
 }

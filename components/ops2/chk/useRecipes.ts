@@ -26,7 +26,8 @@ async function call<T>(u: string, init?: RequestInit): Promise<ApiResult<T>> {
   }
 }
 
-export function useRecipes(equipment: string) {
+/** enabled false(노트북 로컬 화면 — 웹 레시피 없음)면 읽지 않는다 */
+export function useRecipes(equipment: string, enabled = true) {
   const [list, setList] = useState<RecipeItem[] | null>(null);
   const [canEdit, setCanEdit] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,9 +44,10 @@ export function useRecipes(equipment: string) {
   }, [equipment]);
 
   useEffect(() => {
+    if (!enabled) return;
     const t = setTimeout(() => void reload(), 0);
     return () => clearTimeout(t);
-  }, [reload]);
+  }, [reload, enabled]);
 
   const get = useCallback((id: string) => call<{ recipe: RecipeFull }>(url(equipment, id)), [equipment]);
 

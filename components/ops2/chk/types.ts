@@ -12,6 +12,7 @@ export type Perms = { canOperate: boolean; isAdmin: boolean; kinds: string[] };
 export type Hello = {
   equipment?: string; instance?: string; program?: string; version?: string; runMode?: string;
   configVersion?: number; webSchemaHash?: string | null; writesAllowed?: boolean; deviceUtc?: string;
+  commandKinds?: string[];                       // 노트북 로컬 화면(HMI 경로)에서 받는 명령 — local 모드 권한
   web?: {
     online: boolean; lastSeenAt: string | null; holderInstance: string | null; sse: boolean;
     clockSkewMs: number | null; serverNow: string; label: string | null; hasSchema: boolean; perms: Perms;
@@ -44,6 +45,7 @@ export type Bundle = {
   hash: string; version: number;
   paramSchemaHash?: string;
   deviceConfigVersion?: number | null;           // schema API — current 를 덮은 장비 설정 버전
+  configVersion?: number | null;                 // 묶음 머리(로컬 /api/v1/schema — 장비 설정 버전)
   webConfigVersion?: number | null;              // 그 버전의 웹 행이 있으면 같은 값, 없으면 null(묶음 current 그대로)
   params?: ParamDef[];
   commands?: CommandDef[];
@@ -82,6 +84,8 @@ export type StateData = {
   snapshot?: Record<string, unknown>;
   left?: Record<string, unknown>;
   stopping?: string | null;
+  uplink?: { enabled?: boolean; connected?: boolean; lastOkAt?: string | null; lastError?: string | null;
+             queued?: number; spoolBytes?: number; dropped?: number } | null;   // 장비가 본 웹 연결
 };
 
 export type EventData = {

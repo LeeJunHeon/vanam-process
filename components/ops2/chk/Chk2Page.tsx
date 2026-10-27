@@ -10,8 +10,11 @@
 // 모를 때 바로 다시 누를 수 있게), 화면 stream 이 끊겨도 웹이 장비와 이어져 있으면(hello.web.online) 보낸다.
 // 블록 편집(Chk2BlockEditor — 레시피 안의 블록 행)·공정 기록(Chk2History — 목록·상세·1분 요약 그래프)은 W-4b.
 // 공정 중 값 수정(Chk2Adjust — PROCESS_ADJUST, 항목마다 결과를 기다림)·설정(Chk2Config — 관리자 적용·되돌리기, 이력)은 W-5.
+// 노트북 로컬 화면(W-7, hmi/ → 챔버K v2\hmi): 같은 Chk2Device 를 mode local 로 — 권한은 hello.commandKinds(HMI 경로 명령)만,
+// bench(runMode bench·writesAllowed false)면 읽기 전용 띠·잠금. 레시피·설정·공정 기록·명령 기록·장비 고르기는 없다.
+// 연결은 이 로컬 서버 stream — 끊기면 "노트북 프로그램 연결 끊김"(같은 PC 라 시계 차 0). 장비가 본 웹 연결(state.uplink)을 작게.
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { AlertTriangle, Clock, Eye, LogIn, Radio, WifiOff } from "lucide-react";
+import { AlertTriangle, Clock, Cloud, CloudOff, Eye, Laptop, Lock, LogIn, Radio, WifiOff } from "lucide-react";
 import Chk2Mimic from "./Chk2Mimic";
 import Chk2Status from "./Chk2Status";
 import { BlockCard, HeaterCard, IgCard } from "./Chk2Cards";
@@ -23,7 +26,9 @@ import Chk2Recipes from "./Chk2Recipes";
 import { ConfirmDialog, Notices, SimpleConfirm, type Ask, type Notice } from "./kit";
 import { STALE_SEC_DEFAULT, STOP_KINDS, paramValue, plcFresh } from "./logic";
 import { reasonLabel } from "./types";
-import { useChk2 } from "./useChk2";
+import { useChk2, type Chk2Mode } from "./useChk2";
+import { Chk2ModeContext } from "./mode";
+import { fmtKst } from "@/lib/ops2/time";
 import { useRecipes } from "./useRecipes";
 
 const STORE_KEY = "vanam-process:chk2-device";
@@ -100,9 +105,12 @@ export default function Chk2Page() {
   );
 }
 
-function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: MutableRefObject<boolean> }) {
-  const d = useChk2(equipment);
-  const recipes = useRecipes(equipment);
+export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
+  equipment: string; dirtyRef: MutableRefObject<boolean>; mode?: Chk2Mode;
+}) {
+  const local = screen === "local";
+  const d = useChk2(equipment, screen);
+  const recipes = useRecipes(equipment, !local);
   const [now, setNow] = useState(() => Date.now());
   const [ask, setAsk] = useState<Ask | null>(null);
   const [inflight, setInflight] = useState<Record<string, number>>({});   // 결과를 기다리는 명령(종류 또는 PLC_BUTTON:target)
@@ -123,14 +131,18 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
   }, [notices]);
 
   const web = d.hello?.web;
-  const perms = web?.perms;
+  // 노트북 로컬 화면: 권한 = 이 경로(HMI)에서 받는 명령, bench 면 아무것도
+  const bench = local && (d.hello?.runMode === "bench" || d.hello?.writesAllowed === false);
+  const perms = local
+    ? (d.hello ? { canOperate: !bench, isAdmin: false, kinds: bench ? [] : d.hello.commandKinds ?? [] } : undefined)
+    : web?.perms;
   const st = d.state?.data ?? null;
   const snap = st?.snapshot;
   const skew = web?.clockSkewMs ?? 0;
   // 마지막 state 의 나이 — 장비 시계(ts) → 웹 시계(− 시계 차) → 이 브라우저 시계(− 웹과의 차)
   const age = d.state ? now + d.offsetMs - (Date.parse(d.state.ts) - skew) : null;
   const ageSec = age === null ? null : Math.max(0, Math.round(age / 1000));
-  const connected = age !== null && age <= LOST_MS;
+  const connected = age !== null && age <= LOST_MS && (!local || d.streamUp);   // 로컬은 노트북 프로그램 stream 이 살아 있어야
   const plcLink = st?.links?.plc;
   const staleSec = typeof paramValue(d.bundle, "HEATER_STALE_SEC") === "number"
     ? (paramValue(d.bundle, "HEATER_STALE_SEC") as number) : STALE_SEC_DEFAULT;
@@ -205,21 +217,49 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
   const mode = d.hello?.runMode;
 
   const plcAge = typeof plcLink?.age === "number" ? `${plcLink.age.toFixed(1)} s` : "나이 없음";
-  const mimicNote = !connected ? "장비 끊김 · 조작 잠금"
+  const mimicNote = local && connected ? "보기만 — PLC 버튼은 웹에서만"
+    : !connected ? (local && !d.streamUp ? "노트북 프로그램 연결 끊김 · 조작 잠금" : "장비 끊김 · 조작 잠금")
     : !plcOk ? `PLC 값 ${plcLink?.q ?? "-"} · ${plcAge}(기준 ${staleSec} s) · 조작 잠금`
     : !canOperate ? "조회만" : "노드를 눌러 조작";
 
+  const up = st?.uplink;
+  const chipAge = local && !d.streamUp && age !== null ? Math.max(age, LOST_MS + 1) : age;   // 로컬은 stream 이 끊기면 바로 끊김
   return (
-    <>
+    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [] }}>
+      {local && (
+        <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-gray-900 px-3 py-2 text-xs text-white">
+          <Laptop size={15} /> <b>노트북 로컬 화면</b>
+          <span className="font-mono font-bold">{d.hello?.equipment ?? "-"}</span>
+          <span className="text-gray-300">{d.hello?.runMode ?? "-"}</span>
+          <span className="font-mono text-gray-400">{d.hello?.version ?? ""}</span>
+          <span className={`ml-auto flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] ${
+            !up?.enabled ? "bg-gray-700 text-gray-300" : up.connected ? "bg-emerald-700/60 text-emerald-100" : "bg-amber-600/70 text-amber-50"}`}
+            title={up?.lastError ? `마지막 오류: ${up.lastError}` : undefined}>
+            {up?.enabled && up.connected ? <Cloud size={12} /> : <CloudOff size={12} />}
+            {!up?.enabled ? "웹 연결 안 씀" : `웹 ${up.connected ? "연결" : "끊김"}`}
+            {up?.enabled && ` · 마지막 성공 ${up.lastOkAt ? fmtKst(up.lastOkAt) : "-"} · 보관 ${up.queued ?? 0} · 버림 ${up.dropped ?? 0}`}
+          </span>
+        </div>
+      )}
+      {bench && (
+        <p className="flex items-center gap-2 rounded-2xl border border-amber-300 bg-amber-100 p-3 text-xs font-bold text-amber-900">
+          <Lock size={14} /> 읽기 전용(bench) — 조작은 장비 앞면으로
+        </p>
+      )}
+      {local && !d.streamUp && (
+        <p className="flex items-center gap-2 rounded-2xl border border-rose-300 bg-rose-50 p-3 text-xs font-bold text-rose-700">
+          <WifiOff size={14} /> 노트북 프로그램 연결 끊김 — 다시 붙는 중, 조작이 잠겼습니다. 표시는 마지막 값입니다.
+        </p>
+      )}
       {/* 연결 띠 */}
       <div className="flex flex-wrap items-center gap-2 text-[11px]">
         <span className={`flex items-center gap-1.5 rounded-lg px-2 py-1 font-semibold ${
-          age === null ? "bg-gray-100 text-gray-500"
-          : age <= LATE_MS ? "bg-emerald-50 text-emerald-700"
-          : age <= LOST_MS ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700"}`}>
-          <span className={`h-2 w-2 rounded-full ${age === null ? "bg-gray-300" : age <= LATE_MS ? "bg-emerald-500"
-            : age <= LOST_MS ? "bg-amber-500" : "bg-rose-500"}`} />
-          {age === null ? "상태 없음" : age <= LATE_MS ? "실시간" : age <= LOST_MS ? `늦음 ${ageSec}초` : `끊김 ${ageSec}초`}
+          chipAge === null ? "bg-gray-100 text-gray-500"
+          : chipAge <= LATE_MS ? "bg-emerald-50 text-emerald-700"
+          : chipAge <= LOST_MS ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700"}`}>
+          <span className={`h-2 w-2 rounded-full ${chipAge === null ? "bg-gray-300" : chipAge <= LATE_MS ? "bg-emerald-500"
+            : chipAge <= LOST_MS ? "bg-amber-500" : "bg-rose-500"}`} />
+          {chipAge === null ? "상태 없음" : chipAge <= LATE_MS ? "실시간" : chipAge <= LOST_MS ? `늦음 ${ageSec}초` : `끊김 ${ageSec}초`}
         </span>
         {mode && (
           <span className={`rounded-lg px-2 py-1 font-bold ${
@@ -238,7 +278,7 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
             <Clock size={12} /> 장비 시계 차 {(skew / 1000).toFixed(1)} s
           </span>
         )}
-        {!d.streamUp && (
+        {!d.streamUp && !local && (
           <span className="flex items-center gap-1 rounded-lg bg-gray-100 px-2 py-1 text-gray-500">
             <WifiOff size={12} /> 화면 연결 다시 붙는 중
           </span>
@@ -256,12 +296,12 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
           이 장비의 웹 설정 묶음이 아직 없습니다 — 장비가 연결되면 받아 옵니다.
         </p>
       )}
-      {perms && !perms.canOperate && (
+      {perms && !perms.canOperate && !local && (
         <p className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-3 text-xs font-semibold text-gray-600">
           <Eye size={14} /> 조회만 — 장비 담당자·관리자만 조작
         </p>
       )}
-      {d.state && !connected && (
+      {d.state && !connected && (!local || d.streamUp) && (
         <p className="flex items-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
           <AlertTriangle size={14} /> <b>장비 끊김 {ageSec}초</b> — 표시는 마지막 값이며 조작이 잠겼습니다.
           {webOnline && canOperate && " 웹은 장비와 이어져 있어 정지 명령은 보낼 수 있습니다."}
@@ -270,7 +310,7 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
       <Notices list={notices} onClose={(id) => setNotices((l) => l.filter((n) => n.id !== id))} />
 
       <Chk2Status bundle={d.bundle} st={st} connected={connected} lastRun={d.runs[0] ?? null} can={can} onAsk={setAsk}
-        webRecipes={recipes.list} />
+        webRecipes={local ? undefined : recipes.list} />
 
       <Chk2Adjust bundle={d.bundle} st={st} skewMs={web?.clockSkewMs ?? 0} canKey={allowed} onAsk={setAsk} />
 
@@ -291,22 +331,31 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
         <BlockCard def={block("rfp")} snap={snap} link={link("rfp")} big={["fwd_w", "ref_w"]} foldable />
       </div>
 
-      <Chk2Recipes bundle={d.bundle} st={st} recipes={recipes} can={can} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef} />
+      {local ? (
+        <>
+          <EventFeed bundle={d.bundle} feed={d.feed} />
+          <p className="text-[11px] text-gray-400">레시피·설정·공정 기록·명령 기록은 웹 화면에서</p>
+        </>
+      ) : (
+        <>
+          <Chk2Recipes bundle={d.bundle} st={st} recipes={recipes} can={can} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef} />
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <EventFeed bundle={d.bundle} feed={d.feed} />
-        <div className="space-y-3">
-          <CommandLog bundle={d.bundle} commands={d.commands} />
-          <RunList bundle={d.bundle} runs={d.runs} />
-        </div>
-      </div>
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+            <EventFeed bundle={d.bundle} feed={d.feed} />
+            <div className="space-y-3">
+              <CommandLog bundle={d.bundle} commands={d.commands} />
+              <RunList bundle={d.bundle} runs={d.runs} />
+            </div>
+          </div>
 
-      <Chk2Config equipment={equipment} bundle={d.bundle} st={st} perms={perms ?? null} connected={connected}
-        reloadSchema={d.loadSchema} notify={notify} />
+          <Chk2Config equipment={equipment} bundle={d.bundle} st={st} perms={perms ?? null} connected={connected}
+            reloadSchema={d.loadSchema} notify={notify} />
 
-      <Chk2History equipment={equipment} bundle={d.bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
+          <Chk2History equipment={equipment} bundle={d.bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
+        </>
+      )}
 
       <ConfirmDialog ask={ask} onOk={run} onCancel={cancel} />
-    </>
+    </Chk2ModeContext.Provider>
   );
 }

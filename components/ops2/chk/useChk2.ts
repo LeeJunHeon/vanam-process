@@ -7,6 +7,10 @@
 // 묶음: 가지고 있는 묶음의 hash 와 hello 의 webSchemaHash 가 다르면 schema 를 읽는다(409 면 다음 hello 때 다시) —
 // 새 묶음을 받기 전까지는 가지고 있던 묶음을 그대로 쓴다. hello(웹 연결·권한)는 10 s 마다도 다시 읽는다.
 // 묶음 params current 는 장비 설정 버전의 값(schema API) — state.configVersion 이 바뀌면(설정 적용·되돌리기) 다시 읽는다.
+// mode(W-7): web = /process/api/ops2/[equipment]/v1/*(hello.web·perms·명령 ?wait) /
+//   local = 노트북 로컬 화면, 같은 주소의 /api/v1/*(챔버K v2 chk/local_server.py — 로그인 없음·127.0.0.1).
+//   local 은 명령 결과가 POST 응답 {id, ok, reason, detail} 로 바로 오고, 명령 기록·공정 기록 API 가 없다.
+//   stream 은 브라우저가 스스로 다시 붙으면 Last-Event-ID 로 그 뒤부터 이어 받는다(id = seq).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { newerState } from "./logic";
 import type { Bundle, CmdRow, Envelope, EventData, Hello, RunRow, StateData } from "./types";
@@ -24,7 +28,9 @@ export type SendResult = {
   body: { id?: string; status?: string; reasonCode?: string; detail?: string; error?: string };
 };
 
-const api = (eq: string, path: string) => `/api/ops2/${encodeURIComponent(eq)}/v1/${path}`;
+export type Chk2Mode = "web" | "local";
+
+const webApi = (eq: string, path: string) => `/api/ops2/${encodeURIComponent(eq)}/v1/${path}`;
 
 /** 명령 id(32 hex) — randomUUID 는 https·localhost 에서만 있으므로 getRandomValues 로 */
 function newId(): string {
@@ -33,7 +39,9 @@ function newId(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-export function useChk2(equipment: string) {
+export function useChk2(equipment: string, mode: Chk2Mode = "web") {
+  const local = mode === "local";
+  const api = useCallback((_eq: string, path: string) => (local ? `/api/v1/${path}` : webApi(_eq, path)), [local]);
   const [hello, setHello] = useState<Hello | null>(null);
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [state, setState] = useState<Envelope<StateData> | null>(null);
@@ -56,11 +64,12 @@ export function useChk2(equipment: string) {
       if (!r?.ok) return;                               // 409(아직 없음) 등 — 가지고 있던 묶음 그대로, 다음 hello 때 다시
       const b = (await r.json()) as Bundle;
       bundleHash.current = b.hash ?? null;
-      setBundle(b);
+      // 로컬 묶음에는 deviceConfigVersion 이 없다 — 묶음 머리 configVersion 이 같은 뜻
+      setBundle(local && b.deviceConfigVersion === undefined ? { ...b, deviceConfigVersion: b.configVersion ?? null } : b);
     } finally {
       schemaBusy.current = false;
     }
-  }, [equipment]);
+  }, [equipment, api, local]);
 
   const loadHello = useCallback(async () => {
     const t0 = Date.now();
@@ -71,7 +80,8 @@ export function useChk2(equipment: string) {
       return;
     }
     if (!r?.ok) {
-      setError(!r ? "웹 서버에 닿지 않습니다." : r.status === 404 ? "등록되지 않았거나 꺼진 장비입니다."
+      setError(local ? (!r ? "노트북 프로그램에 닿지 않습니다." : `장비 정보를 읽지 못했습니다(${r.status}).`)
+        : !r ? "웹 서버에 닿지 않습니다." : r.status === 404 ? "등록되지 않았거나 꺼진 장비입니다."
         : `장비 정보를 읽지 못했습니다(${r.status}).`);
       return;
     }
@@ -80,17 +90,19 @@ export function useChk2(equipment: string) {
     setHello(h);
     if (h.web?.serverNow) setOffsetMs(Date.parse(h.web.serverNow) - (t0 + t1) / 2);
     if (h.webSchemaHash && h.webSchemaHash !== bundleHash.current) await loadSchema();
-  }, [equipment, loadSchema]);
+  }, [equipment, loadSchema, api, local]);
 
   const loadCommands = useCallback(async () => {
+    if (local) return;                                  // 로컬 서버에는 명령 기록 API 가 없다
     const r = await fetch(api(equipment, "commands?limit=20"), { cache: "no-store" }).catch(() => null);
     if (r?.ok) setCommands((await r.json()).commands ?? []);
-  }, [equipment]);
+  }, [equipment, api, local]);
 
   const loadRuns = useCallback(async () => {
+    if (local) return;                                  // 공정 기록은 웹에만
     const r = await fetch(api(equipment, "runs?limit=10"), { cache: "no-store" }).catch(() => null);
     if (r?.ok) setRuns((await r.json()).runs ?? []);
-  }, [equipment]);
+  }, [equipment, api, local]);
 
   useEffect(() => {
     if (authLost) return;
@@ -131,7 +143,7 @@ export function useChk2(equipment: string) {
 
     const open = () => {
       if (stopped) return;
-      const s = new EventSource(`${BP}${api(equipment, "stream")}`);
+      const s = new EventSource(local ? api(equipment, "stream") : `${BP}${api(equipment, "stream")}`);
       es = s;
       s.onopen = () => {
         attempt = 0;
@@ -174,10 +186,23 @@ export function useChk2(equipment: string) {
       if (retry) clearTimeout(retry);
       if (cmdTimer) clearTimeout(cmdTimer);
     };
-  }, [equipment, authLost, loadHello, loadCommands, loadRuns]);
+  }, [equipment, authLost, loadHello, loadCommands, loadRuns, api, local]);
 
-  /** 명령 보내기 — ?wait=10 으로 결과(accepted·rejected·expired)까지 */
+  /** 명령 보내기 — web: ?wait=10 으로 결과(accepted·rejected·expired)까지 / local: POST 응답 {ok, reason, detail} 이 곧 결과 */
   const send = useCallback(async (kind: string, args: Record<string, unknown>, label?: string): Promise<SendResult> => {
+    if (local) {
+      try {
+        const r = await fetch(api(equipment, "command"), {
+          method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: newId(), kind, args }),
+        });
+        const b = (await r.json().catch(() => ({}))) as { id?: string; ok?: boolean; reason?: string | null; detail?: string; error?: string };
+        if (typeof b.ok !== "boolean") return { ok: false, status: r.status, body: { error: b.error ?? `HTTP ${r.status}` } };
+        return { ok: true, status: r.status, body: { id: b.id, status: b.ok ? "accepted" : "rejected",
+                                                      reasonCode: b.reason ?? undefined, detail: b.detail ?? "" } };
+      } catch {
+        return { ok: false, status: 0, body: { error: "network" } };
+      }
+    }
     try {
       const r = await fetch(`${api(equipment, "command")}?wait=10`, {
         method: "POST",
@@ -191,7 +216,7 @@ export function useChk2(equipment: string) {
     } catch {
       return { ok: false, status: 0, body: { error: "network" } };
     }
-  }, [equipment, loadCommands]);
+  }, [equipment, loadCommands, api, local]);
 
   // 장비 설정 버전이 바뀌면 묶음(current)을 다시 — 같은 버전은 한 번만
   const cfgVer = state?.data.configVersion;
