@@ -11,6 +11,8 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { ops2Db } from "@/lib/ops2/db";
 import { closeOthers, eventEnvelope, publishBrowser, type WireEnvelope } from "@/lib/ops2/hub";
+import { clearResync, overriddenCurrent, pendingResync, storedValues } from "@/lib/ops2/config";
+import { enqueueChat } from "@/lib/ops2/chat";
 
 export const LEASE_MS = 30_000;
 const SCHEMA_RETRY_MS = 10 * 60_000;   // 해시가 다른 webSchema 를 받은 뒤 다시 달라고 하지 않는 시간
@@ -182,7 +184,7 @@ function wireOf(e: Envelope): WireEnvelope {
   return { id: e.id, instance: e.instance, seq: e.seq, ts: e.ts.toISOString(), type: e.type, data };
 }
 
-type Applied = { acked: string[]; wire: WireEnvelope[] };
+type Applied = { acked: string[]; wire: WireEnvelope[]; ok: Envelope[]; resynced: string[] };
 
 /** 메시지 묶음 하나를 트랜잭션 하나로. 돌려주는 값 = acked·브라우저로 보낼 envelope(커밋되면 유효) */
 async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
@@ -203,10 +205,20 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
   const results = of("cmd_result");
   const acks = of("config_ack");
   const devicePatch: Prisma.Ops2DeviceUpdateInput = {};
+  const resynced: string[] = [];
 
-  // ── hello: 실행·장비 정보, 웹 묶음, 설정 첫 기준값(장비 현재값) ──
+  // ── hello: 실행·장비 정보, 웹 묶음, 설정 첫 기준값(장비 저장 값 — 묶음 params[].stored)·resync ──
+  // lastHello._overriddenCurrent = 덮어쓴 키의 실행 값(묶음 current — 묶음이 올 때만 알 수 있어 다음 hello 로 이어 간다)
   for (const h of hellos) {
     const { webSchema, ...d } = h.data;
+    const helloKeys = Array.isArray(d.overriddenKeys) ? d.overriddenKeys.map(String) : [];
+    let ovCur: Obj = {};
+    if (isObj(webSchema) && webSchema.hash === d.webSchemaHash) ovCur = overriddenCurrent(webSchema);
+    else {
+      const prev = await tx.ops2Device.findUnique({ where: { equipment }, select: { lastHello: true } });
+      const was = isObj(prev?.lastHello) && isObj(prev.lastHello._overriddenCurrent) ? prev.lastHello._overriddenCurrent : {};
+      for (const k of helloKeys) if (k in was) ovCur[k] = was[k];
+    }
     const fields = {
       program: str(d.program), version: str(d.version), runMode: str(d.runMode), schemaHash: str(d.schemaHash),
       webSchemaHash: d.webSchemaHash as string, configVersion: int(d.configVersion),
@@ -229,7 +241,7 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
     Object.assign(devicePatch, {
       runMode: fields.runMode, program: fields.program, version: fields.version, schemaHash: fields.schemaHash,
       webSchemaHash: fields.webSchemaHash, configVersion: fields.configVersion, writesAllowed: fields.writesAllowed,
-      lastHello: json(d), lastHelloAt: now,
+      lastHello: json({ ...d, _overriddenCurrent: ovCur }), lastHelloAt: now,
       ...(deviceUtc ? { clockSkewMs: deviceUtc.getTime() - now.getTime() } : {}),
     });
 
@@ -241,18 +253,25 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
                    bundle: json(webSchema), firstEquipment: equipment, receivedAt: now }],
           skipDuplicates: true,
         });
-        const hasBase = await tx.ops2ConfigVersion.findFirst({ where: { equipment }, select: { version: true } });
-        if (!hasBase) {
-          const values: Obj = {};
-          for (const p of Array.isArray(webSchema.params) ? webSchema.params : []) {
-            if (isObj(p) && typeof p.key === "string" && p.scope !== "secret") values[p.key] = p.current ?? null;
-          }
+        const top = await tx.ops2ConfigVersion.findFirst({ where: { equipment }, orderBy: { version: "desc" }, select: { version: true } });
+        const rs = pendingResync(equipment);
+        if (!top) {
           await tx.ops2ConfigVersion.createMany({
-            data: [{ equipment, version: int(d.configVersion) ?? 0, kind: "import", paramValues: json(values),
-                     paramSchemaHash: str(webSchema.paramSchemaHash), createdBy: "device", createdAt: now }],
+            data: [{ equipment, version: int(d.configVersion) ?? 0, kind: "import", paramValues: json(storedValues(webSchema)),
+                     paramSchemaHash: str(webSchema.paramSchemaHash), createdBy: "device", createdAt: now,
+                     note: "장비 저장 값(묶음 stored)" }],
             skipDuplicates: true,
           });
+        } else if (rs) {
+          // 장비 저장 값으로 기준 다시 읽기 — 장비 버전·웹 최대보다 큰 번호(명령은 보내지 않음)
+          const cv = int(d.configVersion);
+          await tx.ops2ConfigVersion.create({
+            data: { equipment, version: Math.max(top.version, cv ?? 0) + 1, kind: "resync", paramValues: json(storedValues(webSchema)),
+                    paramSchemaHash: str(webSchema.paramSchemaHash), createdBy: rs.by, createdAt: now,
+                    note: `장비 저장 값으로 기준 다시 읽기(장비 v${cv ?? "?"})${rs.note ? ` — ${rs.note}` : ""}` },
+          });
         }
+        if (rs) resynced.push(equipment);
       } else {
         schemaHold.set(hash, now.getTime() + SCHEMA_RETRY_MS);
         bads.push({ id: `schema-${h.id}`, ackId: null, instance: h.instance,
@@ -490,6 +509,7 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
       ...bads.map((b) => b.ackId).filter((v): v is string => !!v),
     ],
     wire: ok.map(wireOf),
+    ok, resynced,
   };
 }
 
@@ -507,10 +527,13 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
 
   let acked: string[] = [...known];
   let wire: WireEnvelope[] = [];
+  let done: Envelope[] = [];
   let fallback = 0;
   const take = (r: Applied) => {
     acked.push(...r.acked);
     wire.push(...r.wire);
+    done.push(...r.ok);
+    for (const e of r.resynced) clearResync(e);
   };
   try {
     take(await ops2Db.$transaction((tx) => applyBatch(tx, ctx, messages), TX_OPTS));
@@ -522,6 +545,7 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
     console.error("[ops2/ingest] 배치 실패 — 하나씩 처리", ctx.equipment, code);
     acked = [...known];
     wire = [];
+    done = [];
     for (const raw of messages) {
       try {
         take(await ops2Db.$transaction((tx) => applyBatch(tx, ctx, [raw]), TX_OPTS));
@@ -542,6 +566,11 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
 
   // 커밋된 것만 화면으로(이미 받았던 것이 다시 와도 화면이 envelope id 로 거른다)
   publishBrowser(ctx.equipment, wire);
+  // 구글챗 알림(W-6) — 커밋된 것으로 outbox 에(같은 원인 envelope id 는 한 번만). 실패해도 ingest 는 그대로
+  if (done.length) {
+    await enqueueChat(ctx.equipment, done, ctx.now).catch((e) =>
+      console.error("[ops2/chat] outbox 넣기 실패", ctx.equipment, String((e as Error)?.message ?? e).slice(0, 300)));
+  }
 
   // needWebSchema 는 hello 가 있는 POST 만: 묶음이 없거나 이 장비의 설정 기준값이 없으면
   let needWebSchema = false;
@@ -553,12 +582,20 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
     const hash = hello.data.webSchemaHash as string;
     const hold = schemaHold.get(hash);
     if (!hold || hold < ctx.now.getTime()) {
-      const [ws, base] = await Promise.all([
+      const [ws, base, dev] = await Promise.all([
         ops2Db.ops2WebSchema.findUnique({ where: { hash }, select: { hash: true } }),
         ops2Db.ops2ConfigVersion.findFirst({ where: { equipment: ctx.equipment }, select: { version: true } }),
+        ops2Db.ops2Device.findUnique({ where: { equipment: ctx.equipment }, select: { lastHello: true } }),
       ]);
-      needWebSchema = !ws || !base;
+      // 덮어쓴 키가 바뀌었는데 그 실행 값을 모르면(묶음으로만 온다) 한 번 더 달라고 한다
+      const lh = isObj(dev?.lastHello) ? dev.lastHello : {};
+      const keys = Array.isArray(hello.data.overriddenKeys) ? hello.data.overriddenKeys.map(String) : [];
+      const ovKnown = isObj(lh._overriddenCurrent) ? lh._overriddenCurrent : {};
+      const ovMissing = !("webSchema" in hello.data) && keys.some((k) => !(k in ovKnown));
+      needWebSchema = !ws || !base || ovMissing;
     }
   }
+  // resync 요청이 있으면 hello 가 없는 POST 에도(장비는 needWebSchema 면 묶음을 실은 hello 를 한 번 더 보낸다)
+  if (!needWebSchema && pendingResync(ctx.equipment)) needWebSchema = true;
   return { acked, needWebSchema, fallback };
 }

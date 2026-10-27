@@ -5,7 +5,10 @@ import { ops2Db } from "@/lib/ops2/db";
 import { actorOf, deviceBundle, enabledDevice, limitOf } from "@/lib/ops2/browser";
 import { readLimited } from "@/lib/ops2/body";
 import { COMMAND_TTL_MS, expireDue, isOnline, webCommandDef } from "@/lib/ops2/commands";
-import { checkParamValue, currentConfig, isObj, type Obj, type ParamDefLite } from "@/lib/ops2/config";
+import {
+  checkParamValue, currentConfig, inFlightVersion, isObj, nextVersion, pendingResync, requestResync, RESYNC_TTL_MS,
+  type Obj, type ParamDefLite,
+} from "@/lib/ops2/config";
 import { stripNul } from "@/lib/ops2/ingest";
 import { kick } from "@/lib/ops2/hub";
 import { canRunCommand, isAdminRole, isOperatorOf, operatorEquipments } from "@/lib/ops2/perm";
@@ -46,8 +49,9 @@ const VERSION_SEL = {
 } as const;
 
 // GET /api/ops2/[equipment]/config?limit=50 — 설정 보기(장비 담당자·관리자). 장비 버전·지금 값·대기 중·버전 목록(값 없이).
-// 지금 값 = 장비 configVersion 의 웹 행(없으면 null — 화면이 묶음 current 로 + 안내).
-// 대기 중 = 지금보다 새 웹 버전 중 ack 가 없거나 pending_idle·pending_restart 인 것, 그리고 state.configPending.
+// 지금 값 = 장비 configVersion 의 웹 행(그보다 큰 resync 행이 있으면 그 값 — base). 없으면 null(화면이 묶음 current 로 + 안내).
+// 대기 중 = 지금보다 새 웹 버전 중 ack 가 없거나 pending_idle·pending_restart 인 것(resync 는 장비에 안 가므로 빼고), state.configPending.
+// 덮어쓰기 = hello overriddenKeys + 그 키의 실행 값(묶음 current — ingest 가 lastHello._overriddenCurrent 로 이어 둔 것).
 export async function GET(req: NextRequest, { params }: { params: Promise<{ equipment: string }> }) {
   const { equipment } = await params;
   const ctx = await ctxOf(equipment);
@@ -61,14 +65,19 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ equi
     ops2Db.ops2State.findUnique({ where: { equipment }, select: { data: true } }),
   ]);
   const dv = cur.version ?? -1;
-  const pendingVersions = list.filter((v) => v.version > dv && (v.ackStatus === null || v.ackStatus.startsWith("pending")))
+  const pendingVersions = list.filter((v) => v.version > dv && v.kind !== "resync" && (v.ackStatus === null || v.ackStatus.startsWith("pending")))
     .map((v) => v.version);
+  const lh = isObj(ctx.device.lastHello) ? ctx.device.lastHello : {};
+  const helloKeys = Array.isArray(lh.overriddenKeys) ? lh.overriddenKeys.map(String) : [];
+  const ovCur = isObj(lh._overriddenCurrent) ? lh._overriddenCurrent : {};
   const pendingRows = pendingVersions.length ? await ops2Db.ops2ConfigVersion.findMany({
     where: { equipment, version: { in: pendingVersions } }, select: { version: true, paramValues: true, ackStatus: true },
   }) : [];
   return NextResponse.json({
     equipment, canApply: ctx.canApply, canRollback: ctx.canRollback,
-    deviceVersion: cur.version, current: cur.values,
+    deviceVersion: cur.version, current: cur.values, base: cur.base,
+    overridden: Object.fromEntries(helloKeys.map((k) => [k, k in ovCur ? ovCur[k] : null])),
+    resyncPending: !!pendingResync(equipment),
     currentRow: cur.row ? { version: cur.row.version, kind: cur.row.kind, ackStatus: cur.row.ackStatus,
                             overriddenKeys: cur.row.overriddenKeys, pendingKeys: cur.row.pendingKeys } : null,
     statePending: isObj(st?.data) ? st.data.configPending ?? null : null,
@@ -84,8 +93,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ equi
 //    baseVersion ≠ 장비 지금 버전이면 409 base_changed, 같은 version 동시 생성은 409 version_taken,
 //    앞서 보낸 웹 버전이 아직 답이 없으면(30 s 안) 409 in_flight — 같은 지금 값 위의 두 버전이 서로를 되돌리지 않게.
 //    키 하나 웹 검사(형식·범위·enum·pattern)를 통과하지 못하면 400 — 키 사이 규칙은 장비(CONFIG_INVALID).
-//  {action: "rollback"}: CONFIG_ROLLBACK 명령만 — 장비가 지금 + 1 버전을 스스로 만들고 config_ack(values)로 웹 행이 생긴다.
-//  ?wait 동안 명령 결과·ack 를 기다려 {version, command, ack} 로 돌려준다.
+//  {action: "rollback"}: CONFIG_ROLLBACK {version} 명령만 — version 은 적용과 같은 규칙으로 웹이 정한다(5-12). 장비가 그 번호로
+//    직전 값을 적용하고 config_ack(values)로 웹 행이 생긴다(같은 in_flight 막기).
+//  {action: "resync", note?}: 장비 저장 값으로 기준 다시 읽기 — 명령은 보내지 않는다. 다음 POST 응답 needWebSchema 로 묶음을
+//    다시 받아 ingest 가 kind resync 행(stored 값)을 만든다(in_flight 이면 409).
+//  ?wait 동안 명령 결과·ack(resync 는 그 행)를 기다려 {version, command, ack} 로 돌려준다.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ equipment: string }> }) {
   const { equipment } = await params;
   const ctx = await ctxOf(equipment);
@@ -103,9 +115,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
     return bad("bad_json", "JSON 이 아님");
   }
   const action = body.action;
-  if (action !== "apply" && action !== "rollback") return bad("bad_action", "action 은 apply 또는 rollback");
+  if (action !== "apply" && action !== "rollback" && action !== "resync") return bad("bad_action", "action 은 apply·rollback·resync");
   if (!ctx.bundle) return bad("no_schema", "장비 묶음이 아직 없음", 409);
-  if (!(action === "apply" ? ctx.canApply : ctx.canRollback)) {
+  if (!(action === "rollback" ? ctx.canRollback : ctx.canApply)) {
     return NextResponse.json({ error: "forbidden", detail: "설정 적용·되돌리기는 관리자만" }, { status: 403 });
   }
   const now = new Date();
@@ -118,6 +130,26 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
   let kind: string;
   let args: Obj;
   let label: string;
+  const inFlightErr = (v: number) => bad("in_flight", `앞서 보낸 버전 ${v} 이 장비 답을 기다리는 중 — 결과를 본 뒤 다시`, 409);
+  const waitS = Math.min(Math.max(Number(req.nextUrl.searchParams.get("wait") ?? 0) || 0, 0), WAIT_MAX_S);
+  const until = Date.now() + waitS * 1000;
+
+  if (action === "resync") {
+    const busyV = await ops2Db.$transaction((tx) => inFlightVersion(tx, equipment, cur.version, now));
+    if (busyV !== null) return inFlightErr(busyV);
+    requestResync(equipment, ctx.who, note, now.getTime());
+    kick(equipment);
+    let row = null;
+    for (;;) {
+      row = await ops2Db.ops2ConfigVersion.findFirst({
+        where: { equipment, kind: "resync", createdAt: { gte: now } }, orderBy: { version: "desc" }, select: VERSION_SEL,
+      });
+      if (row || Date.now() >= until) break;
+      await new Promise((x) => setTimeout(x, 250));
+    }
+    return NextResponse.json({ version: row?.version ?? null, cmdId: null, command: null, ack: row,
+                               waiting: !row, ttlSec: RESYNC_TTL_MS / 1000 });
+  }
 
   if (action === "apply") {
     if (body.baseVersion !== cur.version) {
@@ -144,66 +176,71 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
     for (const [k, p] of defs) if (p.scope !== "secret") values[k] = k in body.changes ? body.changes[k] : cur.values[k];
     const missing = [...defs.values()].filter((p) => p.scope !== "secret" && values[p.key] === undefined).map((p) => p.key);
     if (missing.length) return bad("missing_keys", `지금 버전에 없는 키 ${missing.length}개(${missing.slice(0, 5).join(", ")}) — 묶음이 바뀐 뒤 장비 버전 행이 없음`, 409);
-    const top = await ops2Db.ops2ConfigVersion.findFirst({ where: { equipment }, orderBy: { version: "desc" }, select: { version: true } });
-    version = Math.max(top?.version ?? 0, cur.version ?? 0) + 1;
+    version = await nextVersion(ops2Db, equipment, cur.version);
     kind = "CONFIG_APPLY";
     const schemaHash = typeof ctx.bundle.paramSchemaHash === "string" ? ctx.bundle.paramSchemaHash : "";
     args = { version, values, schemaHash };
     label = `설정 버전 ${version} 적용(${Object.keys(body.changes).length}개 키)`;
     try {
       await ops2Db.$transaction(async (tx) => {
-        // 앞서 보낸 웹 버전이 아직 장비 답을 기다리면 거부 — 둘 다 같은 지금 값 위에 만들면 뒤 것이 앞 것을 되돌린다
-        const inFlight = await tx.ops2ConfigVersion.findFirst({
-          where: { equipment, kind: "web", version: { gt: cur.version ?? -1 }, ackStatus: null,
-                   createdAt: { gt: new Date(now.getTime() - COMMAND_TTL_MS) } },
-          select: { version: true },
-        });
-        if (inFlight) throw Object.assign(new Error("in_flight"), { inFlight: inFlight.version });
+        // 앞서 보낸 버전(적용·되돌리기)이 아직 장비 답을 기다리면 거부 — 둘 다 같은 지금 값 위에 만들면 뒤 것이 앞 것을 되돌린다
+        const inFlight = await inFlightVersion(tx, equipment, cur.version, now);
+        if (inFlight !== null) throw Object.assign(new Error("in_flight"), { inFlight });
         await tx.ops2ConfigVersion.create({
           data: { equipment, version: version!, kind: "web", paramValues: values as Prisma.InputJsonValue, paramSchemaHash: schemaHash,
                   createdBy: ctx.who, createdAt: now, note, cmdId,
                   changes: Object.keys(body.changes as Obj).sort().map((k) => ({ key: k, old: cur.values![k] ?? null, new: (body.changes as Obj)[k] })) as Prisma.InputJsonValue },
         });
         await createCommand(tx, device, cmdId, kind, args, label, ctx.who, now);
-      });
+      }, { isolationLevel: "Serializable" });                  // 되돌리기(행 없이 번호만 씀)와 같은 번호를 잡지 않게
     } catch (e) {
-      if ((e as { code?: string })?.code === "P2002") return bad("version_taken", `버전 ${version} 을 다른 사람이 먼저 만듦 — 다시`, 409);
+      const code = (e as { code?: string })?.code;
+      if (code === "P2002" || code === "P2034") return bad("version_taken", `버전 ${version} 을 다른 요청이 먼저 잡음 — 다시`, 409);
       const busyV = (e as { inFlight?: number })?.inFlight;
-      if (busyV !== undefined) return bad("in_flight", `앞서 보낸 버전 ${busyV} 이 장비 답을 기다리는 중 — 결과를 본 뒤 다시`, 409);
+      if (busyV !== undefined) return inFlightErr(busyV);
       console.error("[ops2/config]", equipment, (e as Error)?.message?.slice(0, 300));
       return NextResponse.json({ error: "server error" }, { status: 500 });
     }
   } else {
     kind = "CONFIG_ROLLBACK";
-    args = {};
-    label = `설정 되돌리기(지금 버전 ${String(cur.version)} → 이전 값으로 새 버전)`;
-    await ops2Db.$transaction(async (tx) => createCommand(tx, device, cmdId, kind, args, label, ctx.who, now));
+    try {
+      // 번호는 적용과 같은 규칙(웹이 정함) — 트랜잭션 안에서 in_flight 를 본 뒤 정한다
+      version = await ops2Db.$transaction(async (tx) => {
+        const inFlight = await inFlightVersion(tx, equipment, cur.version, now);
+        if (inFlight !== null) throw Object.assign(new Error("in_flight"), { inFlight });
+        const v = await nextVersion(tx, equipment, cur.version);
+        await createCommand(tx, device, cmdId, kind, { version: v },
+                            `설정 되돌리기(지금 버전 ${String(cur.version)} → 이전 값으로 v${v})`, ctx.who, now);
+        return v;
+      }, { isolationLevel: "Serializable" });
+    } catch (e) {
+      const busyV = (e as { inFlight?: number })?.inFlight;
+      if (busyV !== undefined) return inFlightErr(busyV);
+      if ((e as { code?: string })?.code === "P2034") return bad("version_taken", "다른 설정 요청과 겹침 — 다시", 409);
+      console.error("[ops2/config]", equipment, (e as Error)?.message?.slice(0, 300));
+      return NextResponse.json({ error: "server error" }, { status: 500 });
+    }
   }
   await expireDue(equipment, now);
   kick(equipment);
 
-  // 결과 기다리기 — 명령 결과, 그리고 ack(적용: 그 버전 행, 되돌리기: 지금보다 새 rollback 행)
-  const waitS = Math.min(Math.max(Number(req.nextUrl.searchParams.get("wait") ?? 0) || 0, 0), WAIT_MAX_S);
-  const until = Date.now() + waitS * 1000;
+  // 결과 기다리기 — 명령 결과, 그리고 ack(그 버전 행 — 되돌리기도 웹이 정한 번호)
+  const v = version!;
   const read = async () => {
     const c = await ops2Db.ops2Command.findUnique({ where: { id: cmdId }, select: { status: true, reasonCode: true, detail: true } });
-    const row = version !== null
-      ? await ops2Db.ops2ConfigVersion.findUnique({ where: { equipment_version: { equipment, version } }, select: VERSION_SEL })
-      : await ops2Db.ops2ConfigVersion.findFirst({
-          where: { equipment, kind: "rollback", version: { gt: cur.version ?? -1 } },   // ack 시각은 장비 시계라 쓰지 않는다
-          orderBy: { version: "desc" }, select: VERSION_SEL,
-        });
+    const row = await ops2Db.ops2ConfigVersion.findUnique({ where: { equipment_version: { equipment, version: v } }, select: VERSION_SEL });
     return { c, row };
   };
   let r = await read();
   while (Date.now() < until) {
-    const done = r.c && (r.c.status === "expired" || (r.c.status === "rejected" && (version === null || r.row?.ackStatus))
+    // 되돌리기 거부는 행이 생기지 않는다(ack 에 values 없음) — 명령 거부면 끝
+    const done = r.c && (r.c.status === "expired" || (r.c.status === "rejected" && (action === "rollback" || r.row?.ackStatus))
       || (r.c.status === "accepted" && r.row?.ackStatus && r.row.ackAt));
     if (done) break;
     await new Promise((x) => setTimeout(x, 250));
     r = await read();
   }
-  return NextResponse.json({ version: version ?? r.row?.version ?? null, cmdId, command: r.c, ack: r.row });
+  return NextResponse.json({ version: v, cmdId, command: r.c, ack: r.row });
 }
 
 /** 웹 명령 행(pending) — /v1/command 와 같은 칸(만료·대상 실행·장비 시계 기준 만료) */

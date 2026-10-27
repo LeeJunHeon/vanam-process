@@ -2,14 +2,17 @@
 
 // 챔버K v2 설정(W-5) — 보기는 장비 담당자·관리자, 적용·되돌리기는 관리자(묶음 CONFIG_APPLY·CONFIG_ROLLBACK role admin).
 // 설정 버전은 장비별(CHK2 와 CHK2-SIM 따로). /api/ops2/[equipment]/config(GET 보기·POST 적용·되돌리기), /config/[version].
-// 지금 값 = 장비가 쓰는 버전(state.configVersion)의 웹 행 — 없으면 묶음 current + 안내.
+// 지금 값 = 장비가 쓰는 버전(state.configVersion)의 웹 행 — 없으면 묶음 current + 안내. 그보다 큰 resync 행(관리자
+// "장비 저장 값으로 기준 다시 읽기" — 장비에 명령 없이 묶음 stored 로 만든 행)이 있으면 그 값이 기준(5-12).
 // 대기 중 = 지금보다 새 웹 버전(ack 없음·pending_*)과 state.configPending(idle·restart 대기 키 → 값).
 // 편집: 묶음 params 를 group 별로(라벨·단위·형식·범위·enum·pattern·기본값·safety·apply·desc·v1 출처). 비밀값은 보이지도
-// 보내지도 않는다, webLocked 는 읽기만, 노트북 덮어쓰기가 이기는 키(overriddenKeys)는 표시.
+// 보내지도 않는다, webLocked 는 읽기만, 노트북 덮어쓰기가 정한 키(hello overriddenKeys·ack overriddenKeys)는
+// "노트북 덮어쓰기 — 지금 실행 값 X" — 적용 값은 저장 값 기준(덮어쓰기 값을 config 에 넣지 않는다).
+// 적용이 거부되면 거부된 키(errors·detail 에 나온 키)를 표시하고 "편집 비우기".
 // 웹 검사는 키 하나씩(lib/ops2/configCheck) — 키 사이 규칙(crossRules)은 설명만, 판단은 장비(CONFIG_INVALID errors 그대로).
 // 이력: 버전 목록 → 하나(changes·ack) → 두 버전 비교.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { GitCompare, History, RotateCcw, Save, Settings2 } from "lucide-react";
+import { DownloadCloud, Eraser, GitCompare, History, RotateCcw, Save, Settings2 } from "lucide-react";
 import { CONFIG_REASON, checkParamValue } from "@/lib/ops2/configCheck";
 import { fmtKst } from "@/lib/ops2/time";
 import { Card, SimpleConfirm, type Notice } from "./kit";
@@ -22,13 +25,16 @@ type Version = {
 };
 type Overview = {
   canApply: boolean; canRollback: boolean; deviceVersion: number | null; current: Record<string, unknown> | null;
+  base: { version: number; kind: string } | null;            // 지금 값의 행(장비 버전 행 또는 그보다 큰 resync 행)
+  overridden: Record<string, unknown>;                        // hello overriddenKeys → 실행 값(모르면 null)
+  resyncPending: boolean;
   currentRow: { version: number; kind: string; ackStatus: string | null; overriddenKeys: unknown; pendingKeys: unknown } | null;
   statePending: { idle?: Record<string, unknown>; restart?: Record<string, unknown> } | null;
   pending: { version: number; ackStatus: string | null; values: Record<string, unknown> }[];
   webMaxVersion: number | null; versions: Version[];
 };
 type ApplyResp = {
-  version: number | null; cmdId: string;
+  version: number | null; cmdId: string | null; waiting?: boolean; action?: string;
   command: { status: string; reasonCode: string | null; detail: string | null } | null; ack: Version | null;
   error?: string; detail?: string; errors?: string[];
 };
@@ -125,7 +131,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
   const [group, setGroup] = useState<string>("process");
   const [q, setQ] = useState("");
   const [onlyChanged, setOnlyChanged] = useState(false);
-  const [ask, setAsk] = useState<"apply" | "rollback" | null>(null);
+  const [ask, setAsk] = useState<"apply" | "rollback" | "resync" | null>(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [lastResult, setLastResult] = useState<ApplyResp | null>(null);
@@ -180,7 +186,17 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
   const canApply = !!ov?.canApply && connected;
   const readOnly = !ov?.canApply;
   const idleP = ov?.statePending?.idle ?? {}, restartP = ov?.statePending?.restart ?? {};
-  const overridden = new Set(arr(ov?.currentRow?.overriddenKeys));
+  const overridden = new Set([...arr(ov?.currentRow?.overriddenKeys), ...Object.keys(ov?.overridden ?? {})]);
+  // 마지막 적용이 거부됐으면 그 오류 글에 나온 키
+  const rejected = useMemo(() => {
+    const r = lastResult;
+    if (!r || r.action !== "apply" || !(r.ack?.ackStatus === "rejected" || r.command?.status === "rejected")) return new Set<string>();
+    const text = [...arr(r.ack?.errors), r.command?.detail ?? ""].join(" ");
+    const keys = params.map((p) => p.key).filter((k) => new RegExp(`(^|[^A-Z0-9_])${k}([^A-Z0-9_]|$)`).test(text));
+    // 키 사이 규칙 오류는 "[X08] MAX < START" 처럼 규칙 id 만 — 묶음 crossRules 의 키로
+    for (const m of text.matchAll(/\[([A-Z]+\d+)\]/g)) keys.push(...(bundle?.crossRules?.find((c) => c.id === m[1])?.keys ?? []));
+    return new Set(keys);
+  }, [lastResult, params, bundle]);
   const pendingWeb = new Map<string, number[]>();
   for (const pv of ov?.pending ?? []) {
     for (const p of params) if (ov?.current && !same(pv.values?.[p.key], ov.current[p.key])) {
@@ -206,9 +222,17 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
     }).catch(() => null);
     setBusy(false);
     const b: ApplyResp = r ? await r.json().catch(() => ({})) : { error: "network" } as ApplyResp;
+    b.action = String(body.action);
     setLastResult(b);
+    const what = { apply: "적용", rollback: "되돌리기", resync: "기준 다시 읽기" }[String(body.action)] ?? "";
     if (!r || !r.ok) {
-      notify({ tone: "bad", title: `설정 ${body.action === "apply" ? "적용" : "되돌리기"} — 보내지 못함`, text: `${b.error ?? `HTTP ${r?.status}`}${b.detail ? ` · ${b.detail}` : ""}` });
+      notify({ tone: "bad", title: `설정 ${what} — 보내지 못함`, text: `${b.error ?? `HTTP ${r?.status}`}${b.detail ? ` · ${b.detail}` : ""}` });
+      return;
+    }
+    if (body.action === "resync") {
+      notify(b.ack ? { tone: "ok", title: `설정 기준 v${b.ack.version} — 장비 저장 값으로 다시 읽음`, text: "다음 적용은 이 값 위에 만듭니다(장비에는 보내지 않음)" }
+        : { tone: "warn", title: "설정 기준 다시 읽기 — 장비 묶음을 기다리는 중", text: "장비가 다음 연락에 묶음을 보내면 행이 생깁니다(1 분 안)" });
+      await load();
       return;
     }
     const a = b.ack, c = b.command;
@@ -255,13 +279,30 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
             <span>장비 버전 <b className="text-gray-900">v{ov.deviceVersion ?? "-"}</b>{ov.currentRow && ` (${ov.currentRow.kind})`}</span>
+            {ov.base && ov.base.version !== ov.deviceVersion && (
+              <Badge tone="bg-blue-50 text-blue-700" title="장비에 보내지 않은 기준 — 다음 적용이 이 값 위에 만들어진다">
+                기준 v{ov.base.version}({ov.base.kind} — 장비 저장 값)
+              </Badge>
+            )}
             <span>웹 최대 v{ov.webMaxVersion ?? "-"}</span>
             {ov.pending.length > 0 && <Badge tone="bg-amber-50 text-amber-700">대기 중 웹 버전 {ov.pending.map((p) => `v${p.version}(${p.ackStatus ? STATUS_TEXT[p.ackStatus] ?? p.ackStatus : "응답 없음"})`).join(", ")}</Badge>}
             {(Object.keys(idleP).length > 0 || Object.keys(restartP).length > 0) && (
               <Badge tone="bg-amber-50 text-amber-700">장비 대기 키 — 공정 끝나면 {Object.keys(idleP).length} · 재시작 때 {Object.keys(restartP).length}</Badge>
             )}
             {!ov.canApply && <Badge tone="bg-gray-100 text-gray-500">보기만 — 적용은 관리자</Badge>}
+            {Object.keys(ov.overridden ?? {}).length > 0 && (
+              <Badge tone="bg-violet-50 text-violet-700" title="장비 hello overriddenKeys — 그 키의 실행 값은 노트북 local_override.json">
+                노트북 덮어쓰기 {Object.keys(ov.overridden).length}키: {Object.keys(ov.overridden).join(", ")}
+              </Badge>
+            )}
             <span className="ml-auto flex gap-1.5">
+              {ov.canApply && (
+                <button disabled={!connected || busy || ov.resyncPending} onClick={() => setAsk("resync")}
+                  title="장비에 명령을 보내지 않고, 장비가 저장한 값(묶음 stored)으로 다음 적용의 기준을 다시 만든다"
+                  className="flex items-center gap-1 rounded-xl border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40">
+                  <DownloadCloud size={13} /> {ov.resyncPending ? "기준 다시 읽는 중…" : "장비 저장 값으로 기준 다시 읽기"}
+                </button>
+              )}
               {ov.canRollback && (
                 <button disabled={!connected || busy} onClick={() => setAsk("rollback")}
                   className="flex items-center gap-1 rounded-xl border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40">
@@ -309,13 +350,18 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                       const e = changed.includes(p.key) ? errors[p.key] : null;
                       const range = p.type === "int" || p.type === "float" ? `${p.min ?? ""}~${p.max ?? ""}` : "";
                       return (
-                        <tr key={p.key} className={`border-t border-gray-100 align-top ${changed.includes(p.key) ? "bg-blue-50/40" : ""}`}>
+                        <tr key={p.key} className={`border-t border-gray-100 align-top ${rejected.has(p.key) ? "bg-rose-50/60" : changed.includes(p.key) ? "bg-blue-50/40" : ""}`}>
                           <td className="px-2 py-1.5">
                             <p className="font-mono text-[10.5px] font-semibold text-gray-800">{p.key}</p>
                             <p className="text-gray-500">{p.label}</p>
                             <span className="flex flex-wrap gap-0.5">
                               {p.webLocked && <Badge tone="bg-gray-200 text-gray-600">노트북 설정 파일로만</Badge>}
-                              {overridden.has(p.key) && <Badge tone="bg-violet-50 text-violet-700">노트북 덮어쓰기가 이김</Badge>}
+                              {overridden.has(p.key) && (
+                                <Badge tone="bg-violet-50 text-violet-700" title="노트북 local_override.json 이 정한 키 — 웹 적용 값은 저장 값 기준, 실행은 덮어쓰기 값">
+                                  노트북 덮어쓰기 — 지금 실행 값 {ov.overridden && p.key in ov.overridden && ov.overridden[p.key] !== null ? show(ov.overridden[p.key]) : "?"}
+                                </Badge>
+                              )}
+                              {rejected.has(p.key) && <Badge tone="bg-rose-600 text-white">거부됨</Badge>}
                               {p.key in idleP && <Badge tone="bg-amber-50 text-amber-700" title={`대기 값 ${show(idleP[p.key])}`}>대기(공정 끝나면) → {show(idleP[p.key])}</Badge>}
                               {p.key in restartP && <Badge tone="bg-amber-50 text-amber-700" title={`대기 값 ${show(restartP[p.key])}`}>대기(재시작) → {show(restartP[p.key])}</Badge>}
                               {pendingWeb.has(p.key) && <Badge tone="bg-amber-50 text-amber-700">웹 v{pendingWeb.get(p.key)!.join("·v")} 에서 바뀜</Badge>}
@@ -356,10 +402,21 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                   <ul className="list-disc pl-4">{rules.map((r) => <li key={r.id}><span className="font-mono">{r.id}</span> {r.desc} <span className="text-gray-400">({r.keys.join(", ")})</span></li>)}</ul>
                 </div>
               )}
-              {lastResult?.ack && arr(lastResult.ack.errors).length > 0 && (
+              {lastResult?.action === "apply" && (lastResult.ack?.ackStatus === "rejected" || lastResult.command?.status === "rejected") && (
                 <div className="rounded-lg bg-rose-50 p-2 text-[11px] text-rose-700">
-                  <p className="font-semibold">장비 검사 오류(버전 {lastResult.ack.version} — {lastResult.ack.reasonCode})</p>
-                  <ul className="list-disc pl-4">{arr(lastResult.ack.errors).map((x, i) => <li key={i}>{x}</li>)}</ul>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">
+                      버전 {lastResult.version ?? "-"} 거부 — {(() => { const rc = lastResult.ack?.reasonCode ?? lastResult.command?.reasonCode; return rc ? `${CONFIG_REASON[rc] ?? reasonLabel(bundle, rc)} (${rc})` : ""; })()}
+                    </p>
+                    <span>거부된 키: {rejected.size ? <span className="font-mono">{[...rejected].join(", ")}</span> : "오류 글에 키 이름 없음"}</span>
+                    <button onClick={() => { setEdits({}); setLastResult(null); }}
+                      className="ml-auto flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-2 py-0.5 font-semibold text-rose-700 hover:bg-rose-100">
+                      <Eraser size={12} /> 편집 비우기
+                    </button>
+                  </div>
+                  <p className="mt-0.5 text-rose-600">편집한 값은 그대로 남아 있습니다 — 고쳐서 다시 적용하거나 편집 비우기({changed.length}개 키).</p>
+                  {arr(lastResult.ack?.errors).length > 0 && <ul className="list-disc pl-4">{arr(lastResult.ack?.errors).map((x, i) => <li key={i}>{x}</li>)}</ul>}
+                  {!arr(lastResult.ack?.errors).length && lastResult.command?.detail && <p>{lastResult.command.detail}</p>}
                 </div>
               )}
             </>
@@ -457,9 +514,17 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
       )}
       {ask === "rollback" && ov && (
         <SimpleConfirm title="설정 되돌리기" ok="되돌리기" danger
-          text={<>장비 {equipment} 의 설정을 장비에 저장된 <b>직전 버전</b> 값으로 되돌립니다. 장비가 새 버전(v{(ov.deviceVersion ?? 0) + 1})을 만들고
-            웹 이력에 그 버전이 생깁니다. 공정 중이면 H 등급 변경은 장비가 거부합니다.</>}
+          text={<>장비 {equipment} 의 설정을 장비에 저장된 <b>직전 버전</b> 값으로 되돌립니다. 새 버전 번호
+            v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1} 을 웹이 정해 보내고, 장비 결과(값)로 그 버전 행이 생깁니다.
+            공정 중이면 H 등급 변경은 장비가 거부합니다.</>}
           onCancel={() => setAsk(null)} onOk={() => { setAsk(null); void post({ action: "rollback" }); }} />
+      )}
+      {ask === "resync" && ov && (
+        <SimpleConfirm title="장비 저장 값으로 기준 다시 읽기" ok="다시 읽기"
+          text={<>장비 {equipment} 가 저장한 설정 값(묶음 stored — 노트북 덮어쓰기 빼고)을 다시 받아 새 버전
+            v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1}(kind resync)을 만듭니다. <b>장비에는 아무 명령도 보내지 않습니다.</b>{" "}
+            다음 적용은 이 값 위에 만들어집니다(예전 웹이 실행 값으로 기준을 만든 장비용).</>}
+          onCancel={() => setAsk(null)} onOk={() => { setAsk(null); void post({ action: "resync" }); }} />
       )}
     </Card>
   );

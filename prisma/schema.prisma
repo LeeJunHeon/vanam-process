@@ -551,6 +551,29 @@ model Ops2BadMessage {
   @@schema("process")
 }
 
+// 구글챗 알림 보낼 것(W-6) — 웹 서버가 보낸다(장비는 보내지 않음). ingest 가 커밋한 뒤 넣고, 서버 안 타이머가 하나씩 보낸다.
+// msg_id = 원인 envelope id(같은 원인은 한 번만 — 웹이 판단한 장비 끊김·복구는 web-offline-·web-online-).
+// status queued → sent · failed(다시 보내기 30 s·2 분·10 분 뒤에도 실패) · skipped(모드·주소 없음·늦게 받음·반복 — last_error 에 까닭).
+// last_error 에 웹훅 주소는 쓰지 않는다. next_at = 다음 보내기 시각
+model Ops2ChatOutbox {
+  id        Int       @id @default(autoincrement())
+  equipment String
+  kind      String
+  msgId     String    @unique @map("msg_id")
+  payload   Json
+  status    String
+  tries     Int       @default(0)
+  lastError String?   @map("last_error")
+  nextAt    DateTime? @map("next_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  sentAt    DateTime? @map("sent_at") @db.Timestamptz(6)
+
+  @@index([status, nextAt])
+  @@index([equipment, createdAt])
+  @@map("ops2_chat_outbox")
+  @@schema("process")
+}
+
 // 장비 담당자 — equipment 는 기준 장비 ID(-SIM 을 뗀 것, 예 CHK2). employee_id = hr.employees.id(FK 없음)
 model Ops2Operator {
   equipment  String

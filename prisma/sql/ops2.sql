@@ -276,6 +276,32 @@ CREATE INDEX IF NOT EXISTS "ops2_operator_employee_id_idx" ON "process"."ops2_op
 -- CreateIndex (W-4a)
 CREATE UNIQUE INDEX IF NOT EXISTS "ops2_recipe_base_equipment_kind_name_key" ON "process"."ops2_recipe"("base_equipment", "kind", "name");
 
+-- CreateTable (W-6 구글챗 알림 outbox)
+CREATE TABLE IF NOT EXISTS "process"."ops2_chat_outbox" (
+    "id" SERIAL NOT NULL,
+    "equipment" TEXT NOT NULL,
+    "kind" TEXT NOT NULL,
+    "msg_id" TEXT NOT NULL,
+    "payload" JSONB NOT NULL,
+    "status" TEXT NOT NULL,
+    "tries" INTEGER NOT NULL DEFAULT 0,
+    "last_error" TEXT,
+    "next_at" TIMESTAMPTZ(6),
+    "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "sent_at" TIMESTAMPTZ(6),
+
+    CONSTRAINT "ops2_chat_outbox_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex (W-6)
+CREATE UNIQUE INDEX IF NOT EXISTS "ops2_chat_outbox_msg_id_key" ON "process"."ops2_chat_outbox"("msg_id");
+
+-- CreateIndex (W-6)
+CREATE INDEX IF NOT EXISTS "ops2_chat_outbox_status_next_at_idx" ON "process"."ops2_chat_outbox"("status", "next_at");
+
+-- CreateIndex (W-6)
+CREATE INDEX IF NOT EXISTS "ops2_chat_outbox_equipment_created_at_idx" ON "process"."ops2_chat_outbox"("equipment", "created_at");
+
 -- 장비 등록. token_hash 는 비워 둔다(비어 있으면 그 장비의 연결은 모두 401) —
 -- node scripts/ops2-token.mjs <장비ID> 가 보여 주는 UPDATE 로 넣는다.
 INSERT INTO "process"."ops2_device" ("equipment", "label") VALUES

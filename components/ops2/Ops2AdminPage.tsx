@@ -4,8 +4,9 @@
 // 장비 목록(주인 실행·마지막 연락·시계 차·최근 409 …)과 고른 장비의 최근 기록, 주인 비우기(강제 인수).
 // 장비(기준 ID)별 담당자 추가·삭제, 장비별 명령 SSE 연결, 명령 목록(보낸 길·횟수·결과까지 시간·결과 모름).
 // 명령 버튼은 두지 않는다(W-3). 토큰 교체는 W-3 에서 이 화면에 더한다.
+// 구글챗 알림(W-6): 고른 장비의 주소 있음/없음(주소 자체는 안 보임)·보내는 모드·최근 outbox 20·실패 다시 보내기.
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Cpu, RefreshCw, Unlock, UserPlus, X } from "lucide-react";
+import { AlertTriangle, Cpu, MessageSquare, RefreshCw, RotateCcw, Unlock, UserPlus, X } from "lucide-react";
 import { fmtKst } from "@/lib/ops2/time";
 
 type Device = {
@@ -36,9 +37,21 @@ type Cmd = { id: string; origin: string; kind: string; status: string; reasonCod
 type Operator = { equipment: string; employeeId: number; name: string | null; active: boolean; createdBy: string };
 type Employee = { id: number; name: string; email: string | null; processOwner: boolean };
 type Bad = { id: string; instance: string | null; receivedAt: string; reason: string };
+type Outbox = { id: number; kind: string; msgId: string; title: string; channel: string | null; status: string; tries: number;
+                lastError: string | null; nextAt: string | null; createdAt: string; sentAt: string | null };
+type Chat = { process: boolean; alert: boolean; envNames: { process: string; alert: string }; runMode: string | null;
+              sends: boolean; treatAsProd: boolean; outbox: Outbox[] };
 type Overview = {
   devices: Device[]; leaseSec: number;
-  state?: StateBrief | null; events?: Ev[]; runs?: Run[]; commands?: Cmd[]; bad?: Bad[]; summaryCount?: number;
+  state?: StateBrief | null; events?: Ev[]; runs?: Run[]; commands?: Cmd[]; bad?: Bad[]; summaryCount?: number; chat?: Chat;
+};
+
+const CHAT_KIND: Record<string, string> = {
+  run_start: "공정 시작", run_end: "공정 끝", run_fail: "실패 이유", alert: "이상", plc_link: "PLC 끊김·복구", device_link: "장비 연결",
+};
+const CHAT_STATUS: Record<string, [string, string]> = {
+  queued: ["보낼 것", "text-amber-600"], sent: ["보냄", "text-emerald-600"], failed: ["실패", "font-semibold text-rose-600"],
+  skipped: ["안 보냄", "text-gray-400"],
 };
 
 const SKEW_WARN_MS = 3_000;
@@ -147,7 +160,25 @@ export default function Ops2AdminPage() {
     }
   };
 
+  const retryChat = async (equipment: string, id: number) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/ops2/admin/devices/${encodeURIComponent(equipment)}/chat`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "retry", id }),
+      });
+      const j = await res.json().catch(() => ({}));
+      setMsg(res.ok ? `알림 #${id} 을 다시 보냅니다.` : j?.error ?? "실패했습니다.");
+    } catch {
+      setMsg("실패했습니다.");
+    } finally {
+      setBusy(false);
+      load();
+    }
+  };
+
   const st = data?.state;
+  const chat = data?.chat;
 
   return (
     <div className="space-y-3 p-3 sm:p-6">
@@ -305,6 +336,59 @@ export default function Ops2AdminPage() {
               </button>
             </div>
           </Card>
+
+          {chat && (
+            <Card title={`구글챗 알림 — ${sel}`}>
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                <MessageSquare className="h-3.5 w-3.5 text-gray-500" />
+                <span className={`rounded px-1.5 py-0.5 font-semibold ${chat.sends ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
+                  {chat.sends ? `보냄 — 모드 ${chat.runMode ?? "?"}${chat.treatAsProd ? "(개발 시험: prod 로 봄)" : ""}` : `안 보냄 — 모드 ${chat.runMode ?? "?"}(prod 만 보냄)`}
+                </span>
+                {([["공정", chat.process, chat.envNames.process], ["이상·끊김", chat.alert, chat.envNames.alert]] as const).map(([t, has, env]) => (
+                  <span key={t} title={env} className={`rounded px-1.5 py-0.5 font-semibold ${has ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-700"}`}>
+                    {t} 주소 {has ? "있음" : t === "이상·끊김" && chat.process ? "없음 → 공정 주소로" : "없음"}
+                  </span>
+                ))}
+                <span className="text-gray-400">주소는 서버 환경변수({chat.envNames.process}·{chat.envNames.alert}) — 여기에는 보이지 않습니다</span>
+              </div>
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full text-left text-[11px]">
+                  <thead className="text-gray-400">
+                    <tr><th className="py-1 pr-2">#</th><th className="pr-2">넣음</th><th className="pr-2">종류</th><th className="pr-2">상태</th>
+                      <th className="pr-2">횟수</th><th className="pr-2">내용</th><th className="pr-2">까닭·다음</th><th /></tr>
+                  </thead>
+                  <tbody>
+                    {chat.outbox.map((o) => {
+                      const [label, tone] = CHAT_STATUS[o.status] ?? [o.status, ""];
+                      return (
+                        <tr key={o.id} className="border-t border-gray-50 align-top">
+                          <td className="py-1 pr-2 font-mono text-gray-400">{o.id}</td>
+                          <td className="whitespace-nowrap pr-2 font-mono text-gray-400">{fmtKst(o.createdAt)}</td>
+                          <td className="whitespace-nowrap pr-2">{CHAT_KIND[o.kind] ?? o.kind}</td>
+                          <td className={`whitespace-nowrap pr-2 ${tone}`}>{label}{o.sentAt ? ` ${fmtKst(o.sentAt)}` : ""}</td>
+                          <td className="pr-2 tabular-nums">{o.tries}</td>
+                          <td className="min-w-0 max-w-md break-words pr-2 text-gray-600">{o.title}</td>
+                          <td className="pr-2 text-gray-500">
+                            {o.lastError ?? ""}
+                            {o.status === "queued" && o.nextAt && <span className="text-amber-600"> · 다음 {fmtKst(o.nextAt)}</span>}
+                          </td>
+                          <td>
+                            {o.status === "failed" && (
+                              <button onClick={() => retryChat(sel, o.id)} disabled={busy}
+                                className="flex items-center gap-1 whitespace-nowrap rounded-lg border border-gray-200 px-2 py-0.5 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40">
+                                <RotateCcw className="h-3 w-3" /> 다시 보내기
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!chat.outbox.length && <tr><td colSpan={8} className="py-2 text-gray-400">없음</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             <Card title="최근 사건 30">
