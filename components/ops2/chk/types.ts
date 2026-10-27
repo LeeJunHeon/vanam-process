@@ -60,6 +60,13 @@ export type Bundle = {
 };
 
 export type Link = { q?: string | null; age?: number | null };
+/** state.adjust 한 항목 — scope live 지금 블록이 쓰는 중 · future 앞으로 올 블록 · done 쓰던 블록이 지남 · unused 안 씀.
+ *  adjusted.t 는 장비 시계 epoch 초. busy = RF Pulse START 중(ADJUST_BUSY) */
+export type AdjustState = {
+  device: string; item: string; value: number | null; recipe: number | null;
+  adjusted: { by?: string | null; t?: number | null; source?: string | null } | null;
+  scope: "live" | "future" | "done" | "unused"; busy: boolean;
+};
 export type StateData = {
   procState?: string; runId?: string | null;
   step?: { no: number; total: number; type?: string | null; label?: string | null; remainS?: number | null } | null;
@@ -71,6 +78,7 @@ export type StateData = {
   links?: Record<string, Link>;
   configVersion?: number;
   configPending?: { idle?: Record<string, unknown>; restart?: Record<string, unknown> } | null;
+  adjust?: AdjustState[] | null;                 // 묶음 10(5-12)부터 — 공정 중 수정 항목의 지금 값, 공정 밖 null
   snapshot?: Record<string, unknown>;
   left?: Record<string, unknown>;
   stopping?: string | null;

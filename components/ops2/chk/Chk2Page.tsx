@@ -272,7 +272,7 @@ function Chk2Device({ equipment, dirtyRef }: { equipment: string; dirtyRef: Muta
       <Chk2Status bundle={d.bundle} st={st} connected={connected} lastRun={d.runs[0] ?? null} can={can} onAsk={setAsk}
         webRecipes={recipes.list} />
 
-      <Chk2Adjust equipment={equipment} bundle={d.bundle} st={st} feed={d.feed} canKey={allowed} onAsk={setAsk} />
+      <Chk2Adjust bundle={d.bundle} st={st} skewMs={web?.clockSkewMs ?? 0} canKey={allowed} onAsk={setAsk} />
 
       <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
         <Chk2Mimic bundle={d.bundle} snapshot={snap} plcOk={plcOk} canPress={canPlc}

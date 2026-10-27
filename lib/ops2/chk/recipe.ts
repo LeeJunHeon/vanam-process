@@ -17,7 +17,7 @@ import { blockEnvOf, checkBlocks, expandBlocks, pulseEdgeViolation, usesOf, type
 export { pyFixed, pyFloatRepr, pyG, pyNum, pyRound, pyTruthy } from "./py";
 
 /** 이 검사가 맞춘 묶음 버전(골든과 같음) — 묶음 version 이 다르면 화면이 "장비 판단만 믿을 것" 안내 */
-export const GOLDEN_EXPORT_VERSION = 9;
+export const GOLDEN_EXPORT_VERSION = 10;
 /** 챔버K recipe.DELAY_RE.pattern(IGNORECASE) — 골든 시험이 묶음 delayPattern 과 같은지 본다 */
 export const DELAY_PATTERN = String.raw`^\s*delay\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$`;
 const DELAY_RE = new RegExp(DELAY_PATTERN, "i");
