@@ -46,3 +46,6 @@ next-env.d.ts
 
 # 서비스 계정 키 (커밋 금지)
 /secrets
+
+# 노트북 로컬 화면 빌드 결과(npm run hmi:build — 챔버K v2\hmi 로 넣는다)
+/dist-hmi

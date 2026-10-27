@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "ops2:golden": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-golden.mjs",
+    "hmi:build": "node scripts/hmi-build.mjs",
+    "hmi:copy": "node scripts/hmi-copy.mjs",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -29,6 +31,7 @@
     "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "esbuild": "0.28.2",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "prisma": "^7.8.0",
