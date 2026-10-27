@@ -2,7 +2,7 @@
 // CHAT_WEBHOOK_PLC_DISCONNECT_URL — "웹 서버가 보낸다"). 문구·카드 모양·조건은 v1(챔버K 저장소 main.py _chat_*·
 // controller/chat_notifier.py ChatNotifier)과 같게.
 // - 보내는 것: 장비 runMode 가 prod 일 때만(hello). sim·bench 는 outbox 에 skipped "보내지 않음(모드 …)"로만.
-//   개발 노트북 시험용 OPS2_CHAT_TREAT_AS_PROD=<장비ID,…> 는 운영 빌드(NODE_ENV=production)에서는 무시.
+//   개발 노트북 시험용 OPS2_CHAT_TREAT_AS_PROD=<장비ID,…> 는 개발 모드(next dev)에서만 — 운영 빌드에서는 무시.
 // - 주소: 서버 환경변수 OPS2_CHAT_WEBHOOK_<장비ID>(공정 시작·끝·실패 이유), OPS2_CHAT_ALERT_WEBHOOK_<장비ID>(이상·PLC 끊김·
 //   장비 연결 끊김). 장비ID 는 대문자, 영숫자 밖은 _(CHK2-SIM → CHK2_SIM). 알림용이 없으면 v1 처럼 공정용으로
 //   (v1 notify_plc_link: PLC 전용 주소 or 기본 주소). 둘 다 없으면 skipped "주소 없음". 주소는 기록·화면에 쓰지 않는다.
@@ -53,10 +53,13 @@ export function webhookState(equipment: string) {
   return { names: n, process: !!process.env[n.process]?.trim(), alert: !!process.env[n.alert]?.trim() };
 }
 
-/** 개발 노트북 시험용 — 운영 빌드에서는 무시 */
+/** 개발 노트북 시험용 — 개발 모드(next dev)에서만(인증 우회 DEV_AUTH_BYPASS 와 같은 판정: NODE_ENV 는 빌드 때 인라인되어
+ *  운영 빌드에서는 이 분기가 빠진다). 켜져 있으면 서버 로그에 한 번 */
+const TREAT_AS_PROD = process.env.NODE_ENV === "development"
+  ? (process.env.OPS2_CHAT_TREAT_AS_PROD ?? "").split(",").map((s) => s.trim()).filter(Boolean) : [];
+if (TREAT_AS_PROD.length) console.warn(`[ops2/chat] OPS2_CHAT_TREAT_AS_PROD 켜짐(개발 모드 전용) — ${TREAT_AS_PROD.join(", ")} 를 prod 로 봄`);
 export function treatAsProd(equipment: string): boolean {
-  if (process.env.NODE_ENV === "production") return false;
-  return (process.env.OPS2_CHAT_TREAT_AS_PROD ?? "").split(",").map((s) => s.trim()).filter(Boolean).includes(equipment);
+  return TREAT_AS_PROD.includes(equipment);
 }
 export function sendsChat(equipment: string, runMode: string | null): boolean {
   return runMode === "prod" || treatAsProd(equipment);
