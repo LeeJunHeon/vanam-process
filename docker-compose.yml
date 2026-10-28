@@ -25,9 +25,9 @@ services:
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       SMTP_FROM: ${SMTP_FROM}
       OPS_INGEST_TOKEN: ${OPS_INGEST_TOKEN}
-      # 챔버K v2 구글챗 알림(W-6) — 값은 NAS .env 에(비밀값). 없으면 보내지 않음
-      OPS2_CHAT_WEBHOOK_CHK2: ${OPS2_CHAT_WEBHOOK_CHK2}
-      OPS2_CHAT_ALERT_WEBHOOK_CHK2: ${OPS2_CHAT_ALERT_WEBHOOK_CHK2}
+      # 챔버K v2 구글챗 알림(W-6) — 값은 NAS .env 에(비밀값). 없거나 빈 값이면 보내지 않음(outbox "주소 없음")
+      OPS2_CHAT_WEBHOOK_CHK2: ${OPS2_CHAT_WEBHOOK_CHK2:-}
+      OPS2_CHAT_ALERT_WEBHOOK_CHK2: ${OPS2_CHAT_ALERT_WEBHOOK_CHK2:-}
     volumes:
       - /volume1/docker/process-web/uploads:/app/uploads
       - /volume1/docker/process-web/secrets:/app/secrets:ro

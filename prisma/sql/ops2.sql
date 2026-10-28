@@ -302,11 +302,11 @@ CREATE INDEX IF NOT EXISTS "ops2_chat_outbox_status_next_at_idx" ON "process"."o
 -- CreateIndex (W-6)
 CREATE INDEX IF NOT EXISTS "ops2_chat_outbox_equipment_created_at_idx" ON "process"."ops2_chat_outbox"("equipment", "created_at");
 
--- 장비 등록. token_hash 는 비워 둔다(비어 있으면 그 장비의 연결은 모두 401) —
+-- 장비 등록(운영 장비만 — 시험 장비 CHK2-SIM·TEST-SIM 은 prisma/sql/ops2-local-test.sql, 로컬 DB 전용).
+-- token_hash 는 비워 둔다(비어 있으면 그 장비의 연결은 모두 401) —
 -- node scripts/ops2-token.mjs <장비ID> 가 보여 주는 UPDATE 로 넣는다.
 INSERT INTO "process"."ops2_device" ("equipment", "label") VALUES
-    ('CHK2', '챔버K'),
-    ('CHK2-SIM', '챔버K 시뮬레이터')
+    ('CHK2', '챔버K')
 ON CONFLICT ("equipment") DO NOTHING;
 
 COMMIT;
