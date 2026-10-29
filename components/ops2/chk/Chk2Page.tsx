@@ -44,7 +44,7 @@ const OK_NOTICE_MS = 6_000;
 const SEND_ERROR: Record<string, string> = {
   device_offline: "장비 연결 끊김(마지막 연락 10 s 넘음)",
   forbidden: "권한 없음 — 장비 담당자·관리자만 조작",
-  no_schema: "장비 묶음이 아직 없음",
+  no_schema: "장비 정의를 아직 받지 못함",
   unknown_kind: "웹에서 낼 수 없는 명령",
   bad_args: "인자 오류",
   config_path: "설정 변경은 설정 화면에서",
@@ -236,19 +236,57 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   })();
   const elapsedS = runStartMs !== null ? Math.max(0, (now + d.offsetMs - runStartMs) / 1000) : null;
 
-  // 묶음도 state 도 없는 장비(v2 프로그램이 웹에 붙은 적 없음) — 안내만
-  const neverConnected = !!d.hello && !d.bundle && !d.state;
+  // v2 프로그램이 웹에 붙은 적 없는 장비 — 안내만. hello 만으로 판정(묶음·state 를 받아 오는 사이 안내가 잠깐 보이지 않게)
+  const h = d.hello;
+  const neverConnected = !!h && !h.instance && !h.webSchemaHash && !h.web?.hasSchema && !h.web?.lastSeenAt && !d.bundle && !d.state;
 
-  // 상태 카드가 화면 밖으로 나가면 위에 얇은 줄(같은 확인창·같은 동작)
-  const statusRef = useRef<HTMLDivElement | null>(null);
-  const [statusOut, setStatusOut] = useState(false);
+  // 상태 카드가 스크롤 영역 위로 다 지나가면 그때만 위에 얇은 줄(같은 확인창·같은 동작).
+  // 얇은 줄은 겹쳐 뜨는 fixed 요소 — 카드 자리를 차지하지 않아 나타나고 사라질 때 레이아웃이 밀리지 않는다.
+  // 카드가 붙을 때마다(callback ref) 스크롤 영역을 다시 찾고, 스크롤·크기 바뀜마다 위치로 판정.
+  const [statusEl, setStatusEl] = useState<HTMLDivElement | null>(null);
+  const [bar, setBar] = useState<{ top: number; left: number; width: number } | null>(null);
   useEffect(() => {
-    const el = statusRef.current;
-    if (!el || typeof IntersectionObserver === "undefined") return;
-    const o = new IntersectionObserver(([e]) => setStatusOut(!e.isIntersecting && e.boundingClientRect.top < 0), { threshold: 0 });
-    o.observe(el);
-    return () => o.disconnect();
-  }, [neverConnected]);
+    if (!statusEl) return;
+    let scroller: HTMLElement | null = statusEl.parentElement;
+    while (scroller && !/(auto|scroll)/.test(getComputedStyle(scroller).overflowY)) scroller = scroller.parentElement;
+    let raf = 0;
+    const check = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const top = Math.max(scroller ? scroller.getBoundingClientRect().top : 0, 0);
+        const r = statusEl.getBoundingClientRect();
+        const next = r.bottom <= top + 1 ? { top: top + 8, left: Math.round(r.left), width: Math.round(r.width) } : null;
+        setBar((b) => (!b && !next) || (b && next && b.top === next.top && b.left === next.left && b.width === next.width) ? b : next);
+      });
+    };
+    check();
+    window.addEventListener("scroll", check, true);
+    window.addEventListener("resize", check);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("scroll", check, true);
+      window.removeEventListener("resize", check);
+    };
+  }, [statusEl]);
+
+  // hello 를 받기 전 — 연결된 적 없는 장비도 전체 화면이 잠깐 보였다 바뀌지 않게 자리표시만(못 받으면 오류 안내)
+  if (!d.hello) {
+    return (
+      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail }}>
+        {d.authLost ? (
+          <p className="flex items-center gap-2 rounded-2xl border border-rose-300 bg-rose-50 p-3 text-xs font-bold text-rose-700">
+            <LogIn size={14} /> 로그인이 끊겼습니다 — 새로고침하세요. 조작이 잠겼습니다.
+          </p>
+        ) : d.error ? (
+          <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{d.error}</p>
+        ) : (
+          <section className="animate-pulse rounded-2xl border border-gray-100 bg-gray-50 p-6 text-center text-sm text-gray-400">
+            장비 정보를 읽는 중…
+          </section>
+        )}
+      </Chk2ModeContext.Provider>
+    );
+  }
 
   const up = st?.uplink;
   const chipAge = local && !d.streamUp && age !== null ? Math.max(age, LOST_MS + 1) : age;   // 로컬은 stream 이 끊기면 바로 끊김
@@ -362,12 +400,12 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
         </section>
       ) : (
         <>
-          {statusOut && (
-            <div className="sticky top-0 z-30 h-0">
+          {bar && statusEl && (
+            <div className="fixed z-30" style={{ top: bar.top, left: bar.left, width: bar.width }}>
               <StatusBar bundle={d.bundle} st={st} connected={connected} can={can} onAsk={setAsk} />
             </div>
           )}
-          <div ref={statusRef}>
+          <div ref={setStatusEl}>
             <Chk2Status bundle={d.bundle} st={st} connected={connected} lastRun={d.runs[0] ?? null} can={can} onAsk={setAsk}
               webRecipes={local ? undefined : recipes.list} elapsedS={elapsedS} startedMs={runStartMs} />
           </div>

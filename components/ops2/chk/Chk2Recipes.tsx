@@ -169,7 +169,7 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
     setBlockUid(at >= 0 ? next.rows[at]?.uid ?? null : null);       // 블록 편집기는 열린 채로
     setDraft(next);
     notify({ tone: c?.errors ? "warn" : "ok", title: `레시피 '${name}' — 저장함`,
-             text: c ? `서버 검사: 오류 ${c.errors} · 경고 ${c.warnings}${c.first ? ` — ${c.first}` : ""}` : "서버 검사 없음(묶음에 열 정의 없음)" });
+             text: c ? `서버 검사: 오류 ${c.errors} · 경고 ${c.warnings}${c.first ? ` — ${c.first}` : ""}` : "서버 검사 없음(장비 정의에 레시피 열이 없음)" });
   };
 
   const remove = async () => {
@@ -189,12 +189,12 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
   const loadedWeb = byName("process", loaded?.name);
 
   const loadWhy = !draft || draft.kind !== "process" ? null
-    : !env ? "묶음에 레시피 열 정의가 없음"
+    : !env ? "장비 정의를 아직 받지 못함"
     : !draft.id || dirty ? "저장한 뒤 적재"
     : errCount ? `검사 오류 ${errCount}개 — 고친 뒤 적재`
     : !can("RECIPE_LOAD") ? "권한·연결 확인(또는 결과 기다리는 중)" : null;
   const runWhy = !draft || draft.kind !== "heater" ? null
-    : !env ? "묶음에 레시피 열 정의가 없음"
+    : !env ? "장비 정의를 아직 받지 못함"
     : !draft.id || dirty ? "저장한 뒤 실행"
     : errCount ? `검사 오류 ${errCount}개 — 고친 뒤 실행`
     : !can("HEATER_RECIPE_RUN") ? "권한·연결 확인(또는 결과 기다리는 중)" : null;
@@ -300,12 +300,12 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
           <p className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] font-semibold text-amber-800">
             <AlertTriangle size={13} />
             {(bundle?.version ?? 0) > GOLDEN_EXPORT_VERSION
-              ? `웹 검사 기준이 장비보다 옛것 — 장비 판단만 믿을 것(웹 검사 v${GOLDEN_EXPORT_VERSION}, 장비 묶음 v${bundle?.version})`
-              : `장비 묶음이 웹 검사 기준보다 옛것 — 장비 판단만 믿을 것(장비 묶음 v${bundle?.version}, 웹 검사 v${GOLDEN_EXPORT_VERSION})`}
+              ? `웹 검사 기준이 장비보다 옛것 — 장비 판단만 믿을 것(웹 검사 v${GOLDEN_EXPORT_VERSION}, 장비 정의 v${bundle?.version})`
+              : `장비 정의가 웹 검사 기준보다 옛것 — 장비 판단만 믿을 것(장비 정의 v${bundle?.version}, 웹 검사 v${GOLDEN_EXPORT_VERSION})`}
           </p>
         )}
         {!env && bundle && (
-          <p className="rounded-lg bg-gray-50 px-2 py-1.5 text-[11px] text-gray-500">묶음에 레시피 열 정의가 없어 웹 검사를 하지 않습니다 — 장비 판단만.</p>
+          <p className="rounded-lg bg-gray-50 px-2 py-1.5 text-[11px] text-gray-500">장비 정의에 레시피 열이 없어 웹 검사를 하지 않습니다 — 장비 판단만.</p>
         )}
         {recipes.error && <p className="rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] text-rose-700">{recipes.error}</p>}
 

@@ -238,7 +238,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
     }
     if (body.action === "resync") {
       notify(b.ack ? { tone: "ok", title: `설정 기준 v${b.ack.version} — 장비 저장 값으로 다시 읽음`, text: "다음 적용은 이 값 위에 만듭니다(장비에는 보내지 않음)" }
-        : { tone: "warn", title: "설정 기준 다시 읽기 — 장비 묶음을 기다리는 중", text: "장비가 다음 연락에 묶음을 보내면 행이 생깁니다(1 분 안)" });
+        : { tone: "warn", title: "설정 기준 다시 읽기 — 장비 정의를 기다리는 중", text: "장비가 다음에 연락하면 만들어집니다(1분 안)" });
       await load();
       return;
     }
@@ -321,7 +321,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
           </div>
           {!ov.current && (
             <p className="rounded-lg bg-amber-50 px-2 py-1 text-[11px] text-amber-800">
-              장비 버전 v{ov.deviceVersion ?? "-"} 의 값이 웹에 없습니다(노트북에서 생긴 버전 등) — 묶음 current 를 보여 줍니다. 적용하려면 먼저 되돌리기나 장비 확인.
+              장비 버전 v{ov.deviceVersion ?? "-"} 의 값이 웹에 없습니다(노트북에서 생긴 버전 등) — 장비가 지금 쓰는 값을 보여 줍니다. 적용하려면 먼저 되돌리기나 장비 확인.
             </p>
           )}
 

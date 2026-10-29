@@ -38,7 +38,7 @@ function leftText(left: Record<string, unknown>): string {
 function StopButtons({ can, onAsk, small }: { can: (kind: string) => boolean; onAsk: (a: Ask) => void; small?: boolean }) {
   const pad = small ? "px-2.5 py-1" : "px-3 py-2";
   return (
-    <div className="flex shrink-0 flex-wrap gap-2">
+    <div className={`flex shrink-0 gap-2 whitespace-nowrap ${small ? "flex-nowrap" : "flex-wrap"}`}>
       <button disabled={!can("BUZZ_STOP")}
         onClick={() => onAsk({ kind: "BUZZ_STOP", label: "부저 정지", stop: true, note: "울리는 부저를 끕니다." })}
         className={`flex items-center gap-1 rounded-xl border border-gray-200 bg-white ${pad} text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40`}>
@@ -74,7 +74,7 @@ export function StatusBar({ bundle, st, connected, can, onAsk }: {
   const remain = remainOf(st);
   const step = st?.step;
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-gray-200 bg-white/95 px-3 py-1.5 shadow-md backdrop-blur">
+    <div className="flex items-center gap-3 whitespace-nowrap rounded-2xl border border-gray-200 bg-white/95 px-3 py-1.5 shadow-md backdrop-blur">
       <span className={`text-[11px] font-semibold ${kind === "active" ? "text-blue-600" : kind === "stopping" ? "text-amber-600" : "text-gray-500"}`}>
         {kind === "active" ? "가동 중" : kind === "stopping" ? "정지 중" : "대기"}
       </span>
