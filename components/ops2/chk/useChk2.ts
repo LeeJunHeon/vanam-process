@@ -49,6 +49,7 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web") {
   const [commands, setCommands] = useState<CmdRow[]>([]);
   const [runs, setRuns] = useState<RunRow[]>([]);
   const [streamUp, setStreamUp] = useState(false);
+  const [streamEver, setStreamEver] = useState(false);  // 한 번이라도 붙었나("연결 중…" / "다시 연결 중…")
   const [offsetMs, setOffsetMs] = useState(0);         // 웹 서버 시계 − 이 브라우저 시계
   const [error, setError] = useState<string | null>(null);
   const [authLost, setAuthLost] = useState(false);     // hello 401 — 새로고침해야 한다
@@ -148,6 +149,7 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web") {
       s.onopen = () => {
         attempt = 0;
         setStreamUp(true);
+        setStreamEver(true);
         void loadHello();
       };
       s.onerror = () => {
@@ -227,5 +229,5 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web") {
     void loadSchema();
   }, [cfgVer, bundle, loadSchema]);
 
-  return { hello, bundle, state, feed, commands, runs, streamUp, offsetMs, error, authLost, send, loadSchema };
+  return { hello, bundle, state, feed, commands, runs, streamUp, streamEver, offsetMs, error, authLost, send, loadSchema };
 }

@@ -1,51 +1,28 @@
 "use client";
 
-// 챔버K v2 아래 줄 — 사건(stream: 수준별 색·사유 라벨), 명령 기록(commands), 최근 공정(runs).
+// 챔버K v2 아래 줄 — 로그(stream: 수준별 색), 조작 기록(commands), 런 이력(runs). v1 CHK 화면과 같은 이름(W-9).
+// 로그 기본 보기 = 묶음 eventKinds 의 main + 경고·오류 전부 + 공정 시작·끝·명령 결과·설정 결과, '상세'를 켜면 전부와 원시 코드·문구.
+// 한 줄 = 시각 · 종류 이름 · 한글 내용(text.logLine — 상태 바뀜·블록·공정 중 수정·명령 결과는 묶음 이름으로).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "./kit";
 import { fmtKst } from "@/lib/ops2/time";
-import {
-  CMD_STATUS, RUN_RESULT, adjustText, commandLabel, reasonLabel, type Bundle, type CmdRow, type RunRow,
-} from "./types";
+import { useChk2Mode } from "./mode";
+import { logLine, runTitle } from "./text";
+import { CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, type Bundle, type CmdRow, type RunRow } from "./types";
 import type { FeedItem } from "./useChk2";
 
-const LEVEL_TONE: Record<string, string> = { error: "text-rose-600", warn: "text-amber-600", info: "text-gray-600" };
-const s = (v: unknown) => (typeof v === "string" ? v : v == null ? "" : String(v));
-
-function line(b: Bundle | null, e: FeedItem): { level: string; code: string; text: string } {
-  const d = e.data;
-  if (e.type === "event") {
-    const code = s(d.code);
-    const adj = adjustText(b, d.code, d.context);
-    if (adj) return { level: s(d.level) || "info", code, text: adj };
-    const label = reasonLabel(b, code);
-    const msg = s(d.message);
-    return { level: s(d.level) || "info", code, text: [d.ruleId && `[${s(d.ruleId)}]`, label !== code && label, msg].filter(Boolean).join(" ") };
-  }
-  if (e.type === "run_start") {
-    return { level: "info", code: "RUN_START", text: `공정 시작 ${s(d.name) || s(d.recipeName) || ""} (행 ${s(d.stepNo)}${d.by ? `, ${s(d.by)}` : ""})` };
-  }
-  if (e.type === "run_end") {
-    const r = s(d.result);
-    return { level: r === "done" ? "info" : "warn", code: "RUN_END",
-             text: `공정 끝 — ${RUN_RESULT[r] ?? r}${d.reasonCode ? ` · ${reasonLabel(b, s(d.reasonCode))}` : ""}` };
-  }
-  if (e.type === "cmd_result") {
-    const ok = d.status === "accepted";
-    return { level: ok ? "info" : "warn", code: s(d.reasonCode) || (ok ? "ACCEPTED" : "REJECTED"),
-             text: `명령 ${commandLabel(b, s(d.kind))} ${CMD_STATUS[s(d.status)] ?? s(d.status)}${
-               d.reasonCode ? ` — ${reasonLabel(b, s(d.reasonCode))}` : ""} (${s(d.source)}${d.by ? `, ${s(d.by)}` : ""})` };
-  }
-  return { level: d.status === "rejected" ? "warn" : "info", code: "CONFIG_ACK",
-           text: `설정 버전 ${s(d.version)} ${s(d.status)}${d.reasonCode ? ` — ${reasonLabel(b, s(d.reasonCode))}` : ""}` };
-}
+const LEVEL_TONE: Record<string, string> = {
+  error: "text-rose-600", critical: "text-rose-700", warn: "text-amber-600", info: "text-gray-600",
+};
 
 export function EventFeed({ bundle, feed }: { bundle: Bundle | null; feed: FeedItem[] }) {
   const [onlyIssue, setOnlyIssue] = useState(false);
+  const { detail } = useChk2Mode();
   const box = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
-  const rows = useMemo(() => feed.map((e) => ({ e, ...line(bundle, e) })), [bundle, feed]);   // state 마다 다시 그리지 않게
-  const shown = onlyIssue ? rows.filter((r) => r.level !== "info") : rows;
+  const rows = useMemo(() => feed.map((e) => ({ e, ...logLine(bundle, e) })), [bundle, feed]);   // state 마다 다시 그리지 않게
+  const seen = detail ? rows : rows.filter((r) => r.main);
+  const shown = onlyIssue ? seen.filter((r) => r.level !== "info") : seen;
   const issues = rows.filter((r) => r.level !== "info").length;
   const newest = feed[feed.length - 1]?.id;
 
@@ -55,23 +32,26 @@ export function EventFeed({ bundle, feed }: { bundle: Bundle | null; feed: FeedI
   }, [newest, onlyIssue]);
 
   return (
-    <Card title="사건" right={
+    <Card title="로그" right={
       <button onClick={() => setOnlyIssue((v) => !v)}
         className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${onlyIssue ? "bg-rose-50 text-rose-600" : "text-gray-400 hover:bg-gray-50"}`}>
         경고·오류{issues > 0 && ` ${issues}`}
       </button>
     }>
       {!shown.length ? (
-        <p className="py-6 text-center text-xs text-gray-300">{onlyIssue ? "경고·오류가 없습니다" : "받은 사건이 없습니다"}</p>
+        <p className="py-6 text-center text-xs text-gray-300">{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다 — 장비가 연결되면 쌓입니다"}</p>
       ) : (
         <div ref={box}
           onScroll={() => { const el = box.current; if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
           className="h-64 space-y-1 overflow-y-auto rounded-lg bg-gray-50/60 p-2 font-mono [overflow-anchor:none]">
           {shown.map((r) => (
-            <p key={r.e.id} className="flex gap-2 text-[11px] leading-snug">
+            <p key={r.e.id} className="flex gap-2 text-[11px] leading-snug" title={r.raw}>
               <span className="shrink-0 text-gray-300">{fmtKst(r.e.ts)}</span>
-              <span className={`shrink-0 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>{r.code}</span>
-              <span className={LEVEL_TONE[r.level] ?? LEVEL_TONE.info}>{r.text}</span>
+              <span className={`shrink-0 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>{r.kind}</span>
+              <span className={LEVEL_TONE[r.level] ?? LEVEL_TONE.info}>
+                {r.text}
+                {detail && <span className="ml-1.5 text-gray-400">{r.raw}</span>}
+              </span>
             </p>
           ))}
         </div>
@@ -94,10 +74,11 @@ function argText(a: Record<string, unknown> | null): string {
 }
 
 export function CommandLog({ bundle, commands }: { bundle: Bundle | null; commands: CmdRow[] }) {
+  const { detail } = useChk2Mode();
   return (
-    <Card title="명령 기록">
+    <Card title="조작 기록">
       {!commands.length ? (
-        <p className="py-5 text-center text-xs text-gray-300">명령 기록이 없습니다</p>
+        <p className="py-5 text-center text-xs text-gray-300">조작 기록이 없습니다</p>
       ) : (
         <div className="space-y-1">
           {commands.map((c) => (
@@ -107,7 +88,8 @@ export function CommandLog({ bundle, commands }: { bundle: Bundle | null; comman
                 <span className="font-medium text-gray-800">{c.label ?? commandLabel(bundle, c.kind)}</span>
                 {argText(c.args) && <span className="font-bold text-gray-700">{argText(c.args)}</span>}
                 <span className="text-gray-400">{c.requestedBy}</span>
-                <span className="text-gray-300">{c.origin === "web" ? (c.sentVia ? `${c.sentVia} × ${c.sendCount}` : "") : c.origin}</span>
+                {detail && <span className="text-gray-300">{c.origin === "web" ? (c.sentVia ? `${c.sentVia} × ${c.sendCount}` : "") : c.origin}</span>}
+                {!detail && c.origin !== "web" && <span className="text-gray-300">노트북</span>}
                 <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_TONE[c.status] ?? "bg-gray-100 text-gray-500"}`}>
                   {CMD_STATUS[c.status] ?? c.status}
                 </span>
@@ -115,7 +97,7 @@ export function CommandLog({ bundle, commands }: { bundle: Bundle | null; comman
               {c.reasonCode && (
                 <p className={`truncate pl-1 text-[10px] ${c.status === "rejected" ? "text-rose-500" : "text-amber-600"}`}
                   title={c.detail ?? undefined}>
-                  {reasonLabel(bundle, c.reasonCode)} ({c.reasonCode})
+                  {reasonLabel(bundle, c.reasonCode)}{detail && ` (${c.reasonCode})`}
                 </p>
               )}
             </div>
@@ -133,8 +115,9 @@ function dur(a: string | null, b: string | null): string {
 }
 
 export function RunList({ bundle, runs }: { bundle: Bundle | null; runs: RunRow[] }) {
+  const { detail } = useChk2Mode();
   return (
-    <Card title="최근 공정">
+    <Card title="런 이력">
       {!runs.length ? (
         <p className="py-5 text-center text-xs text-gray-300">기록된 공정이 없습니다</p>
       ) : (
@@ -152,8 +135,9 @@ export function RunList({ bundle, runs }: { bundle: Bundle | null; runs: RunRow[
               <tr key={r.runId} className="border-t border-gray-50 align-top text-gray-600">
                 <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{fmtKst(r.startedAt)}</td>
                 <td className="py-2 pr-3">
-                  <span className="block max-w-[220px] truncate" title={r.runId}>{r.name ?? r.recipeName ?? "-"}</span>
+                  <span className="block max-w-[260px] truncate" title={`${r.name ?? ""} · ${r.runId}`}>{runTitle(r)}</span>
                   {r.startedBy && <span className="text-[10px] text-gray-400">{r.startedBy}</span>}
+                  {detail && <span className="block font-mono text-[10px] text-gray-300">{r.name} · {r.runId}</span>}
                 </td>
                 <td className="py-2 pr-3">
                   <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${

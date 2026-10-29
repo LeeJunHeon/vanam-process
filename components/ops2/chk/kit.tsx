@@ -3,7 +3,8 @@
 // 챔버K v2 장비 화면 공통 조각 — v1 OpsKit(OpsCard·확인창) 모양을 v2 쪽에 새로(v1 은 전환 뒤 지운다).
 import { useEffect, useRef, type ReactNode } from "react";
 import { X } from "lucide-react";
-import { Q_TONE, fmtValue, type FieldDef, type Link } from "./types";
+import { Q_LABEL, Q_TONE, fmtValue, type FieldDef, type Link } from "./types";
+import { useChk2Mode } from "./mode";
 
 export function Card({
   title, right, children, className = "",
@@ -21,14 +22,16 @@ export function Card({
   );
 }
 
-/** 장비 블록 품질 배지(state.links — q·age 초) */
+/** 장비 블록 품질 배지(state.links — q·age 초). 평소 한글(정상·늦음·오래됨·끊김·꺼짐), 원래 글·나이는 '상세'에서 */
 export function QBadge({ link }: { link?: Link }) {
+  const { detail } = useChk2Mode();
   const q = link?.q ?? "—";
   const age = typeof link?.age === "number" ? link.age : null;
   return (
     <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${Q_TONE[q] ?? "bg-gray-100 text-gray-400"}`}
-      title={age !== null ? `마지막 값 ${age.toFixed(1)} s 전` : undefined}>
-      {q}{age !== null && q !== "ok" && q !== "off" ? ` ${age.toFixed(0)}s` : ""}
+      title={`${q}${age !== null ? ` · 마지막 값 ${age.toFixed(1)} s 전` : ""}`}>
+      {Q_LABEL[q] ?? q}
+      {detail && <span className="ml-1 font-mono font-normal opacity-70">{q}{age !== null ? ` ${age.toFixed(1)}s` : ""}</span>}
     </span>
   );
 }
@@ -39,19 +42,21 @@ export function Dot({ on, alert, dim }: { on?: boolean | null; alert?: boolean; 
   return <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full border ${c}`} />;
 }
 
-/** 묶음 snapshot 정의 그대로 값 하나 — 숫자는 fmt·단위, bool 은 점 */
+/** 묶음 snapshot 정의 그대로 값 하나 — 숫자는 fmt·단위, bool 은 점, str 은 enumLabels(묶음 v11). desc 는 마우스를 올리면 */
 export function FieldValue({ f, v, dim }: { f: FieldDef; v: unknown; dim?: boolean }) {
+  const { detail } = useChk2Mode();
+  const tip = [f.desc, detail ? f.column : ""].filter(Boolean).join(" · ") || undefined;
   if (f.type === "bool") {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-gray-600">
+      <span className="flex items-center gap-1.5 text-xs text-gray-600" title={tip}>
         <Dot on={v === true} dim={dim || v === null || v === undefined} />
         <span className={v === true && !dim ? "font-semibold text-gray-800" : ""}>{f.label}</span>
       </span>
     );
   }
-  const s = fmtValue(v, f.fmt);
+  const s = typeof v === "string" && f.enumLabels?.[v] ? f.enumLabels[v] : fmtValue(v, f.fmt);
   return (
-    <div className="flex items-baseline justify-between gap-2 py-0.5 text-xs" title={f.column}>
+    <div className="flex items-baseline justify-between gap-2 py-0.5 text-xs" title={tip}>
       <span className="shrink-0 truncate text-gray-400">{f.label}</span>
       <span className="truncate text-right">
         <span className={`font-semibold tabular-nums ${s && !dim ? "text-gray-900" : "text-gray-300"}`}>{s || "—"}</span>
@@ -171,6 +176,7 @@ export function SimpleConfirm({ title, text, ok, danger, onOk, onCancel }: {
 
 export type Notice = { id: string; tone: "ok" | "bad" | "warn"; title: string; text?: string; at: number };
 
+/** 결과 알림 — 화면 오른쪽 아래 고정 토스트(여러 개 쌓임). 닫기는 부르는 쪽(성공은 6 초 뒤 저절로) */
 export function Notices({ list, onClose }: { list: Notice[]; onClose: (id: string) => void }) {
   if (!list.length) return null;
   const TONE = {
@@ -179,9 +185,10 @@ export function Notices({ list, onClose }: { list: Notice[]; onClose: (id: strin
     warn: "border-amber-200 bg-amber-50 text-amber-700",
   };
   return (
-    <div className="space-y-2">
+    <div className="pointer-events-none fixed bottom-4 right-4 z-[80] flex w-[min(24rem,calc(100vw-2rem))] flex-col-reverse gap-2">
       {list.map((n) => (
-        <div key={n.id} className={`flex items-start gap-2 rounded-2xl border p-3 text-xs ${TONE[n.tone]}`}>
+        <div key={n.id} role="status"
+          className={`pointer-events-auto flex items-start gap-2 rounded-2xl border p-3 text-xs shadow-lg ${TONE[n.tone]}`}>
           <div className="min-w-0 flex-1 leading-relaxed">
             <p className="font-bold">{n.title}</p>
             {n.text && <p className="mt-0.5">{n.text}</p>}

@@ -9,6 +9,8 @@
 // 보내지도 않는다, webLocked 는 읽기만, 노트북 덮어쓰기가 정한 키(hello overriddenKeys·ack overriddenKeys)는
 // "노트북 덮어쓰기 — 지금 실행 값 X" — 적용 값은 저장 값 기준(덮어쓰기 값을 config 에 넣지 않는다).
 // 적용이 거부되면 거부된 키(errors·detail 에 나온 키)를 표시하고 "편집 비우기".
+// W-9: 묶음 고르기 = paramGroups label(v11), 표 첫 칸 = label 굵게·키는 아래 작은 회색, 등급 높음·중간·낮음, 적용 시점은 한글만.
+// desc 는 보이고 note·v1 출처·원래 적용 시점 이름은 '상세'에서만.
 // 웹 검사는 키 하나씩(lib/ops2/configCheck) — 키 사이 규칙(crossRules)은 설명만, 판단은 장비(CONFIG_INVALID errors 그대로).
 // 이력: 버전 목록 → 하나(changes·ack) → 두 버전 비교.
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -17,6 +19,10 @@ import { CONFIG_REASON, checkParamValue } from "@/lib/ops2/configCheck";
 import { fmtKst } from "@/lib/ops2/time";
 import { Card, SimpleConfirm, type Notice } from "./kit";
 import { reasonLabel, type Bundle, type ParamDef, type Perms, type StateData } from "./types";
+import { useChk2Mode } from "./mode";
+
+const SAFETY_TEXT: Record<string, string> = { H: "높음", M: "중간", L: "낮음" };
+const TYPE_TEXT: Record<string, string> = { float: "숫자", int: "정수", str: "글", bool: "켬·끔", enum: "선택" };
 
 type Version = {
   version: number; kind: string; createdBy: string; createdAt: string; note: string | null; cmdId: string | null;
@@ -123,6 +129,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
   equipment: string; bundle: Bundle | null; st: StateData | null; perms: Perms | null; connected: boolean;
   reloadSchema: () => Promise<void>; notify: (n: Omit<Notice, "id" | "at">) => void;
 }) {
+  const { detail } = useChk2Mode();
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"edit" | "history">("edit");
   const [ov, setOv] = useState<Overview | null>(null);
@@ -278,10 +285,10 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
       ) : err ? <p className="text-xs text-rose-600">{err}</p> : !ov ? <p className="text-xs text-gray-400">읽는 중…</p> : (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-600">
-            <span>장비 버전 <b className="text-gray-900">v{ov.deviceVersion ?? "-"}</b>{ov.currentRow && ` (${ov.currentRow.kind})`}</span>
+            <span>장비 버전 <b className="text-gray-900">v{ov.deviceVersion ?? "-"}</b>{detail && ov.currentRow && ` (${ov.currentRow.kind})`}</span>
             {ov.base && ov.base.version !== ov.deviceVersion && (
               <Badge tone="bg-blue-50 text-blue-700" title="장비에 보내지 않은 기준 — 다음 적용이 이 값 위에 만들어진다">
-                기준 v{ov.base.version}({ov.base.kind} — 장비 저장 값)
+                기준 v{ov.base.version}(장비 저장 값{detail ? ` · ${ov.base.kind}` : ""})
               </Badge>
             )}
             <span>웹 최대 v{ov.webMaxVersion ?? "-"}</span>
@@ -291,14 +298,15 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
             )}
             {!ov.canApply && <Badge tone="bg-gray-100 text-gray-500">보기만 — 적용은 관리자</Badge>}
             {Object.keys(ov.overridden ?? {}).length > 0 && (
-              <Badge tone="bg-violet-50 text-violet-700" title="장비 hello overriddenKeys — 그 키의 실행 값은 노트북 local_override.json">
-                노트북 덮어쓰기 {Object.keys(ov.overridden).length}키: {Object.keys(ov.overridden).join(", ")}
+              <Badge tone="bg-violet-50 text-violet-700" title={Object.keys(ov.overridden).join(", ")}>
+                노트북 설정 파일이 정한 값 {Object.keys(ov.overridden).length}개
+                {detail && <span className="ml-1 font-mono font-normal">{Object.keys(ov.overridden).join(", ")}</span>}
               </Badge>
             )}
             <span className="ml-auto flex gap-1.5">
               {ov.canApply && (
                 <button disabled={!connected || busy || ov.resyncPending} onClick={() => setAsk("resync")}
-                  title="장비에 명령을 보내지 않고, 장비가 저장한 값(묶음 stored)으로 다음 적용의 기준을 다시 만든다"
+                  title="장비에 명령을 보내지 않고, 장비에 저장된 값으로 다음 적용의 기준을 다시 만든다"
                   className="flex items-center gap-1 rounded-xl border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40">
                   <DownloadCloud size={13} /> {ov.resyncPending ? "기준 다시 읽는 중…" : "장비 저장 값으로 기준 다시 읽기"}
                 </button>
@@ -322,11 +330,15 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
               <div className="flex flex-wrap items-center gap-2 text-[11px]">
                 <select value={group} onChange={(e) => { setGroup(e.target.value); setQ(""); setOnlyChanged(false); }}
                   className="rounded-md border border-gray-200 px-1 py-0.5">
-                  {groups.map((g) => <option key={g} value={g}>{g} ({params.filter((p) => (p.group ?? "기타") === g).length})</option>)}
+                  {groups.map((g) => (
+                    <option key={g} value={g}>
+                      {bundle?.paramGroups?.find((x) => x.key === g)?.label ?? g} ({params.filter((p) => (p.group ?? "기타") === g).length})
+                    </option>
+                  ))}
                 </select>
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="키·라벨 찾기" className="w-40 rounded-md border border-gray-200 px-1.5 py-0.5" />
                 <label className="flex items-center gap-1"><input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} /> 바꾼 것만({changed.length})</label>
-                {busyNow && <Badge tone="bg-amber-50 text-amber-700">공정·히터 운전 중 — H 등급은 장비가 거부, idle 키는 끝난 뒤 적용</Badge>}
+                {busyNow && <Badge tone="bg-amber-50 text-amber-700">공정·히터 운전 중 — 등급 높음 값은 장비가 거부, 멈춰 있을 때 적용하는 값은 끝난 뒤 적용</Badge>}
                 <span className="ml-auto flex items-center gap-1.5">
                   {changed.length > 0 && <button onClick={() => setEdits({})} className="px-1 text-gray-400 underline">되돌림</button>}
                   {ov.canApply && (
@@ -352,8 +364,8 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                       return (
                         <tr key={p.key} className={`border-t border-gray-100 align-top ${rejected.has(p.key) ? "bg-rose-50/60" : changed.includes(p.key) ? "bg-blue-50/40" : ""}`}>
                           <td className="px-2 py-1.5">
-                            <p className="font-mono text-[10.5px] font-semibold text-gray-800">{p.key}</p>
-                            <p className="text-gray-500">{p.label}</p>
+                            <p className="text-xs font-bold text-gray-900">{p.label || p.key}</p>
+                            <p className="font-mono text-[10px] text-gray-400">{p.key}</p>
                             <span className="flex flex-wrap gap-0.5">
                               {p.webLocked && <Badge tone="bg-gray-200 text-gray-600">노트북 설정 파일로만</Badge>}
                               {overridden.has(p.key) && (
@@ -374,20 +386,20 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                             {e && <p className="mt-0.5 text-rose-600">{e}</p>}
                           </td>
                           <td className="px-2 py-1.5 text-gray-500">
-                            {p.type}{range && ` · ${range}`}{p.unit && ` ${p.unit}`}
+                            {detail ? p.type : TYPE_TEXT[p.type ?? ""] ?? p.type}{range && ` · ${range}`}{p.unit && ` ${p.unit}`}
                             {p.enum && <p className="text-[10px]">{p.enum.map(String).join(" · ")}</p>}
                             {p.pattern && <p className="font-mono text-[10px]">/{p.pattern}/</p>}
                           </td>
                           <td className="px-2 py-1.5 tabular-nums text-gray-400">{show(p.default)}</td>
                           <td className="px-2 py-1.5">
                             <Badge tone={p.safety === "H" ? "bg-rose-600 text-white" : p.safety === "M" ? "bg-amber-50 text-amber-700" : "bg-gray-100 text-gray-500"}
-                              title={p.safety === "H" ? "H — 공정 중 변경 금지·관리자 전용" : undefined}>{p.safety}</Badge>{" "}
-                            <span className="text-gray-500" title={APPLY_TEXT[p.apply ?? ""]}>{p.apply}</span>
-                            <p className="text-[10px] text-gray-400">{APPLY_TEXT[p.apply ?? ""]}</p>
+                              title={p.safety === "H" ? "공정 중 변경 금지·관리자 전용" : undefined}>{SAFETY_TEXT[p.safety ?? ""] ?? p.safety}</Badge>
+                            <p className="mt-0.5 text-[10px] text-gray-500">{APPLY_TEXT[p.apply ?? ""] ?? p.apply}</p>
+                            {detail && <p className="font-mono text-[10px] text-gray-300">{p.safety} · {p.apply}</p>}
                           </td>
                           <td className="max-w-xs px-2 py-1.5 text-gray-500">
-                            {p.desc}{p.note && <p className="text-[10px] text-gray-400">{p.note}</p>}
-                            {p.v1Source && <p className="text-[10px] text-gray-400">v1 {p.v1Key ?? ""} · {p.v1Source}</p>}
+                            {p.desc}{detail && p.note && <p className="text-[10px] text-gray-400">{p.note}</p>}
+                            {detail && p.v1Source && <p className="text-[10px] text-gray-400">v1 {p.v1Key ?? ""} · {p.v1Source}</p>}
                           </td>
                         </tr>
                       );
@@ -490,7 +502,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                   <tr key={k} className="border-t border-gray-100 align-top">
                     <td className="pr-2 font-mono">{k}</td>
                     <td className="pr-2">{show(nowVal(p))} → <b>{show(edits[k])}</b>{p.unit && ` ${p.unit}`}</td>
-                    <td><Badge tone={p.safety === "H" ? "bg-rose-600 text-white" : "bg-gray-100 text-gray-600"}>{p.safety}</Badge> {APPLY_TEXT[p.apply ?? ""]}</td>
+                    <td><Badge tone={p.safety === "H" ? "bg-rose-600 text-white" : "bg-gray-100 text-gray-600"}>{SAFETY_TEXT[p.safety ?? ""] ?? p.safety}</Badge> {APPLY_TEXT[p.apply ?? ""]}</td>
                   </tr>
                 );
               })}</tbody>
@@ -515,15 +527,14 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
       {ask === "rollback" && ov && (
         <SimpleConfirm title="설정 되돌리기" ok="되돌리기" danger
           text={<>장비 {equipment} 의 설정을 장비에 저장된 <b>직전 버전</b> 값으로 되돌립니다. 새 버전 번호
-            v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1} 을 웹이 정해 보내고, 장비 결과(값)로 그 버전 행이 생깁니다.
-            공정 중이면 H 등급 변경은 장비가 거부합니다.</>}
+            v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1} 로 기록됩니다. 공정 중이면 등급 높음 값의 변경은 장비가 거부합니다.</>}
           onCancel={() => setAsk(null)} onOk={() => { setAsk(null); void post({ action: "rollback" }); }} />
       )}
       {ask === "resync" && ov && (
         <SimpleConfirm title="장비 저장 값으로 기준 다시 읽기" ok="다시 읽기"
-          text={<>장비 {equipment} 가 저장한 설정 값(묶음 stored — 노트북 덮어쓰기 빼고)을 다시 받아 새 버전
-            v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1}(kind resync)을 만듭니다. <b>장비에는 아무 명령도 보내지 않습니다.</b>{" "}
-            다음 적용은 이 값 위에 만들어집니다(예전 웹이 실행 값으로 기준을 만든 장비용).</>}
+          text={<>장비 {equipment} 에 저장된 설정 값(노트북 설정 파일이 정한 값은 빼고)을 다시 받아 새 버전
+            v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1}을 만듭니다. <b>장비에는 아무 명령도 보내지 않습니다.</b>{" "}
+            다음 적용은 이 값 위에 만들어집니다.{detail && <span className="block font-mono text-[11px] text-gray-400">묶음 params[].stored · kind resync</span>}</>}
           onCancel={() => setAsk(null)} onOk={() => { setAsk(null); void post({ action: "resync" }); }} />
       )}
     </Card>

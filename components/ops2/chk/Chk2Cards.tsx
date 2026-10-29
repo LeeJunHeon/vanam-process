@@ -12,28 +12,31 @@ import { useChk2Mode } from "./mode";
 type Common = { def?: BlockDef; snap?: Record<string, unknown>; link?: Link };
 
 /** 블록 하나 — big 은 위 줄에 크게, 나머지 숫자·문자 필드는 목록, bool 은 점 */
-export function BlockCard({ def, snap, link, big = [], foldable, children }: Common & {
-  big?: string[]; foldable?: boolean; children?: ReactNode;
+export function BlockCard({ def, snap, link, big = [], foldable, hide = [], children }: Common & {
+  big?: string[]; foldable?: boolean; hide?: string[]; children?: ReactNode;
 }) {
   const [manual, setManual] = useState<boolean | null>(null);   // 누르기 전에는 품질대로(off 면 접음)
+  const { detail } = useChk2Mode();
   if (!def) return null;
   const off = link?.q === "off";
   const open = manual ?? (!foldable || !off);
   const dimOf = (column: string, own?: boolean) =>
     off || (own && snap?.[`${column}.q`] !== undefined && snap?.[`${column}.q`] !== "ok");
   const bigs = big.map((n) => def.fields.find((f) => f.name === n)).filter((f) => !!f);
-  const rest = def.fields.filter((f) => !big.includes(f.name));
+  // detail 필드(레지스터·내부 값)는 '상세'에서만, hide 는 카드가 따로 보여 주는 것
+  const rest = def.fields.filter((f) => !big.includes(f.name) && (detail || (!f.detail && !hide.includes(f.name))));
   const bools = rest.filter((f) => f.type === "bool");
   const others = rest.filter((f) => f.type !== "bool");
 
+  const title = <>{def.label}{def.desc && <span className="text-[11px] font-normal text-gray-400">{def.desc}</span>}</>;
   return (
     <Card
       title={
         foldable ? (
           <button onClick={() => setManual(!open)} className="flex items-center gap-1">
-            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {def.label}
+            {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {title}
           </button>
-        ) : def.label
+        ) : title
       }
       right={<span className="flex items-center gap-1.5">{foldable && !open && off && <span className="text-[10px] text-gray-400">꺼져 있음 — 접어 둠</span>}<QBadge link={link} /></span>}
     >
@@ -124,13 +127,25 @@ export function HeaterCard({ bundle, def, snap, link, st, can, locked, onAsk }: 
   const m = useChk2Mode();
   const full = !m.webOnly("HEATER_ON");                       // 노트북 화면은 히터 정지만
 
+  // 출력 — v1 결정대로 퍼센트 없이 DAC 값과 추정 전류, 꺼져 있으면 "정지 (DAC n)"
+  const mv = typeof snap?.["heater.mv"] === "number" ? (snap["heater.mv"] as number) : null;
+  const mvMax = typeof snap?.["heater.mv_limit"] === "number" ? (snap["heater.mv_limit"] as number) : null;
+  const amp = typeof snap?.["heater.current_est"] === "number" ? (snap["heater.current_est"] as number) : null;
+  const running = snap?.["heater.run"] === true;
+  const outText = mv === null ? "—" : running
+    ? `DAC ${Math.round(mv)}${mvMax ? `/${Math.round(mvMax)}` : ""}${amp !== null ? ` · ≈${amp.toFixed(1)} A` : ""}`
+    : `정지 (DAC ${Math.round(mv)})`;
+
   return (
-    <BlockCard def={def} snap={snap} link={link} big={["pv", "pv2", "sv"]}>
-      <p className="mt-2 text-[11px] text-gray-500">
-        {owner ? `${HEATER_OWNER[owner] ?? owner} 소유` : "소유 없음"}
-        {st?.heater?.handedOver && " · 공정에서 넘겨받음"}
-        {gas && ` · ${GAS_STATE[gas] ?? gas}`}
-      </p>
+    <BlockCard def={def} snap={snap} link={link} big={["pv", "pv2", "sv"]} hide={["mv", "current_est"]}>
+      <p className="mt-2 text-xs text-gray-600">출력 <b className="tabular-nums text-gray-900">{outText}</b></p>
+      {(owner || (gas && gas !== "IDLE")) && (
+        <p className="mt-1 text-[11px] text-gray-500">
+          {owner && `히터: ${HEATER_OWNER[owner] ?? owner} 소유`}
+          {st?.heater?.handedOver && " · 공정에서 넘겨받음"}
+          {gas && gas !== "IDLE" && `${owner ? " · " : ""}${GAS_STATE[gas] ?? gas}`}
+        </p>
+      )}
       <div className="mt-2 rounded-xl bg-gray-50 p-3">
         {full && <div className="grid grid-cols-[auto_1fr] items-start gap-x-3 gap-y-2 text-[11px]">
           <span className="pt-1.5 text-gray-500">목표 온도</span>
@@ -189,7 +204,9 @@ export function HeaterCard({ bundle, def, snap, link, st, can, locked, onAsk }: 
               가스 해제
             </button>
           )}
-          <span className="ml-auto text-[10px] text-gray-400">{full ? "ON 은 목표 칸이 비면 지금 목표(sv)로 · " : ""}히터 정지는 공정·레시피 소유여도 멈춤</span>
+          <span className="ml-auto text-[10px] text-gray-400">
+            {full ? "목표 칸을 비우고 ON 하면 지금 목표 온도로 켭니다. " : ""}히터 정지는 공정·레시피가 쓰는 중이어도 멈춥니다.
+          </span>
         </div>
         {!full && <WebOnlyNote what="목표 온도·ON·OFF·이상 리셋·가스 해제" />}
       </div>
@@ -214,7 +231,7 @@ export function IgCard({ def, snap, link, can, onAsk }: Common & { can: (kind: s
             {want ? "ON" : "OFF"}
           </button>
         ))}
-        <span className="ml-auto text-[10px] text-gray-400">공정 중에는 공정이 다룬다(유휴에서만)</span>
+        <span className="ml-auto text-[10px] text-gray-400">공정 중에는 공정이 필라멘트를 다룹니다(공정이 없을 때만 조작)</span>
       </div>}
     </BlockCard>
   );

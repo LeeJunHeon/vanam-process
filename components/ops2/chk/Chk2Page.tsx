@@ -13,10 +13,13 @@
 // 노트북 로컬 화면(W-7, hmi/ → 챔버K v2\hmi): 같은 Chk2Device 를 mode local 로 — 권한은 hello.commandKinds(HMI 경로 명령)만,
 // bench(runMode bench·writesAllowed false)면 읽기 전용 띠·잠금. 레시피·설정·공정 기록·명령 기록·장비 고르기는 없다.
 // 연결은 이 로컬 서버 stream — 끊기면 "노트북 프로그램 연결 끊김"(같은 PC 라 시계 차 0). 장비가 본 웹 연결(state.uplink)을 작게.
+// W-9: 한 페이지 순서 — 연결 줄 → 상태(스크롤하면 위에 얇은 줄) → 계통도|히터·이온 게이지 → 장비 값 → 공정 중 수정 → 레시피 →
+// 로그|조작 기록·런 이력 → 공정 기록 → 설정. '상세' 토글(useDetailPref — 원시 코드·키·run id 등), 결과 알림은 오른쪽 아래 토스트.
+// 묶음도 state 도 없는 장비(v2 가 붙은 적 없음)는 안내 카드만.
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { AlertTriangle, Clock, Cloud, CloudOff, Eye, Laptop, Lock, LogIn, Radio, WifiOff } from "lucide-react";
+import { AlertTriangle, Clock, Cloud, CloudOff, Code2, Eye, Laptop, Lock, LogIn, Radio, WifiOff } from "lucide-react";
 import Chk2Mimic from "./Chk2Mimic";
-import Chk2Status from "./Chk2Status";
+import Chk2Status, { StatusBar } from "./Chk2Status";
 import { BlockCard, HeaterCard, IgCard } from "./Chk2Cards";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
 import Chk2Adjust from "./Chk2Adjust";
@@ -27,7 +30,7 @@ import { ConfirmDialog, Notices, SimpleConfirm, type Ask, type Notice } from "./
 import { STALE_SEC_DEFAULT, STOP_KINDS, paramValue, plcFresh } from "./logic";
 import { reasonLabel } from "./types";
 import { useChk2, type Chk2Mode } from "./useChk2";
-import { Chk2ModeContext } from "./mode";
+import { Chk2ModeContext, useDetailPref } from "./mode";
 import { fmtKst } from "@/lib/ops2/time";
 import { useRecipes } from "./useRecipes";
 
@@ -116,6 +119,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const [inflight, setInflight] = useState<Record<string, number>>({});   // 결과를 기다리는 명령(종류 또는 PLC_BUTTON:target)
   const [notices, setNotices] = useState<Notice[]>([]);
   const [plcPending, setPlcPending] = useState<Record<string, { want: boolean; at: number }>>({});
+  const [detail, setDetail] = useDetailPref();
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -195,12 +199,12 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       notify({ tone: "ok", title: `${what} — 장비가 받음` });
     } else if (b.status === "rejected") {
       notify({ tone: "bad", title: `${what} — 거부`,
-               text: `${reasonLabel(d.bundle, b.reasonCode)}${b.reasonCode ? ` (${b.reasonCode})` : ""}${b.detail ? ` — ${b.detail}` : ""}` });
+               text: `${reasonLabel(d.bundle, b.reasonCode)}${b.reasonCode && detail ? ` (${b.reasonCode})` : ""}${b.detail ? ` — ${b.detail}` : ""}` });
     } else if (b.status === "expired") {
       notify({ tone: "warn", title: `${what} — 만료`, text: reasonLabel(d.bundle, b.reasonCode) });
     } else {
       notify({ tone: "warn", title: `${what} — 결과를 기다리는 중`,
-               text: "10 s 안에 결과가 오지 않았습니다. 명령 기록에서 확인하세요." });
+               text: "10 s 안에 결과가 오지 않았습니다. 조작 기록에서 확인하세요." });
     }
     if (a.plc && !(r.ok && b.status === "accepted")) {
       const t = a.plc.target;
@@ -218,14 +222,38 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
 
   const plcAge = typeof plcLink?.age === "number" ? `${plcLink.age.toFixed(1)} s` : "나이 없음";
   const mimicNote = local && connected ? "보기만 — PLC 버튼은 웹에서만"
-    : !connected ? (local && !d.streamUp ? "노트북 프로그램 연결 끊김 · 조작 잠금" : "장비 끊김 · 조작 잠금")
-    : !plcOk ? `PLC 값 ${plcLink?.q ?? "-"} · ${plcAge}(기준 ${staleSec} s) · 조작 잠금`
+    : !connected ? (local && !d.streamUp ? "노트북 프로그램 연결 끊김 — 조작 잠금" : "장비 끊김 — 조작 잠금")
+    : !plcOk ? `PLC 응답 늦음 — 조작 잠금${detail ? ` (${plcLink?.q ?? "-"} · ${plcAge}, 기준 ${staleSec} s)` : ""}`
     : !canOperate ? "조회만" : "노드를 눌러 조작";
+
+  // 진행 중 공정의 시작 시각(웹 시계 ms) — 런 이력의 진행 중 run, 없으면(노트북 화면) stream 의 run_start(장비 시계 − 시계 차)
+  const runStartMs = (() => {
+    if (!st?.runId) return null;
+    const r = d.runs.find((x) => x.runId === st.runId && x.startedAt);
+    if (r?.startedAt) return Date.parse(r.startedAt);
+    const e = [...d.feed].reverse().find((x) => x.type === "run_start" && x.data.runId === st.runId);
+    return e ? Date.parse(e.ts) - skew : null;
+  })();
+  const elapsedS = runStartMs !== null ? Math.max(0, (now + d.offsetMs - runStartMs) / 1000) : null;
+
+  // 묶음도 state 도 없는 장비(v2 프로그램이 웹에 붙은 적 없음) — 안내만
+  const neverConnected = !!d.hello && !d.bundle && !d.state;
+
+  // 상태 카드가 화면 밖으로 나가면 위에 얇은 줄(같은 확인창·같은 동작)
+  const statusRef = useRef<HTMLDivElement | null>(null);
+  const [statusOut, setStatusOut] = useState(false);
+  useEffect(() => {
+    const el = statusRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const o = new IntersectionObserver(([e]) => setStatusOut(!e.isIntersecting && e.boundingClientRect.top < 0), { threshold: 0 });
+    o.observe(el);
+    return () => o.disconnect();
+  }, [neverConnected]);
 
   const up = st?.uplink;
   const chipAge = local && !d.streamUp && age !== null ? Math.max(age, LOST_MS + 1) : age;   // 로컬은 stream 이 끊기면 바로 끊김
   return (
-    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [] }}>
+    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail }}>
       {local && (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-gray-900 px-3 py-2 text-xs text-white">
           <Laptop size={15} /> <b>노트북 로컬 화면</b>
@@ -246,31 +274,36 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
           <Lock size={14} /> 읽기 전용(bench) — 조작은 장비 앞면으로
         </p>
       )}
-      {local && !d.streamUp && (
+      {local && !d.streamUp && d.streamEver && (
         <p className="flex items-center gap-2 rounded-2xl border border-rose-300 bg-rose-50 p-3 text-xs font-bold text-rose-700">
           <WifiOff size={14} /> 노트북 프로그램 연결 끊김 — 다시 붙는 중, 조작이 잠겼습니다. 표시는 마지막 값입니다.
         </p>
       )}
-      {/* 연결 띠 */}
+      {/* 연결 줄 */}
       <div className="flex flex-wrap items-center gap-2 text-[11px]">
-        <span className={`flex items-center gap-1.5 rounded-lg px-2 py-1 font-semibold ${
-          chipAge === null ? "bg-gray-100 text-gray-500"
-          : chipAge <= LATE_MS ? "bg-emerald-50 text-emerald-700"
-          : chipAge <= LOST_MS ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700"}`}>
-          <span className={`h-2 w-2 rounded-full ${chipAge === null ? "bg-gray-300" : chipAge <= LATE_MS ? "bg-emerald-500"
-            : chipAge <= LOST_MS ? "bg-amber-500" : "bg-rose-500"}`} />
-          {chipAge === null ? "상태 없음" : chipAge <= LATE_MS ? "실시간" : chipAge <= LOST_MS ? `늦음 ${ageSec}초` : `끊김 ${ageSec}초`}
-        </span>
+        {neverConnected ? (
+          <span className="flex items-center gap-1.5 rounded-lg bg-gray-100 px-2 py-1 font-semibold text-gray-500">
+            <span className="h-2 w-2 rounded-full bg-gray-300" /> 연결 대기
+          </span>
+        ) : (
+          <span className={`flex items-center gap-1.5 rounded-lg px-2 py-1 font-semibold ${
+            chipAge === null ? "bg-gray-100 text-gray-500"
+            : chipAge <= LATE_MS ? "bg-emerald-50 text-emerald-700"
+            : chipAge <= LOST_MS ? "bg-amber-50 text-amber-700" : "bg-rose-50 text-rose-700"}`}>
+            <span className={`h-2 w-2 rounded-full ${chipAge === null ? "bg-gray-300" : chipAge <= LATE_MS ? "bg-emerald-500"
+              : chipAge <= LOST_MS ? "bg-amber-500" : "bg-rose-500"}`} />
+            {chipAge === null ? "상태 없음" : chipAge <= LATE_MS ? "실시간" : chipAge <= LOST_MS ? `늦음 ${ageSec}초` : `끊김 ${ageSec}초`}
+          </span>
+        )}
         {mode && (
           <span className={`rounded-lg px-2 py-1 font-bold ${
             mode === "sim" ? "bg-fuchsia-600 text-white" : mode === "bench" ? "bg-amber-100 text-amber-800" : "bg-gray-100 text-gray-700"}`}>
             {mode === "sim" ? "SIM — 모의 장비" : mode.toUpperCase()}
           </span>
         )}
-        {d.hello?.version && <span className="font-mono text-gray-400">{d.hello.version}</span>}
-        {web && (
-          <span className={`flex items-center gap-1 rounded-lg px-2 py-1 ${web.sse ? "text-gray-500" : "bg-amber-50 text-amber-700"}`}>
-            <Radio size={12} /> {web.sse ? "명령 연결(SSE)" : "명령 연결 없음 — POST 응답으로만"}
+        {!d.streamUp && !local && (
+          <span className="flex items-center gap-1 rounded-lg bg-gray-100 px-2 py-1 text-gray-500">
+            <WifiOff size={12} /> {d.streamEver ? "다시 연결 중…" : "연결 중…"}
           </span>
         )}
         {Math.abs(skew) > SKEW_WARN_MS && (
@@ -278,11 +311,22 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
             <Clock size={12} /> 장비 시계 차 {(skew / 1000).toFixed(1)} s
           </span>
         )}
-        {!d.streamUp && !local && (
-          <span className="flex items-center gap-1 rounded-lg bg-gray-100 px-2 py-1 text-gray-500">
-            <WifiOff size={12} /> 화면 연결 다시 붙는 중
+        {detail && d.hello?.version && <span className="font-mono text-gray-400">{d.hello.version}</span>}
+        {detail && d.hello?.instance && <span className="font-mono text-gray-400">실행 {d.hello.instance.slice(0, 8)}</span>}
+        {detail && web && (
+          <span className={`flex items-center gap-1 rounded-lg px-2 py-1 ${web.sse ? "text-gray-500" : "bg-amber-50 text-amber-700"}`}>
+            <Radio size={12} /> {web.sse ? "명령 통로(SSE)" : "명령 통로 없음 — POST 응답으로만"}
           </span>
         )}
+        {!detail && web && !web.sse && d.hello?.web?.online && (
+          <span className="rounded-lg bg-amber-50 px-2 py-1 text-amber-700">명령이 느리게 갈 수 있음</span>
+        )}
+        <button onClick={() => setDetail(!detail)} aria-pressed={detail}
+          title="켜면 원시 코드·키·run id·장비 스텝 문구 등 개발용 정보까지 보입니다"
+          className={`ml-auto flex items-center gap-1 rounded-lg px-2 py-1 font-semibold ${
+            detail ? "bg-gray-800 text-white" : "border border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}>
+          <Code2 size={12} /> 상세 {detail ? "켬" : "끔"}
+        </button>
       </div>
 
       {d.authLost && (
@@ -291,12 +335,12 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
         </p>
       )}
       {d.error && <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{d.error}</p>}
-      {web && !web.hasSchema && (
+      {web && !web.hasSchema && !neverConnected && (
         <p className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-700">
-          이 장비의 웹 설정 묶음이 아직 없습니다 — 장비가 연결되면 받아 옵니다.
+          장비 정의를 아직 받지 못했습니다 — 장비가 연결되면 받아 옵니다.
         </p>
       )}
-      {perms && !perms.canOperate && !local && (
+      {perms && !perms.canOperate && !local && !neverConnected && (
         <p className="flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 p-3 text-xs font-semibold text-gray-600">
           <Eye size={14} /> 조회만 — 장비 담당자·관리자만 조작
         </p>
@@ -309,36 +353,55 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       <Notices list={notices} onClose={(id) => setNotices((l) => l.filter((n) => n.id !== id))} />
 
-      <Chk2Status bundle={d.bundle} st={st} connected={connected} lastRun={d.runs[0] ?? null} can={can} onAsk={setAsk}
-        webRecipes={local ? undefined : recipes.list} />
+      {neverConnected ? (
+        <section className="rounded-2xl border border-dashed border-gray-200 bg-white p-6 text-center">
+          <p className="text-base font-bold text-gray-700">장비 프로그램(v2) 연결 대기</p>
+          <p className="mt-1 text-xs text-gray-500">
+            이 장비는 아직 v2 프로그램이 웹에 연결된 적이 없습니다. 장비 노트북에서 v2 를 실행하면 화면이 채워집니다.
+          </p>
+        </section>
+      ) : (
+        <>
+          {statusOut && (
+            <div className="sticky top-0 z-30 h-0">
+              <StatusBar bundle={d.bundle} st={st} connected={connected} can={can} onAsk={setAsk} />
+            </div>
+          )}
+          <div ref={statusRef}>
+            <Chk2Status bundle={d.bundle} st={st} connected={connected} lastRun={d.runs[0] ?? null} can={can} onAsk={setAsk}
+              webRecipes={local ? undefined : recipes.list} elapsedS={elapsedS} startedMs={runStartMs} />
+          </div>
 
-      <Chk2Adjust bundle={d.bundle} st={st} skewMs={web?.clockSkewMs ?? 0} canKey={allowed} onAsk={setAsk} />
+          <div className="grid grid-cols-1 items-start gap-3 xl:grid-cols-2">
+            <Chk2Mimic bundle={d.bundle} snapshot={snap} plcOk={plcOk} canPress={canPlc}
+              pending={pending} onAsk={setAsk} note={mimicNote} />
+            <div className="flex flex-col gap-3">
+              <HeaterCard bundle={d.bundle} def={block("heater")} snap={snap} link={link("heater")} st={st} can={can}
+                locked={!plcOk} onAsk={setAsk} />
+              <IgCard def={block("ig")} snap={snap} link={link("ig")} can={can} onAsk={setAsk} />
+            </div>
+          </div>
 
-      <div className="grid grid-cols-1 items-stretch gap-3 xl:grid-cols-2">
-        <Chk2Mimic bundle={d.bundle} snapshot={snap} plcOk={plcOk} canPress={canPlc}
-          pending={pending} onAsk={setAsk} note={mimicNote} />
-        <div className="flex flex-col gap-3">
-          <HeaterCard bundle={d.bundle} def={block("heater")} snap={snap} link={link("heater")} st={st} can={can}
-            locked={!plcOk} onAsk={setAsk} />
-          <IgCard def={block("ig")} snap={snap} link={link("ig")} can={can} onAsk={setAsk} />
-        </div>
-      </div>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <BlockCard def={block("mfc")} snap={snap} link={link("mfc")} big={["ar_sccm", "o2_sccm", "pressure_mtorr"]} />
+            <BlockCard def={block("dc")} snap={snap} link={link("dc")} big={["v", "i", "p"]} />
+            <BlockCard def={block("rf")} snap={snap} link={link("rf")} big={["fwd_w", "ref_w"]} />
+            <BlockCard def={block("rfp")} snap={snap} link={link("rfp")} big={["fwd_w", "ref_w"]} foldable />
+          </div>
 
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <BlockCard def={block("mfc")} snap={snap} link={link("mfc")} big={["ar_sccm", "o2_sccm", "pressure_mtorr"]} />
-        <BlockCard def={block("dc")} snap={snap} link={link("dc")} big={["v", "i", "p"]} />
-        <BlockCard def={block("rf")} snap={snap} link={link("rf")} big={["fwd_w", "ref_w"]} />
-        <BlockCard def={block("rfp")} snap={snap} link={link("rfp")} big={["fwd_w", "ref_w"]} foldable />
-      </div>
+          <Chk2Adjust bundle={d.bundle} st={st} skewMs={web?.clockSkewMs ?? 0} canKey={allowed} onAsk={setAsk} />
+        </>
+      )}
 
       {local ? (
         <>
           <EventFeed bundle={d.bundle} feed={d.feed} />
-          <p className="text-[11px] text-gray-400">레시피·설정·공정 기록·명령 기록은 웹 화면에서</p>
+          <p className="text-[11px] text-gray-400">레시피·설정·공정 기록·조작 기록은 웹 화면에서</p>
         </>
       ) : (
         <>
-          <Chk2Recipes bundle={d.bundle} st={st} recipes={recipes} can={can} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef} />
+          <Chk2Recipes bundle={d.bundle} st={st} recipes={recipes} can={can} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef}
+            listOnly={neverConnected} />
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             <EventFeed bundle={d.bundle} feed={d.feed} />
@@ -348,10 +411,13 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
             </div>
           </div>
 
-          <Chk2Config equipment={equipment} bundle={d.bundle} st={st} perms={perms ?? null} connected={connected}
-            reloadSchema={d.loadSchema} notify={notify} />
+          <Chk2History equipment={equipment} bundle={d.bundle}
+            refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
 
-          <Chk2History equipment={equipment} bundle={d.bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
+          {!neverConnected && (
+            <Chk2Config equipment={equipment} bundle={d.bundle} st={st} perms={perms ?? null} connected={connected}
+              reloadSchema={d.loadSchema} notify={notify} />
+          )}
         </>
       )}
 

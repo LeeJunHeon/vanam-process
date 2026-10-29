@@ -1,13 +1,16 @@
 "use client";
 
 // 장비 관리(v2) — 챔버K v2 장비 연결 확인(관리자만). 3 s 마다 갱신.
-// 장비 목록(주인 실행·마지막 연락·시계 차·최근 409 …)과 고른 장비의 최근 기록, 주인 비우기(강제 인수).
+// 장비 목록(연결된 실행·마지막 연락·시계 차·중복 연결 거절 …)과 고른 장비의 최근 기록, 연결 비우기(다른 실행이 넘겨받게).
+// W-9: 말만 정리(진단 화면이라 구조는 그대로) — 최근 사건은 장비 화면 로그와 같은 규칙(묶음 이름, components/ops2/chk/text).
 // 장비(기준 ID)별 담당자 추가·삭제, 장비별 명령 SSE 연결, 명령 목록(보낸 길·횟수·결과까지 시간·결과 모름).
 // 명령 버튼은 두지 않는다(W-3). 토큰 교체는 W-3 에서 이 화면에 더한다.
 // 구글챗 알림(W-6): 고른 장비의 주소 있음/없음(주소 자체는 안 보임)·보내는 모드·최근 outbox 20·실패 다시 보내기.
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Cpu, MessageSquare, RefreshCw, RotateCcw, Unlock, UserPlus, X } from "lucide-react";
 import { fmtKst } from "@/lib/ops2/time";
+import { logLine } from "./chk/text";
+import type { Bundle } from "./chk/types";
 
 type Device = {
   equipment: string; label: string | null; enabled: boolean; hasToken: boolean;
@@ -25,7 +28,7 @@ type StateBrief = {
   uplink: { connected: boolean | null; queued: number | null; dropped: number | null; lastError: string | null };
 };
 type Ev = { msgId: string; ts: string; level: string; code: string; message: string; source: string | null;
-            runId: string | null };
+            runId: string | null; ruleId?: string | null; context?: unknown };
 type Run = { runId: string; instance: string; name: string | null; recipeName: string | null; startedBy: string | null;
              stepNo: number | null; startedAt: string | null; endedAt: string | null; result: string | null;
              reasonCode: string | null };
@@ -78,6 +81,14 @@ export default function Ops2AdminPage() {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sel, setSel] = useState("");
+  const [bundle, setBundle] = useState<Bundle | null>(null);       // 고른 장비의 장비 정의(사건 이름용)
+  useEffect(() => {
+    if (!sel) return;
+    let off = false;
+    void fetch(`/api/ops2/${encodeURIComponent(sel)}/v1/schema`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null)).then((b) => { if (!off) setBundle(b); }).catch(() => { if (!off) setBundle(null); });
+    return () => { off = true; };
+  }, [sel]);
   const [now, setNow] = useState(0);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -150,7 +161,7 @@ export default function Ops2AdminPage() {
     try {
       const res = await fetch(`/api/ops2/admin/devices/${encodeURIComponent(equipment)}/release`, { method: "POST" });
       const j = await res.json().catch(() => ({}));
-      setMsg(res.ok ? `${equipment} 주인 실행을 비웠습니다(${short(j?.released)}).` : j?.error ?? "실패했습니다.");
+      setMsg(res.ok ? `${equipment} 연결된 실행을 비웠습니다(${short(j?.released)}).` : j?.error ?? "실패했습니다.");
     } catch {
       setMsg("실패했습니다.");
     } finally {
@@ -193,15 +204,15 @@ export default function Ops2AdminPage() {
       {error && <p className="rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</p>}
       {msg && <p className="rounded-2xl border border-gray-100 bg-white p-3 text-xs text-gray-600">{msg}</p>}
 
-      <Card title={`장비 (주인 실행은 ${data?.leaseSec ?? 30}초 넘게 조용하면 다른 실행이 넘겨받습니다)`}>
+      <Card title={`장비 (연결된 실행이 ${data?.leaseSec ?? 30}초 넘게 조용하면 다른 실행이 넘겨받습니다)`}>
         <div className="overflow-x-auto">
           <table className="w-full whitespace-nowrap text-left text-xs">
             <thead className="text-[11px] text-gray-400">
               <tr>
                 <th className="py-1 pr-3">장비</th><th className="pr-3">모드</th><th className="pr-3">버전</th>
-                <th className="pr-3">주인 실행</th><th className="pr-3">마지막 연락</th><th className="pr-3">시계 차</th>
-                <th className="pr-3">쓰기</th><th className="pr-3">설정(장비/웹)</th><th className="pr-3">묶음</th>
-                <th className="pr-3">최근 409</th><th className="pr-3">명령 연결(SSE)</th><th>토큰</th>
+                <th className="pr-3">연결된 실행</th><th className="pr-3">마지막 연락</th><th className="pr-3">시계 차</th>
+                <th className="pr-3">쓰기</th><th className="pr-3">설정(장비/웹)</th><th className="pr-3">장비 정의</th>
+                <th className="pr-3">중복 연결 거절</th><th className="pr-3">명령 통로</th><th>토큰</th>
               </tr>
             </thead>
             <tbody>
@@ -308,7 +319,7 @@ export default function Ops2AdminPage() {
 
       {sel && data?.devices.some((d) => d.equipment === sel) && (
         <>
-          <Card title={`최신 state — ${sel}`}>
+          <Card title={`최신 상태 — ${sel}`}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               {st ? (
                 <div className="space-y-1 text-xs text-gray-700">
@@ -332,7 +343,7 @@ export default function Ops2AdminPage() {
                 onClick={() => setConfirm(sel)}
                 className="flex items-center gap-1 rounded-xl border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
               >
-                <Unlock className="h-3.5 w-3.5" /> 주인 비우기(강제 인수)
+                <Unlock className="h-3.5 w-3.5" /> 연결 비우기(다른 실행이 넘겨받게)
               </button>
             </div>
           </Card>
@@ -391,17 +402,21 @@ export default function Ops2AdminPage() {
           )}
 
           <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-            <Card title="최근 사건 30">
+            <Card title="최근 로그 30">
               <ul className="max-h-[28rem] space-y-1 overflow-auto text-[11px]">
-                {(data.events ?? []).map((e) => (
-                  <li key={e.msgId} className="flex gap-2">
-                    <span className="shrink-0 font-mono text-gray-400">{fmtKst(e.ts)}</span>
-                    <span className={`shrink-0 font-semibold ${LEVEL_TONE[e.level] ?? ""}`}>{e.code}</span>
-                    <span className="min-w-0 break-words text-gray-600">
-                      {e.message}{e.source ? ` · ${e.source}` : ""}{e.runId ? ` · run ${e.runId}` : ""}
-                    </span>
-                  </li>
-                ))}
+                {(data.events ?? []).map((e) => {
+                  const l = logLine(bundle, { type: "event", data: { level: e.level, code: e.code, ruleId: e.ruleId, message: e.message,
+                                                                    context: e.context ?? { source: e.source } } });
+                  return (
+                    <li key={e.msgId} className="flex gap-2" title={`${l.raw}${e.runId ? ` · run ${e.runId}` : ""}`}>
+                      <span className="shrink-0 font-mono text-gray-400">{fmtKst(e.ts)}</span>
+                      <span className={`shrink-0 font-semibold ${LEVEL_TONE[e.level] ?? ""}`}>{l.kind}</span>
+                      <span className="min-w-0 break-words text-gray-600">
+                        {l.text}<span className="ml-1 font-mono text-[10px] text-gray-300">{e.code}</span>
+                      </span>
+                    </li>
+                  );
+                })}
                 {!data.events?.length && <li className="text-gray-400">없음</li>}
               </ul>
             </Card>
@@ -451,7 +466,7 @@ export default function Ops2AdminPage() {
                   {!data.commands?.length && <li className="text-gray-400">없음</li>}
                 </ul>
               </Card>
-              <Card title="받지 못한 메시지 10">
+              <Card title="받지 못한 데이터 10">
                 <ul className="space-y-1 text-[11px]">
                   {(data.bad ?? []).map((b) => (
                     <li key={b.id} className="text-rose-600">
@@ -470,12 +485,12 @@ export default function Ops2AdminPage() {
       {confirm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-white p-4">
-            <p className="text-sm font-bold text-gray-900">주인 비우기(강제 인수)</p>
+            <p className="text-sm font-bold text-gray-900">연결 비우기(다른 실행이 넘겨받게)</p>
             <p className="mt-2 text-sm text-gray-700">
-              <b>{confirm}</b> 의 주인 실행을 비웁니다. 다음에 먼저 연결한 실행이 주인이 됩니다 —
-              지금 주인이 살아 있으면 곧바로 다시 잡습니다.
+              <b>{confirm}</b> 의 연결된 실행을 비웁니다. 다음에 먼저 연결한 실행이 넘겨받습니다 —
+              지금 연결된 실행이 살아 있으면 곧바로 다시 잡습니다.
             </p>
-            <p className="mt-3 text-[11px] text-gray-400">사건 INSTANCE_RELEASED 로 실행자와 함께 기록됩니다.</p>
+            <p className="mt-3 text-[11px] text-gray-400">로그에 실행자와 함께 기록됩니다(INSTANCE_RELEASED).</p>
             <div className="mt-4 flex justify-end gap-2">
               <button onClick={() => setConfirm(null)} className="rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50">
                 취소

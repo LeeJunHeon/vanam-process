@@ -92,13 +92,13 @@ export default function Chk2Mimic({ bundle, snapshot, plcOk, canPress, pending, 
   );
 
   return (
-    <section className="flex h-full flex-col rounded-2xl border border-gray-100 bg-white p-3">
+    <section className="flex flex-col rounded-2xl border border-gray-100 bg-white p-3">
       <div className="mb-2 flex items-center justify-between gap-2">
         <h3 className="text-sm font-bold text-gray-900">계통도</h3>
-        <span className={`text-[11px] ${note !== "노드를 눌러 조작" ? "text-rose-600" : "text-gray-400"}`}>{note}</span>
+        <span className={`text-[11px] ${note.includes("잠금") ? "text-rose-600" : "text-gray-400"}`}>{note}</span>
       </div>
 
-      <div className="mb-2 flex flex-wrap gap-x-4 gap-y-1.5 rounded-lg bg-gray-50 px-2.5 py-1.5">
+      <div className="mb-1 flex flex-wrap gap-x-4 gap-y-1 rounded-lg bg-gray-50 px-2.5 py-1">
         {lamps.map((l) => {
           const on = bit(l.key);
           return (
@@ -112,7 +112,7 @@ export default function Chk2Mimic({ bundle, snapshot, plcOk, canPress, pending, 
         })}
       </div>
 
-      <svg viewBox="0 0 640 320" className="my-auto w-full select-none" role="img" aria-label="챔버K v2 계통도">
+      <svg viewBox="0 0 640 316" className="w-full select-none" role="img" aria-label="챔버K v2 계통도">
         {/* 1층: 배관 */}
         <g>
           {pipe({ d: "M 92 76 H 118", on: isOn("ar_valve") })}

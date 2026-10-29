@@ -6,6 +6,8 @@
 // 조작(권한·연결은 W-3 규칙 — can): 적재(RECIPE_LOAD {name, rows} — 웹 검사 오류·저장 안 한 변경이 있으면 막음)·적재 시작·적재 해제,
 // 한 행만 바로 시작(PROCESS_START — v1 행은 장비처럼 히터 열을 지운 row, 블록 행은 {blocks, name}),
 // 히터 레시피 실행·정지·일시정지/재개(held 로 맞는 쪽 하나)·건너뛰기. 시작·실행은 확인창에 요약(빨강). 공정 중 수정은 W-5.
+// W-9: 검사 오류는 칸을 건드린 뒤 또는 저장·적재를 누른 뒤부터(reveal — 저장된 레시피를 열면 바로), 머리 배지는 늘
+// "검사 통과 / 오류 n / 경고 n". listOnly(장비 정의가 없는 장비)면 목록 보기만.
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject, type ReactNode } from "react";
 import { AlertTriangle, ArrowLeft, BookOpen, FilePlus2, Pause, Play, Save, SkipForward, Square, Trash2, Upload, X } from "lucide-react";
 import {
@@ -14,6 +16,7 @@ import {
 } from "@/lib/ops2/chk/recipe";
 import { fmtKst } from "@/lib/ops2/time";
 import { Card, SimpleConfirm, type Ask, type Notice } from "./kit";
+import { useChk2Mode } from "./mode";
 import { HeaterTable, ProcessTable, isBlockRow, newUid, toERows, type ERow } from "./Chk2RecipeEditor";
 import Chk2BlockEditor, { blockRowLines } from "./Chk2BlockEditor";
 import { RECIPE_ERROR, type RecipeFull, type RecipeItem, type RecipeKind, type useRecipes } from "./useRecipes";
@@ -53,7 +56,7 @@ function processLines(name: string, rows: Row[], check: RecipeCheck | null): str
   const first = i < 0 ? [] : isBlockRow(rows[i])
     ? blockRowLines(rows[i], check?.rows[i] ?? null).map((l, k) => (k ? l : `첫 공정 행(${i + 1}행): ${l}`))
     : [`첫 공정 행(${i + 1}행): ${rowLine(rows[i])}`, `첫 공정 행 ${heaterLine(rows[i])}${heat ? ` · 히터 쓰는 행 ${heat}개` : ""}`];
-  return [`레시피 '${name}' · ${content.length}행(v1 행 ${procs.length} · 블록 행 ${blocks} · 딜레이 ${delays})`, ...first];
+  return [`레시피 '${name}' · ${content.length}행(일반 행 ${procs.length} · 블록 행 ${blocks} · 딜레이 행 ${delays})`, ...first];
 }
 
 function heaterLines(name: string, steps: Row[], gas: Row | null): string[] {
@@ -65,10 +68,10 @@ function heaterLines(name: string, steps: Row[], gas: Row | null): string[] {
 }
 
 function CheckBadge({ c }: { c: RecipeItem["check"] }) {
-  if (!c) return <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] text-gray-500">검사 없음</span>;
+  if (!c) return <span className="text-[10px] text-gray-300">—</span>;
   if (c.errors) return <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700" title={c.first ?? ""}>오류 {c.errors}</span>;
   if (c.warnings) return <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">경고 {c.warnings}</span>;
-  return <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">통과</span>;
+  return <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">검사 통과</span>;
 }
 
 const Btn = ({ onClick, disabled, title, tone = "gray", children }: {
@@ -84,11 +87,14 @@ const Btn = ({ onClick, disabled, title, tone = "gray", children }: {
   </button>
 );
 
-export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, dirtyRef }: {
+export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, dirtyRef, listOnly }: {
   bundle: Bundle | null; st: StateData | null; recipes: ReturnType<typeof useRecipes>;
   can: (kind: string) => boolean; onAsk: (a: Ask) => void; notify: (n: Omit<Notice, "id" | "at">) => void;
   dirtyRef: MutableRefObject<boolean>;           // 저장 안 한 변경 — 장비를 바꿀 때 화면이 묻는다
+  listOnly?: boolean;                            // 장비 정의(열)를 받지 못한 장비 — 목록 보기만
 }) {
+  const { detail } = useChk2Mode();
+  const [reveal, setReveal] = useState(false);   // 검사 문구를 모두 보이기(저장·적재를 누른 뒤, 저장된 레시피)
   const [tab, setTab] = useState<RecipeKind>("process");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [confirm, setConfirm] = useState<{ what: "leave"; then: () => void } | { what: "delete" } | null>(null);
@@ -100,7 +106,7 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
   const env = useMemo(() => checkEnvOf(bundle), [bundle]);
   const outdated = checkOutdated(bundle);
   const dirty = !!draft && snap(draft) !== draft.base;
-  const readOnly = !recipes.canEdit;
+  const readOnly = !recipes.canEdit || !!listOnly;
 
   useEffect(() => {
     dirtyRef.current = dirty;
@@ -132,17 +138,20 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
     if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}' — 열지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
     setSaveAs(null);
     setBlockUid(null);
+    setReveal(true);
     setDraft(fromFull(r.data.recipe));
   });
   const create = (kind: RecipeKind) => leave(() => {
     const d = { id: null, kind, name: "", rows: toERows([{}]), gas: {}, updatedAt: null };
     setSaveAs(null);
     setBlockUid(null);
+    setReveal(false);
     setDraft({ ...d, base: snap(d) });
   });
 
   const save = async (asName?: string) => {
     if (!draft) return;
+    setReveal(true);
     const name = (asName ?? draft.name).trim();
     if (!name) return notify({ tone: "bad", title: "이름을 넣으세요", text: "레시피 이름은 1~80자" });
     setBusy(true);
@@ -182,16 +191,21 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
   const loadWhy = !draft || draft.kind !== "process" ? null
     : !env ? "묶음에 레시피 열 정의가 없음"
     : !draft.id || dirty ? "저장한 뒤 적재"
-    : errCount ? `웹 검사 오류 ${errCount}개 — 고친 뒤 적재`
+    : errCount ? `검사 오류 ${errCount}개 — 고친 뒤 적재`
     : !can("RECIPE_LOAD") ? "권한·연결 확인(또는 결과 기다리는 중)" : null;
   const runWhy = !draft || draft.kind !== "heater" ? null
     : !env ? "묶음에 레시피 열 정의가 없음"
     : !draft.id || dirty ? "저장한 뒤 실행"
-    : errCount ? `웹 검사 오류 ${errCount}개 — 고친 뒤 실행`
+    : errCount ? `검사 오류 ${errCount}개 — 고친 뒤 실행`
     : !can("HEATER_RECIPE_RUN") ? "권한·연결 확인(또는 결과 기다리는 중)" : null;
 
   const askLoad = () => {
     if (!draft) return;
+    setReveal(true);
+    if (errCount) {
+      notify({ tone: "bad", title: `레시피 '${draft.name}' — 적재 못 함`, text: `검사 오류 ${errCount}개 — 표의 빨간 칸을 고친 뒤 적재하세요` });
+      return;
+    }
     const rows = draft.rows.map((r) => r.data);
     onAsk({ kind: "RECIPE_LOAD", label: "공정 레시피 적재", detail: `'${draft.name}'`, args: { name: draft.name, rows },
             lines: processLines(draft.name, rows, pCheck), note: "장비에 행 목록을 올립니다(검사 뒤 적재). 시작은 '적재 시작'." });
@@ -214,11 +228,11 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
     if (!env || !rc) return "검사 없음";
     if (rc.kind === "delay") return "딜레이 행은 바로 시작할 수 없음";
     if (rc.kind === "blocks") {
-      if (rc.errors.length) return `웹 검사 오류 — ${rc.errors[0]}`;
+      if (rc.errors.length) return `검사 오류 — ${rc.errors[0]}`;
     } else {
       if (rc.kind !== "row") return "내용 없는 행";
       const m = checkProcessRecipe([manualRow(draft?.rows[i]?.data ?? {})], env);
-      if (m.errors) return `웹 검사 오류 — ${m.rows[0]?.errors[0] ?? m.first}`;
+      if (m.errors) return `검사 오류 — ${m.rows[0]?.errors[0] ?? m.first}`;
     }
     if (!can("PROCESS_START")) return "권한·연결 확인(또는 결과 기다리는 중)";
     if (loaded) return "장비에 레시피가 적재돼 있음 — 해제한 뒤";
@@ -242,6 +256,11 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
   };
   const askHeaterRun = () => {
     if (!draft) return;
+    setReveal(true);
+    if (errCount) {
+      notify({ tone: "bad", title: `히터 레시피 '${draft.name}' — 실행 못 함`, text: `검사 오류 ${errCount}개 — 표의 빨간 칸을 고친 뒤 실행하세요` });
+      return;
+    }
     const steps = draft.rows.map((r) => r.data), gas = gasOrNull(draft.gas);
     onAsk({ kind: "HEATER_RECIPE_RUN", label: "히터 레시피 실행", detail: `'${draft.name}'`, args: { name: draft.name, steps, gas },
             red: true, lines: heaterLines(draft.name, steps, gas), note: "히터를 켜고 스텝대로 온도를 올립니다." });
@@ -298,7 +317,7 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
                 <>장비에 적재됨 <b className="text-gray-900">&apos;{loaded.name || "이름 없음"}&apos;</b>
                   {loadedWeb ? <span className="ml-1 rounded bg-blue-50 px-1 text-blue-700">웹 레시피</span>
                     : <span className="ml-1 rounded bg-gray-200 px-1 text-gray-600">웹 목록에 없는 이름</span>}
-                  {" "}· 행 {loaded.row ?? "-"}/{loaded.rows ?? "-"}{loaded.listActive && " · 리스트 진행 중"}</>
+                  {" "}· {loaded.listActive ? `레시피 진행 중(${loaded.row ?? "-"}/${loaded.rows ?? "-"}행)` : loaded.row ? `${loaded.row}/${loaded.rows ?? "-"}행` : `적재됨 · ${loaded.rows ?? "-"}행`}</>
               ) : "장비에 적재된 공정 레시피 없음"}
             </span>
             {loaded && (
@@ -321,7 +340,7 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
                 <>히터 레시피 실행 중 <b className="text-gray-900">&apos;{hr.name || "이름 없음"}&apos;</b>
                   {byName("heater", hr.name) ? <span className="ml-1 rounded bg-blue-50 px-1 text-blue-700">웹 레시피</span>
                     : <span className="ml-1 rounded bg-gray-200 px-1 text-gray-600">웹 목록에 없는 이름</span>}
-                  {" "}· 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"} · {hr.state ?? "-"}
+                  {" "}· 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"}{detail && hr.state ? ` · ${hr.state}` : ""}
                   {hr.held && <span className="ml-1 rounded bg-amber-100 px-1 font-semibold text-amber-800">일시정지 중</span>}</>
               ) : "실행 중인 히터 레시피 없음"}
             </span>
@@ -360,7 +379,9 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
           /* 목록 */
           <div>
             <div className="mb-1.5 flex items-center justify-between">
-              <span className="text-[11px] text-gray-400">{recipes.list === null ? "읽는 중…" : `${list.length}개`} · CHK2·CHK2-SIM 이 같이 씀</span>
+              <span className="text-[11px] text-gray-400">
+                {recipes.list === null ? "읽는 중…" : `${list.length}개`}{detail && " · CHK2·CHK2-SIM 이 같이 씀"}
+              </span>
               {!readOnly && (
                 <Btn tone="blue" onClick={() => create(tab)}><FilePlus2 size={13} /> 새 {tab === "process" ? "공정" : "히터"} 레시피</Btn>
               )}
@@ -373,7 +394,7 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
                     <th className="px-2 py-1.5 text-right font-semibold">{tab === "process" ? "행" : "스텝"}</th>
                     <th className="px-2 py-1.5 text-left font-semibold">수정자</th>
                     <th className="px-2 py-1.5 text-left font-semibold">시각</th>
-                    <th className="px-2 py-1.5 text-left font-semibold">웹 검사</th>
+                    <th className="px-2 py-1.5 text-left font-semibold">검사</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -394,7 +415,9 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
                     </tr>
                   ))}
                   {recipes.list !== null && !list.length && (
-                    <tr><td colSpan={5} className="p-3 text-center text-gray-400">저장된 레시피가 없습니다</td></tr>
+                    <tr><td colSpan={5} className="p-3 text-center text-gray-400">
+                      저장된 레시피가 없습니다{!readOnly && ` — '새 ${tab === "process" ? "공정" : "히터"} 레시피'로 만드세요`}
+                    </td></tr>
                   )}
                 </tbody>
               </table>
@@ -409,12 +432,15 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
               <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} disabled={readOnly}
                 placeholder="레시피 이름(1~80자)" maxLength={80}
                 className="min-w-0 flex-1 rounded-lg border border-gray-200 px-2 py-1 text-sm font-semibold disabled:bg-gray-50" />
-              {dirty && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">저장 안 함</span>}
-              <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                !env ? "bg-gray-100 text-gray-500" : errCount ? "bg-rose-50 text-rose-700" : warnCount ? "bg-amber-50 text-amber-700"
-                : "bg-emerald-50 text-emerald-700"}`}>
-                {!env ? "웹 검사 없음" : `웹 검사 오류 ${errCount} · 경고 ${warnCount}`}
-              </span>
+              {dirty && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700">저장 안 됨</span>}
+              {env && (
+                <button onClick={() => setReveal(true)} title="누르면 모든 검사 문구를 표에 보입니다"
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                    errCount ? "bg-rose-50 text-rose-700" : warnCount ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>
+                  {errCount ? `오류 ${errCount}` : warnCount ? `경고 ${warnCount}` : "검사 통과"}
+                  {errCount > 0 && warnCount > 0 && ` · 경고 ${warnCount}`}
+                </button>
+              )}
             </div>
             {draft.id && (
               <p className="text-[11px] text-gray-400">마지막 수정 {fmtKst(draft.updatedAt)}{readOnly && " · 조회만(저장은 장비 담당자·관리자)"}</p>
@@ -443,33 +469,33 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
                 {draft.kind === "process" ? (
                   <>
                     {loadWhy && <span className="text-[11px] text-gray-400">{loadWhy}</span>}
-                    <Btn tone="blue" disabled={!!loadWhy} onClick={askLoad}><Upload size={13} /> 장비에 적재</Btn>
+                    <Btn tone="blue" disabled={!!loadWhy && !errCount} onClick={askLoad}><Upload size={13} /> 장비에 적재</Btn>
                   </>
                 ) : (
                   <>
                     {runWhy && <span className="text-[11px] text-gray-400">{runWhy}</span>}
-                    <Btn tone="roseSolid" disabled={!!runWhy} onClick={askHeaterRun}><Play size={13} /> 히터 레시피 실행</Btn>
+                    <Btn tone="roseSolid" disabled={!!runWhy && !errCount} onClick={askHeaterRun}><Play size={13} /> 히터 레시피 실행</Btn>
                   </>
                 )}
               </span>
             </div>
 
-            {pCheck && pCheck.listErrors.length > 0 && (
+            {reveal && pCheck && pCheck.listErrors.length > 0 && (
               <p className="rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-700">{pCheck.listErrors.join(" · ")}</p>
             )}
             {draft.kind === "process" && blockAt >= 0 ? (
               <Chk2BlockEditor key={blockUid} row={draft.rows[blockAt].data} rc={pCheck?.rows[blockAt] ?? null}
                 env={env?.blocks ?? null} bundle={bundle} readOnly={readOnly} rowNo={blockAt + 1}
-                startWhy={rowWhy(blockAt)} onStart={() => askStartRow(blockAt)} onClose={() => setBlockUid(null)}
+                startWhy={rowWhy(blockAt)} onStart={() => askStartRow(blockAt)} onClose={() => setBlockUid(null)} dirty={dirty}
                 onRow={(data) => setDraft((d) => (d ? { ...d, rows: d.rows.map((r) => (r.uid === blockUid ? { ...r, data } : r)) } : d))} />
             ) : draft.kind === "process" ? (
               <ProcessTable cols={bundle?.recipe?.processColumns ?? []} rows={draft.rows} check={pCheck} bundle={bundle}
-                readOnly={readOnly} canStart={rowWhy} onStart={askStartRow} onEditBlocks={setBlockUid} onToBlocks={setToBlocks}
+                readOnly={readOnly} reveal={reveal} canStart={rowWhy} onStart={askStartRow} onEditBlocks={setBlockUid} onToBlocks={setToBlocks}
                 onRows={(f) => setDraft((d) => (d ? { ...d, rows: f(d.rows) } : d))} />
             ) : (
               <HeaterTable stepCols={bundle?.recipe?.heaterStepColumns ?? []} gasCols={bundle?.recipe?.heaterGasColumns ?? []}
                 steps={draft.rows} gas={draft.gas} errors={hCheck?.errors ?? []} warnings={hCheck?.warnings ?? []}
-                bundle={bundle} readOnly={readOnly}
+                bundle={bundle} readOnly={readOnly} reveal={reveal}
                 onSteps={(f) => setDraft((d) => (d ? { ...d, rows: f(d.rows) } : d))}
                 onGas={(g) => setDraft((d) => (d ? { ...d, gas: g } : d))} />
             )}
@@ -478,14 +504,14 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
       </div>
 
       {confirm?.what === "leave" && (
-        <SimpleConfirm title="저장 안 함" ok="버리고 나가기" danger
+        <SimpleConfirm title="저장 안 됨" ok="버리고 나가기" danger
           text="저장하지 않은 변경이 있습니다. 버리고 나갈까요?"
           onCancel={() => setConfirm(null)} onOk={() => { const t = confirm.then; setConfirm(null); t(); }} />
       )}
       {toBlocks !== null && draft && (
         <SimpleConfirm title="블록 행으로 만들기" ok="만들고 편집"
-          text={<>{toBlocks + 1}행의 기본 템플릿(블록 {pCheck?.rows[toBlocks]?.blocks?.length ?? "-"}개)으로 새 블록 행을 {toBlocks + 2}행에
-            만듭니다. 원래 행은 그대로입니다. 펼친 단계는 원래 행과 같습니다(장비와 같은 템플릿).</>}
+          text={<>{toBlocks + 1}행과 같은 순서의 블록 {pCheck?.rows[toBlocks]?.blocks?.length ?? "-"}개로 새 블록 행을 {toBlocks + 2}행에
+            만듭니다. 원래 행은 그대로 둡니다. 블록 행에서 순서를 바꿀 수 있습니다.</>}
           onCancel={() => setToBlocks(null)} onOk={makeBlocks} />
       )}
       {confirm?.what === "delete" && draft && (
