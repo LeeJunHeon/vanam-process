@@ -17,7 +17,7 @@ import { blockEnvOf, checkBlocks, expandBlocks, pulseEdgeViolation, usesOf, type
 export { pyFixed, pyFloatRepr, pyG, pyNum, pyRound, pyTruthy } from "./py";
 
 /** 이 검사가 맞춘 묶음 버전(골든과 같음) — 묶음 version 이 다르면 화면이 "장비 판단만 믿을 것" 안내 */
-export const GOLDEN_EXPORT_VERSION = 10;
+export const GOLDEN_EXPORT_VERSION = 11;
 /** 챔버K recipe.DELAY_RE.pattern(IGNORECASE) — 골든 시험이 묶음 delayPattern 과 같은지 본다 */
 export const DELAY_PATTERN = String.raw`^\s*delay\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$`;
 const DELAY_RE = new RegExp(DELAY_PATTERN, "i");
@@ -29,6 +29,7 @@ export type ColDef = {
   name: string; type: string; unit?: string; required: string;
   min?: number | null; max?: number | null; paramMin?: string | null; paramMax?: string | null;
   minExclusive?: boolean; zeroIsEmpty?: boolean; v1Name?: string; desc?: string;
+  label?: string; help?: string; group?: string;              // 묶음 v11 화면용(열 이름·도움말·머리 묶음)
 };
 export type RecipeDefs = {
   processColumns: ColDef[]; heaterStepColumns: ColDef[]; heaterGasColumns: ColDef[]; delayPattern?: string;

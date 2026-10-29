@@ -17,10 +17,13 @@ export type BParamDef = {
   name: string; type: string; unit: string; default: unknown; required: boolean;
   min: number | null; max: number | null; paramMin: string | null; paramMax: string | null; paramScale: number;
   minExclusive: boolean; enum: unknown[] | null; desc: string;
+  // 묶음 v11(5-13) 화면용 — 없으면(옛 장비) name·desc 로
+  label?: string; help?: string; advanced?: boolean; enumLabels?: Record<string, string> | null;
 };
 export type BlockDef = {
   type: string; label: string; params: BParamDef[]; stage: string; stages: string[];
   watch: Record<string, boolean> | null; container: boolean; steps: string; v1?: string; desc: string;
+  help?: string; group?: string; summary?: string[];          // 묶음 v11 화면용(블록 추가 묶음·한 줄 요약 값)
 };
 export type ValueRule = { id: string; blocks: string[]; kind: string; when: string; key: string; msg: string; uses?: string[] };
 export type BlockDefs = {
@@ -33,6 +36,7 @@ export type BlockDefs = {
   limits: { repeatMax: number; maxDepth: number; maxExpandedSteps: number; labelMax: number };
   blockKeys: string[]; valueRules: ValueRule[]; spDefaultKey: Record<string, string>;
   heaterRampMin: number; pulseEdge: { param: string }; autoEndStopLabel: string;
+  groups?: { key: string; label: string }[];                  // 묶음 v11 — 블록 추가 버튼 묶음 순서
 };
 export type BlockEnv = {
   defs: BlockDefs; byType: Map<string, BlockDef>; stopNos: number[]; mustKeep: number[]; cfg: Cfg;

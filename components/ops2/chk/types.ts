@@ -22,8 +22,13 @@ export type Hello = {
 export type FieldDef = {
   column: string; name: string; type: string; unit: string; label: string; fmt: string; ownQuality?: boolean;
   summary?: string;                              // 1분 요약 방식 mean·max·min·last·any
+  detail?: boolean; desc?: string; enumLabels?: Record<string, string> | null;   // 묶음 v11 — detail 은 '상세'에서만
 };
-export type BlockDef = { name: string; label: string; worker: string; quality: string[]; fields: FieldDef[] };
+export type BlockDef = { name: string; label: string; worker: string; quality: string[]; fields: FieldDef[]; desc?: string };
+/** 정지 순서 단계(묶음 stopSequence·allStopSequence) */
+export type SeqStepDef = { no: number; act?: string; must?: boolean; desc?: string; label?: string; when?: string };
+/** event 메시지 (context.source, context.kind) → 화면 이름·level(main 평소 로그 / detail 상세에서만) — 묶음 v11 */
+export type EventKindDef = { source: string; kind: string; label: string; level: string };
 export type ArgDef = {
   name: string; type?: string; required?: boolean; min?: number | null; max?: number | null;
   paramMin?: string | null; paramMax?: string | null;
@@ -38,6 +43,7 @@ export type ParamDef = {
 /** 공정 중 수정 항목(묶음 adjust.items — blocks.ADJUST_ITEMS) */
 export type AdjustItemDef = {
   device: string; item: string; key: string; apply?: string; whenLive?: string; rules?: string[]; settle?: boolean;
+  label?: string; help?: string;                 // 묶음 v11 화면용
   param: { name: string; type: string; unit?: string; required?: boolean; min?: number | null; max?: number | null;
            paramMin?: string | null; paramMax?: string | null; paramScale?: number; minExclusive?: boolean; desc?: string };
 };
@@ -53,7 +59,10 @@ export type Bundle = {
   plcButtons?: { target: string; addr: string; label: string }[];
   states?: { name: string; label: string; kind: string }[];
   blocks?: Partial<BlockDefs>;
-  stopSequence?: { steps?: { no: number; act?: string; must?: boolean; desc?: string }[]; endStopMustKeep?: number[] };
+  stopSequence?: { steps?: SeqStepDef[]; endStopMustKeep?: number[] };
+  allStopSequence?: { steps?: SeqStepDef[] };
+  eventKinds?: EventKindDef[];                   // 묶음 v11
+  paramGroups?: { key: string; label: string }[];   // 묶음 v11 — 설정 묶음 이름
   recipe?: RecipeDefs;
   snapshot?: { tick?: FieldDef[]; process?: FieldDef[]; blocks?: BlockDef[] };
   events?: { kind: string; label: string }[];
@@ -156,6 +165,11 @@ export function fmtValue(v: unknown, fmt: string): string {
   if (fmt === "d") return String(Math.trunc(v));
   return String(v);
 }
+
+/** 품질 배지 이름(평소) — state.links 의 q */
+export const Q_LABEL: Record<string, string> = {
+  ok: "정상", late: "늦음", stale: "오래됨", fail: "끊김", off: "꺼짐", suppressed: "쉼",
+};
 
 /** 품질 배지 색 — state.links 의 q */
 export const Q_TONE: Record<string, string> = {
