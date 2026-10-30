@@ -24,7 +24,10 @@ export type BlockDef = {
   type: string; label: string; params: BParamDef[]; stage: string; stages: string[];
   watch: Record<string, boolean> | null; container: boolean; steps: string; v1?: string; desc: string;
   help?: string; group?: string; summary?: string[];          // 묶음 v11 화면용(블록 추가 묶음·한 줄 요약 값)
+  skip?: BlockCtl; pause?: BlockCtl;                           // 묶음 13 — 공정 중 건너뛰기·일시정지 규칙(판단은 장비)
 };
+/** 묶음 13 blocks.defs[].skip·pause — kind 가 null 이면 못 함(no = 이유), when = 값 조건(비면 늘), text = 할 일 문구 */
+export type BlockCtl = { kind: string | null; when: string | null; text: string; no: string };
 export type ValueRule = { id: string; blocks: string[]; kind: string; when: string; key: string; msg: string; uses?: string[] };
 export type BlockDefs = {
   defs: BlockDef[];
@@ -485,6 +488,16 @@ function expandBlock(ctx: Ctx, b: CleanBlock, no: string): void {
     case "heater_off":
       out.push(S("HEATER_OFF", "히터 끄기"));
       break;
+    case "heater_settle": {
+      const tol = fl("tol_c"), sec = fl("sec"), mx = fl("max_sec");
+      if (mx > 0) {
+        out.push(S("HEATER_SETTLE", `셔터 전 히터 정착 확인 (TC1 ±${pyG(tol)}°C, ${pyFixed(sec, 0)}s 연속, 상한 ${pyFixed(mx, 0)}s)`, {
+          value: ctx.heaterTarget ?? undefined, polling: true,
+          spec: { tol, sec, max_sec: mx, fail_action: pyStr(p.fail_action) },
+        }));
+      }
+      break;
+    }
     case "wait": {
       const sec = dur(p.sec);
       const sh = stage === "SHUTTER_DELAY";

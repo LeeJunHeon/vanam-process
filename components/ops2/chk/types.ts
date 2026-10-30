@@ -23,6 +23,7 @@ export type FieldDef = {
   column: string; name: string; type: string; unit: string; label: string; fmt: string; ownQuality?: boolean;
   summary?: string;                              // 1분 요약 방식 mean·max·min·last·any
   detail?: boolean; desc?: string; enumLabels?: Record<string, string> | null;   // 묶음 v11 — detail 은 '상세'에서만
+  stateColumn?: string | null;                   // 묶음 12 — 값이 비고 이 상태 열이 ok 가 아니면 상태 이름을 값 자리에
 };
 export type BlockDef = { name: string; label: string; worker: string; quality: string[]; fields: FieldDef[]; desc?: string };
 /** 정지 순서 단계(묶음 stopSequence·allStopSequence) */
@@ -33,7 +34,10 @@ export type ArgDef = {
   name: string; type?: string; required?: boolean; min?: number | null; max?: number | null;
   paramMin?: string | null; paramMax?: string | null;
 };
-export type CommandDef = { kind: string; label: string; role?: string; sources?: string[]; args?: ArgDef[] };
+export type CommandDef = {
+  kind: string; label: string; role?: string; sources?: string[]; args?: ArgDef[]; desc?: string;
+  benchOk?: boolean;                             // 묶음 12 — bench(장비 쓰기 금지)에서도 받는 명령
+};
 export type ParamDef = {
   key: string; label?: string; unit?: string; type?: string; current?: unknown; default?: unknown; pending?: unknown;
   group?: string; min?: number | null; max?: number | null; enum?: unknown[] | null; pattern?: string | null;
@@ -63,6 +67,7 @@ export type Bundle = {
   allStopSequence?: { steps?: SeqStepDef[] };
   eventKinds?: EventKindDef[];                   // 묶음 v11
   paramGroups?: { key: string; label: string }[];   // 묶음 v11 — 설정 묶음 이름
+  eventSources?: { source: string; label: string }[];   // 묶음 13 — event context.source → 출처 이름
   recipe?: RecipeDefs;
   snapshot?: { tick?: FieldDef[]; process?: FieldDef[]; blocks?: BlockDef[] };
   events?: { kind: string; label: string }[];
@@ -78,8 +83,34 @@ export type AdjustState = {
   adjusted: { by?: string | null; t?: number | null; source?: string | null } | null;
   scope: "live" | "future" | "done" | "unused"; busy: boolean;
 };
+/** state.run.paused(묶음 13) — 일시정지 중일 때만. pausedS = 멈춘 지 몇 초 */
+export type PauseInfo = {
+  at?: number; no: string; type: string; label?: string; kind?: string; by?: string | null; source?: string | null;
+  remainS?: number | null; pausedS?: number;
+};
+/** state.run.blocks 한 항목(묶음 13) — 펼친 블록(반복 안은 "5.2#2", 딜레이 행은 no "delay").
+ *  status done·skipped·aborted(끝남) / running·paused(지금) / waiting(아직). start·end 는 장비 시계 epoch 초 */
+export type RunBlock = {
+  no: string; type: string; label?: string; status: string; start?: number | null; end?: number | null;
+  durationS?: number | null; skip?: boolean; pause?: boolean; skipText?: string; pauseText?: string;
+  pausedSec?: number; revision?: number; auto?: boolean;
+};
+/** state.run(묶음 13) — 판·지금 블록·멈춤은 늘, 블록 목록은 바뀌었을 때·10 초마다만(useChk2 가 blocksVersion 으로 기억) */
+export type RunState = {
+  revision: number; current: string | null; paused: PauseInfo | null; blocksVersion?: number;
+  blocks?: RunBlock[]; delay?: { sec?: number; remainS?: number | null };
+};
+/** run_end summary(묶음 13) — 실행된 순서·마지막 판·건너뛴/멈춘 횟수 */
+export type RunSummary = {
+  name?: string; executed?: { no: string; type: string; label?: string; start?: number; end?: number; result: string;
+                              pausedSec?: number; revision?: number }[];
+  revision?: number; skips?: number; pauses?: number; pausedSec?: number;
+};
+
 export type StateData = {
   procState?: string; runId?: string | null;
+  paused?: boolean; procLabel?: string | null;   // 묶음 13 — 일시정지(공정 상태 이름은 그대로)
+  run?: RunState | null;
   step?: { no: number; total: number; type?: string | null; label?: string | null; remainS?: number | null } | null;
   remainS?: number | null;
   recipe?: { name?: string; rows?: number; row?: number | null; listActive?: boolean } | null;

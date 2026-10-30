@@ -17,7 +17,7 @@ import { blockEnvOf, checkBlocks, expandBlocks, pulseEdgeViolation, usesOf, type
 export { pyFixed, pyFloatRepr, pyG, pyNum, pyRound, pyTruthy } from "./py";
 
 /** 이 검사가 맞춘 묶음 버전(골든과 같음) — 묶음 version 이 다르면 화면이 "장비 판단만 믿을 것" 안내 */
-export const GOLDEN_EXPORT_VERSION = 11;
+export const GOLDEN_EXPORT_VERSION = 13;
 /** 챔버K recipe.DELAY_RE.pattern(IGNORECASE) — 골든 시험이 묶음 delayPattern 과 같은지 본다 */
 export const DELAY_PATTERN = String.raw`^\s*delay\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$`;
 const DELAY_RE = new RegExp(DELAY_PATTERN, "i");
@@ -224,6 +224,12 @@ function basePressureOf(p: Record<string, unknown>): number {
   }
 }
 
+/** heater_cascade.ctrl_mode — HEATER_CTRL_MODE(cascade·tc1), 모르는 값·없으면 cascade */
+export function heaterCtrlMode(cfg: Cfg): string {
+  const m = String(cfg.HEATER_CTRL_MODE ?? "cascade").trim().toLowerCase();
+  return m === "cascade" || m === "tc1" ? m : "cascade";
+}
+
 export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: boolean, rfpulsePresent: boolean): Block[] {
   const B = (type: string, label: string, stage: string, params: Record<string, unknown>): Block => ({ type, params, label, stage });
   const fl = (v: unknown) => pyFloatOr0(v);
@@ -278,6 +284,11 @@ export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: 
   const sd = Math.max(0, Math.ceil(fl(p.shutter_delay) * 60));
   if (sd > 0) out.push(B("wait", `Shutter Delay ${sd}s`, "SHUTTER_DELAY", { sec: sd, watch: { dc: true } }));
   const pt = Math.max(0, Math.ceil(fl(p.process_time) * 60));
+  // 셔터 전 히터 정착(묶음 13, v1 3328872) — 셔터 딜레이 뒤·메인 앞. 2단 제어·히터 사용·HEATER_SHUTTER_SETTLE_MAX_SEC > 0 일 때만
+  if (fl(p.process_time) > 0 && pyTruthy(p.use_heater) && fl(p.heater_temp) > 0 && heaterCtrlMode(cfg) === "cascade"
+      && pyFloat(cfg.HEATER_SHUTTER_SETTLE_MAX_SEC) > 0) {
+    out.push(B("heater_settle", "", "", { tol_c: null, sec: null, max_sec: null, fail_action: null }));
+  }
   if (fl(p.process_time) > 0 && pt > 0) out.push(B("main", "", "", { sec: pt, close: false, watch: null }));
   out.push(B("end_stop", "", "", { skip: null }));
   return out;
