@@ -353,7 +353,7 @@ export function checkBlockRow(row: Row, env: CheckEnv): Omit<RowCheck, "kind"> {
     return { ...none, errors: ["블록 행은 process_name(문자열)·blocks 만"], warnings: [] };
   }
   const be = env.blocks;
-  if (!be) return { ...none, errors: [], warnings: ["블록 행 — 이 묶음에는 블록 규칙 표가 없어 웹 검사 없음(장비가 검사)"] };
+  if (!be) return { ...none, errors: [], warnings: ["블록 공정 — 이 장비 정의에는 블록 규칙 표가 없어 웹 검사 없음(장비가 검사)"] };
   const r = checkBlocks(row.blocks, be);
   if (!r.clean) return { ...none, errors: r.errors, warnings: r.warnings };
   return {

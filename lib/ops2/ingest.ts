@@ -259,7 +259,7 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
           await tx.ops2ConfigVersion.createMany({
             data: [{ equipment, version: int(d.configVersion) ?? 0, kind: "import", paramValues: json(storedValues(webSchema)),
                      paramSchemaHash: str(webSchema.paramSchemaHash), createdBy: "device", createdAt: now,
-                     note: "장비 저장 값(묶음 stored)" }],
+                     note: "장비 저장 값" }],
             skipDuplicates: true,
           });
         } else if (rs) {
@@ -275,7 +275,7 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
       } else {
         schemaHold.set(hash, now.getTime() + SCHEMA_RETRY_MS);
         bads.push({ id: `schema-${h.id}`, ackId: null, instance: h.instance,
-                    reason: `webSchema 해시 불일치(묶음 ${String(webSchema.hash).slice(0, 12)} ≠ hello ${hash.slice(0, 12)}) — 저장하지 않음`,
+                    reason: `장비 정의 해시 불일치(받은 정의 ${String(webSchema.hash).slice(0, 12)} ≠ hello ${hash.slice(0, 12)}) — 저장하지 않음`,
                     raw: { id: h.id, bundleHash: webSchema.hash, helloHash: hash } });
       }
     }

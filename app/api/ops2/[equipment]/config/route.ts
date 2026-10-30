@@ -116,7 +116,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
   }
   const action = body.action;
   if (action !== "apply" && action !== "rollback" && action !== "resync") return bad("bad_action", "action 은 apply·rollback·resync");
-  if (!ctx.bundle) return bad("no_schema", "장비 묶음이 아직 없음", 409);
+  if (!ctx.bundle) return bad("no_schema", "장비 정의를 아직 받지 못함", 409);
   if (!(action === "rollback" ? ctx.canRollback : ctx.canApply)) {
     return NextResponse.json({ error: "forbidden", detail: "설정 적용·되돌리기는 관리자만" }, { status: 403 });
   }
@@ -175,7 +175,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
     const values: Obj = {};
     for (const [k, p] of defs) if (p.scope !== "secret") values[k] = k in body.changes ? body.changes[k] : cur.values[k];
     const missing = [...defs.values()].filter((p) => p.scope !== "secret" && values[p.key] === undefined).map((p) => p.key);
-    if (missing.length) return bad("missing_keys", `지금 버전에 없는 키 ${missing.length}개(${missing.slice(0, 5).join(", ")}) — 묶음이 바뀐 뒤 장비 버전 행이 없음`, 409);
+    if (missing.length) return bad("missing_keys", `지금 버전에 없는 키 ${missing.length}개(${missing.slice(0, 5).join(", ")}) — 장비 정의가 바뀐 뒤 장비 버전 행이 없음`, 409);
     version = await nextVersion(ops2Db, equipment, cur.version);
     kind = "CONFIG_APPLY";
     const schemaHash = typeof ctx.bundle.paramSchemaHash === "string" ? ctx.bundle.paramSchemaHash : "";
