@@ -8,13 +8,13 @@
 // W-10 화면 틀: 제목·장비 고르기 → 상태 띠(모든 탭 위에 늘 — Chk2Status, 스크롤로 안 보이면 위에 얇은 줄) → bench 정보 띠 →
 //   탭 운전 · HMI · 레시피 · 기록 · 설정(노트북 로컬 화면은 운전 · HMI · 기록, 주소 ?tab= 에 남김) + 오른쪽 끝 '상세 보기' 토글.
 //   레시피 편집 중 저장 안 한 변경이 있으면 탭·장비를 바꿀 때 확인창.
-// 잠금(lockOf — 버튼에 자물쇠 + 이유): 로그인 끊김 → 권한(웹 perms·로컬은 hello.commandKinds) → bench(runMode bench·writesAllowed false
+// HMI 탭 = Chk2Hmi(계통도). 잠금(lockOf — 버튼에 자물쇠 + 이유): 로그인 끊김 → 권한(웹 perms·로컬은 hello.commandKinds) → bench(runMode bench·writesAllowed false
 //   면 묶음 commands[].benchOk 가 참인 명령만 — 옛 묶음이라 benchOk 가 없으면 전부) → 정지 쪽(연결 또는 웹 온라인이면 됨) →
 //   결과 기다리는 중 → 장비 끊김 → PLC 값 오래됨(PLC 버튼·히터 목표·켜기·끄기·리셋).
 // hello 를 받기 전에는 '장비 정보를 읽는 중…' 자리표시, v2 프로그램이 붙은 적 없는 장비는 연결 대기 카드(레시피·기록만).
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { AlertTriangle, Code2, Cloud, CloudOff, Laptop, Lock, LogIn, WifiOff } from "lucide-react";
-import Chk2Mimic from "./Chk2Mimic";
+import Chk2Hmi from "./Chk2Hmi";
 import { StatusBand, StatusBar, type ConnInfo } from "./Chk2Status";
 import Chk2Run from "./Chk2Run";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
@@ -205,7 +205,6 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const lock = (kind: string) => lockOf(kind);
   const can = (kind: string) => !lockOf(kind);
   const canKey = (kind: string, key: string) => !lockOf(kind, key);
-  const canPlc = (target: string) => !lockOf("PLC_BUTTON", `PLC_BUTTON:${target}`);
   const cancel = useCallback(() => setAsk(null), []);
 
   // PLC "전환 중" — 바라는 값이 아직 아니고 10 s 안
@@ -417,7 +416,8 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
           onEditRecipe={local ? undefined : (id) => { setRecipeReq({ id, n: Date.now() }); goTab("recipe"); }} />
       )}
       {curTab === "hmi" && (
-        <Chk2Mimic bundle={d.bundle} snapshot={snap} plcOk={plcOk} canPress={canPlc} pending={pending} onAsk={setAsk} note={mimicNote} />
+        <Chk2Hmi bundle={d.bundle} snapshot={snap} plcOk={plcOk} lockOf={(t) => lockOf("PLC_BUTTON", `PLC_BUTTON:${t}`)} pending={pending}
+          onAsk={setAsk} note={mimicNote} viewOnly={local} />
       )}
       {curTab === "recipe" && !local && (
         <Chk2Recipes bundle={d.bundle} st={st} recipes={recipes} can={can} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef}
