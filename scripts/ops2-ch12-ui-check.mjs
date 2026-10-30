@@ -66,6 +66,45 @@ with tempfile.TemporaryDirectory() as tmp:
     cmd("pc_sel", "PC_SELECT_CH", {"ch": 2})
     cmd("power_select", "POWER_SELECT", {"on": True})
     rig.loop.run(3)
+    # OES 스펙트럼 — 링크와 같은 쓰로틀·거르기·솎기(drivers/oes_spectrum) 결과를 링크 이벤트 길로(ch1 공정 중)
+    from v2.ch12.drivers import oes_spectrum as OS
+    from v2.ch12.drivers.oes_link import OesEvent
+    xs = [100.0 + i * 0.6 for i in range(2048)]
+    ys = [500.0 + (15000.0 if i == 700 else 0.0) + (3000.0 if 1200 <= i <= 1203 else 0.0) for i in range(2048)]
+    ys[5] = float("nan")
+    d = OS.SpectrumThrottle(0.5).offer(1.0, xs, ys, "ch1", c.wall())
+    rig._ev_for("ch1.oes")(OesEvent("spectrum", "", data=d))
+    out["oes_peak_x"] = xs[700]
+    # 두께 Factor·재료 창 값(THICKNESS_WINDOW — 결과 value 와 사건 thickness/window), 저장 검사 문구(장비)
+    w = rig.hub.run_command("THICKNESS_WINDOW", {"ch": 2, "req": "ui-w1"}, Source.HMI, cid="ui-w1", by="local")
+    out["cmd"]["window"] = {"ok": w.ok, "reason": w.reason}
+    tool = {cc: {g: "" for g in ("G1", "G2", "G3")} for cc in ("up", "mid", "down")}
+    tool["up"]["G1"], tool["mid"]["G3"], tool["down"]["G2"] = "5", "abc", "120.5"
+    cmd("factor_bad", "THICKNESS_FACTOR_SAVE", {"ch": 2, "tooling": tool, "materials": {"G1": "없는재료", "G2": "", "G3": "Al — Aluminum"}})
+    out["factor_bad_args"] = {"tooling": tool, "materials": {"G1": "없는재료", "G2": "", "G3": "Al — Aluminum"}}
+    mrows = [["", "X", "1", "1", ""], ["Foo", "F", "0.1", "abc", ""], ["Aluminum", "Al", "2.7", "1.08", ""], ["aluminum", "Al", "2.7", "1.08", ""], ["", "", "", "", ""]]
+    cmd("materials_bad", "THICKNESS_MATERIALS_SAVE", {"ch": 2, "rows": mrows, "confirmed": True})
+    out["materials_bad_rows"] = mrows
+    # 알림창 — 장비가 내는 길 그대로: 공정 실패(오류창·닫으면 오류 해제), PC 치명, 호스트(로봇) 오류
+    a = rig.asm
+    a.proc["ch1"].popup("CH1 공정 실패", "T1\n\n사유: x\n\n확인을 누르면 상태 표시가 Idle로 변경됩니다.", "error", clear_on_close=True)
+    a.pc.popup("critical", "게이트밸브 인터락", "GV 닫힘", ch=2, clear_on_close=True)
+    from v2.ch12.robot_api import report_to_emit
+    report_to_emit(rig.emit)({"error_code": "E104", "message": "JSON 파싱 실패"}, "HOST")
+    # 노트북 화면 파일 고르기(local_server /api/v1/files — 시작 폴더 아래)
+    from v2.ch12 import local_server as LS
+    share = Path(tmp) / "share"
+    (share / "sub").mkdir(parents=True)
+    (share / "sub" / "r2.xlsx").write_bytes(b"pk")
+    (share / "r1.csv").write_text("#,Process_name\n", encoding="utf-8")
+    (share / "x.txt").write_text("x", encoding="utf-8")
+    rig.cfg["PROCESS_LIST_START_DIR"] = str(share)
+    srv = LS.LocalServer(0, None)
+    srv.attach(rig)
+    out["files"] = srv.files("")[1]
+    out["files_sub"] = srv.files("sub")[1]
+    out["files_bad"] = srv.files("..")[0]
+    rig.loop.run(2)
     h = rig.hub
     out["bundle"] = WS.bundle()
     out["state"] = h.last_state
@@ -97,7 +136,12 @@ await esbuild.build({
       export { HeaterThicknessPanel, PcPanel, TspPanel, LoadLockPanel, RobotPanel } from "./components/ops2/ch12/Ch12Aux";
       export { PlcPanel, CmdForm } from "./components/ops2/ch12/Ch12Controls";
       export { EventFeed } from "./components/ops2/chk/Chk2Logs";
-      export { RgaChart, rgaPoints } from "./components/ops2/ch12/Ch12Spectra";
+      export { RgaChart, rgaPoints, OesChart, oesPoints } from "./components/ops2/ch12/Ch12Spectra";
+      export { default as Ch12SeqEdit } from "./components/ops2/ch12/Ch12SeqEdit";
+      export * as TH from "./components/ops2/ch12/Ch12Thickness";
+      export * as PO from "./components/ops2/ch12/Ch12Popups";
+      export * as LF from "./components/ops2/ch12/Ch12LocalFiles";
+      export { HeaterStatus } from "./components/ops2/ch12/Ch12Aux";
       export { logLine } from "./components/ops2/chk/text";
       export * as L from "./components/ops2/ch12/logic";
       export * as T from "./components/ops2/ch12/types";
@@ -224,6 +268,121 @@ const chamberProps = (ch) => ({
         pts?.length === 3 && pts.map((p) => p.x).join() === "1,18,32" && (html.match(/<circle/g) ?? []).length === 3
         && html.includes("Atomic Mass") && html.includes("Partial Pressure") && html.includes("1e-11") && html.includes("1e-5")
         && render(U.RgaChart, { feed: f, ch: "ch2" }) === "" && !!kind, { pts, kind });
+}
+
+{
+  // OES 그래프 — 장비 state.spectra(v1 거르기·0.5 s 쓰로틀·512점 솎기 — drivers/oes_spectrum), v1 축·빨간 선
+  const pts = U.oesPoints(st, "ch1");
+  const html = render(U.OesChart, { st, ch: "ch1" });
+  const t = textOf(html);
+  const ticks = Array.from({ length: 12 }, (_, k) => String(100 + k * 100));
+  const yt = Array.from({ length: 9 }, (_, k) => String(k * 2000));
+  const empty = render(U.OesChart, { st, ch: "ch2" });
+  check("ui:oes-chart — OES 그래프(x Wavelength (nm) 100~1200 100 간격, y Intensity 0~16000 눈금 9, 빨간 선; 512점 이하·꼭대기 유지, 값 없으면 빈 축)",
+        !!pts && pts.length <= 512 && pts.length >= 256 && pts.every((p) => p.x >= 100 && p.x <= 1200)
+        && pts.some((p) => Math.abs(p.x - fx.oes_peak_x) < 1e-6 && p.y === 15500) && st.spectra.ch1.n === 2048
+        && /data-oes-line=""/.test(html) && html.includes('stroke="#dc2626"') && t.includes("Wavelength (nm)") && t.includes("Intensity")
+        && ticks.every((x) => t.includes(x)) && yt.every((y) => t.includes(y))
+        && !/data-oes-line/.test(empty) && textOf(empty).includes("값 없음") && st.spectra.ch2 === null,
+        { n: pts?.length, spectra: Object.keys(st.spectra ?? {}) });
+  // 지우기(v1 graph.reset·clear_rga_plot) — 그 챔버 run_end·스캔 시작 뒤에는 RGA 그림 없음
+  const ev = (kind, extra) => ({ id: `x${Math.random()}`, type: "event", ts: fx.state.ts, seq: 1, instance: "i",
+    data: { level: "info", code: "X", message: extra?.message ?? "", context: { source: "rga", chamber: "ch1", kind, data: extra?.data ?? {} } } });
+  const dat = ev("data", { data: { mass_axis: [18, 28], pressures: [1e-7, 2e-8] } });
+  const runEnd = { id: "re", type: "run_end", ts: fx.state.ts, seq: 2, instance: "i", data: { chamber: "ch1", runId: "r" } };
+  const runEnd2 = { ...runEnd, id: "re2", data: { chamber: "ch2", runId: "r" } };
+  check("ui:spectra-reset — 그래프 지우기 v1 그대로(공정 시작·끝·RGA 스캔 시작 뒤 RGA 없음, 다른 챔버 공정은 상관없음; OES 는 장비가 비움)",
+        U.rgaPoints([dat, runEnd], "ch1") === null && U.rgaPoints([dat, ev("status", { message: "[RGA] 스캔 시작 — 예산 2회" })], "ch1") === null
+        && U.rgaPoints([dat, runEnd2], "ch1")?.length === 2 && U.rgaPoints([runEnd, dat], "ch1")?.length === 2, null);
+}
+{
+  // 장비 키 state.engines["proc.chN"](assembly.register_engine) — 블록 목록·수정 항목·시작한 블록 수·시퀀스 편집 창
+  const eng = st.engines["proc.ch1"];
+  const cb = L.currentBlocks(st, feed, "ch1");
+  const html = render(U.Ch12Chamber, chamberProps("ch1"));
+  const seq = textOf(render(U.Ch12SeqEdit, { bundle, st, feed, ch: "ch1", can, onAsk: noop, onClose: noop }));
+  check("ui:engines-key — 포털이 장비 키 proc.chN 을 읽음(엔진 상태 글·블록 목록·started_upto·수정 항목·시퀀스 편집 창이 채워짐)",
+        L.engineOf(st, "ch1") === eng && !!eng && cb.from === "engine" && cb.blocks.length === eng.blocks.length && eng.blocks.length > 0
+        && L.startedUpto(st, "ch1", cb.blocks.length) === eng.started_upto && eng.started_upto >= 1 && Array.isArray(eng.adjust)
+        && textOf(html).includes(eng.text) && !seq.includes("아직 받지 못했습니다") && !seq.includes("모르는 키") && !seq.includes("오류 ") && seq.includes(`시작한 블록 ${eng.started_upto}/${eng.blocks.length}`)
+        && L.engineOf(st, "ch2") === st.engines["proc.ch2"], { keys: Object.keys(st.engines), from: cb.from, seq: seq.slice(0, 200) });
+}
+{
+  // 히터 패널 글(v1 ui/heater_panel.py 우선순위 문구 — 장비 heater_panel_text)
+  const p = st.heater.panel;
+  const t = textOf(render(U.HeaterThicknessPanel, { bundle, st, can, onAsk: noop, plcOk: true }));
+  check("ui:heater-text — v1 히터 패널 상태 문구·상태 줄·배지·소유자·램프(값 표 대신)",
+        !!p && t.includes(p.status_text) && t.includes(p.state_line) && t.includes(p.badge) && t.includes(`소유 ${p.owner_text}`)
+        && ["TC", "D/A", "냉각수", "진공", "인터락", "과온", "TC 이상", "워치독"].every((x) => t.includes(x))
+        && ["정지", "운전 중", "운전 중 · 램프", "운전 중 · 유지", "PLC 응답 없음"].some((x) => p.status_text.startsWith(x) || p.status_text.startsWith("인터락")),
+        p);
+}
+{
+  // 두께 Factor·재료 창(v1 thickness_factor_dialog·thickness_material_dialog 그대로 — 값은 THICKNESS_WINDOW 사건)
+  const win = U.TH.windowEvent(feed, "ui-w1");
+  const fh = win && render(U.TH.FactorDialog, { win, feed, can, send: async () => ({}), onClose: noop, onReload: noop });
+  const ft = fh ? textOf(fh) : "", fb = fh ? buttons(fh) : {};
+  const mh = win && render(U.TH.MaterialsDialog, { win, used: [], can, send: async () => ({}), onClose: noop, onSaved: noop });
+  const mt = mh ? textOf(mh) : "", mb = mh ? buttons(mh) : {};
+  const mats = U.TH.matsOf(win?.materials);
+  const fa = fx.factor_bad_args;
+  const fc = U.TH.factorCollect(fa.tooling, fa.materials, mats);
+  const mc = U.TH.materialsCollect(fx.materials_bad_rows);
+  const factorText = "고칠 칸이 있어 저장하지 않았습니다:\n\n" + fc.errs.join("\n");
+  const matText = "고칠 칸이 있어 저장하지 않았습니다:\n\n" + mc.errs.slice(0, 15).join("\n");
+  check("ui:thickness-factor — Factor 창(제목·tooling 3×3 Up/Mid/Down×G1~G3·안내·재료 드롭다운 '(선택 안 함)'·ρ/Z 표시·저장/장비에 쓰기/재료 목록 편집/취소)",
+        fx.cmd.window.ok && !!win && ft.includes("CH2 Thickness Monitor — Factor 설정") && ft.includes(win.factor.tooling_header)
+        && ft.includes(win.factor.material_header) && ["Up", "Mid", "Down", "G1", "G2", "G3"].every((x) => ft.includes(x))
+        && fh.includes('value="(선택 안 함)"') && fb["저장"] === false && fb["장비에 쓰기"] === false && fb["재료 목록 편집"] === false
+        && fb["취소"] === false && ft.includes(win.factor.write_note) && ft.includes("저장하면 다음 공정 시작 때 적용됩니다")
+        && U.TH.valueText("Al — Aluminum", mats, "G1") === "ρ 2.73 · Z 1.080" && U.TH.valueText("없음", mats, "G1") === "목록에 없음"
+        && U.TH.valueText("", mats, "G1") === "—", { title: win?.factor.title, fb });
+  check("ui:thickness-factor-check — 저장 검사 문구가 장비(v1)와 같음(tooling 10~399·숫자 아님·재료 목록에 없음, 빨간 칸)",
+        fx.cmd.factor_bad.reason === "BAD_ARGS" && fx.cmd.factor_bad.detail === factorText.slice(0, 300)
+        && fc.bad.join() === "tooling.up.G1,tooling.mid.G3,material.G1" && U.TH.checkTooling("120.5").v === 120.5,
+        { web: factorText, dev: fx.cmd.factor_bad.detail, bad: fc.bad });
+  check("ui:thickness-materials — 재료 창(제목·열 이름·기호·density·Z-factor·note·행 추가/행 삭제/저장/취소)·저장 검사 문구가 장비와 같음",
+        mt.includes("Thickness Monitor — 재료 목록") && ["이름", "기호", "density (g/cm3)", "Z-factor", "note"].every((x) => mt.includes(x))
+        && mt.includes(win.materials.header) && "행 추가" in mb && "행 삭제" in mb && mb["저장"] === false && mb["취소"] === false
+        && (mh.match(/<tr/g) ?? []).length === win.materials.rows.length + 1
+        && fx.cmd.materials_bad.reason === "BAD_ARGS" && fx.cmd.materials_bad.detail === matText.slice(0, 300)
+        && mc.bad.join(" ") === "0,0 1,2 1,3 3,0" && U.TH.deleteConfirmText(["Aluminum"]).startsWith("Factor 설정에서 쓰는 재료입니다: Aluminum\n"),
+        { web: matText, dev: fx.cmd.materials_bad.detail, bad: mc.bad });
+}
+{
+  // 알림창(v1 경고 5 s·오류창(닫으면 오류 해제)·호스트 15 s, 같은 (제목, 본문) 억제·동시 5개)
+  const pops = feed.map(U.PO.popupOf).filter(Boolean);
+  const warn = pops.find((p) => p.title === "대기 필요" && p.chamber === "ch2");
+  const fail = pops.find((p) => p.title === "CH1 공정 실패");
+  const pc = pops.find((p) => p.title === "게이트밸브 인터락");
+  const host = pops.find((p) => p.kind === "host");
+  const A = U.PO.admit;
+  const mk = (i, extra = {}) => ({ ...warn, id: `p${i}`, title: `t${i}`, ...extra });
+  const five = [0, 1, 2, 3, 4].map((i) => mk(i));
+  const html = render(U.PO.PopupStack, { list: [warn, fail, host], onClose: noop });
+  check("ui:popups — v1 알림창 규칙(경고 5 s 자동 닫힘·오류창 자동 닫힘 없음·닫으면 CHAMBER_ERROR_CLEAR/PC_ERROR_CLEAR·호스트 15 s·중복 억제·동시 5개)",
+        !!warn && warn.kind === "warning" && warn.autoMs === 5000 && !warn.clear
+        && !!fail && fail.kind === "critical" && fail.autoMs === null && fail.clear?.kind === "CHAMBER_ERROR_CLEAR" && fail.clear.args.ch === 1
+        && !!pc && pc.clear?.kind === "PC_ERROR_CLEAR" && pc.clear.args.ch === 2
+        && !!host && host.autoMs === 15000 && host.title.length > 0 && !!bundle.commands.find((c) => c.kind === "CHAMBER_ERROR_CLEAR")
+        && A([warn], { ...warn, id: "z" }).why === "dup" && A(five, mk(9)).why === "cap" && A(five, { ...fail, id: "f2" }).show
+        && A([{ ...fail, clearOnClose: false, clear: null }], { ...fail, id: "f3" }).show && A([fail], { ...fail, id: "f4" }).why === "dup"
+        && (html.match(/role="alertdialog"/g) ?? []).length === 3 && textOf(html).includes("이전 공정 종료 후 1분 대기 필요합니다."),
+        { warn, fail, pc, host });
+}
+{
+  // 노트북 화면 파일 고르기(장비 local_server GET /api/v1/files — 시작 폴더 PROCESS_LIST_START_DIR 아래, csv·xlsx·폴더)
+  const html = render(U.LF.LocalFiles, { bundle, can, onAsk: noop, initial: fx.files });
+  const t = textOf(html);
+  const csv = fx.files.entries.find((e) => e.name === "r1.csv");
+  const tg = U.LF.fileTargets(bundle, csv);
+  const tx = U.LF.fileTargets(bundle, fx.files_sub.entries[0]);
+  check("ui:local-files — 장비 폴더 목록(폴더 먼저·csv/xlsx 만·위 폴더)·고른 파일 → CH1/CH2 적재·PC 불러오기(csv)·프리스퍼터 레시피(path)",
+        fx.files.dir === "" && fx.files.parent === null && fx.files.entries.map((e) => e.name).join() === "sub,r1.csv" && t.includes("sub")
+        && t.includes("r1.csv") && !t.includes("x.txt") && fx.files_sub.parent === "" && fx.files_bad === 403
+        && tg.map((x) => x.label).join() === "CH1 적재,CH2 적재,PC 불러오기,CH1 프리스퍼터 레시피,CH2 프리스퍼터 레시피"
+        && tg[0].kind === "RECIPE_LOAD" && tg[0].args.path === csv.full && tg[1].args.ch === 2
+        && !tx.some((x) => x.kind === "PC_RECIPE_LOAD"), { files: fx.files, tg });
 }
 
 // ───────────── 2) logic.ts ─────────────

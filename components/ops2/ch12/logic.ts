@@ -7,6 +7,7 @@ import { paramValue } from "../chk/logic";
 import type { FeedItem } from "../chk/useChk2";
 import {
   STATE_FALLBACK, asChk, type ArgDef12, type Ch12Bundle, type Ch12State, type ChamberId, type ChamberState, type CommandDef12,
+  type EngineState,
 } from "./types";
 
 /** 명령 이름 — 장비 v2/ch12/commands.py 명령 표(묶음 commands)의 이름을 먼저, 뒤 후보는 표가 바뀌었을 때를 대비한 것 */
@@ -19,7 +20,7 @@ export const KINDS = {
   pcStart: ["PC_START"], pcStop: ["PC_STOP"], pcSelect: ["PC_SELECT_CH"], pcErrClear: ["PC_ERROR_CLEAR"],
   tspStart: ["TSP_START"], tspStop: ["TSP_STOP"], tspSchedule: ["TSP_SCHEDULE"],
   heaterOnOff: ["HEATER_ONOFF"], heaterApply: ["HEATER_APPLY"], heaterReset: ["HEATER_RESET"],
-  thkZero: ["THICKNESS_ZERO"], thkReload: ["THICKNESS_RELOAD"], powerSelect: ["POWER_SELECT"], dump: ["RUNTIME_DUMP"],
+  thkZero: ["THICKNESS_ZERO"], thkReload: ["THICKNESS_RELOAD"], thkWindow: ["THICKNESS_WINDOW"], powerSelect: ["POWER_SELECT"], dump: ["RUNTIME_DUMP"],
   plc: ["PLC_BUTTON"],
 } as const;
 
@@ -61,6 +62,14 @@ export function chArgs(b: Ch12Bundle | null, kind: string, ch: "ch1" | "ch2", ex
 
 // ───────────── 상태 ─────────────
 export const chamberState = (st: Ch12State | null, ch: ChamberId): ChamberState | null => st?.chambers?.[ch] ?? null;
+
+/** 엔진 화면 상태 — 장비 허브 state.engines 의 키는 챔버 공정이 "proc.ch1"·"proc.ch2"(assembly.register_engine),
+ *  플라즈마 클리닝·TSP 는 "pc"·"tsp". 챔버 이름만으로도(옛 키) 찾는다 */
+export function engineOf(st: Ch12State | null, ch: ChamberId): EngineState | undefined {
+  const e = st?.engines;
+  if (!e) return undefined;
+  return (ch === "ch1" || ch === "ch2" ? e[`proc.${ch}`] ?? e[ch] : e[ch]) ?? undefined;
+}
 
 /** 공정 상태 이름·종류 — 묶음 states(장비 표)를 먼저, 없으면 대신 쓰는 이름 */
 export function stateInfo(b: Ch12Bundle | null, name: string | null | undefined, ch?: string): { label: string; kind: string } {
@@ -142,8 +151,16 @@ export function feedChamber(e: FeedItem): string {
 
 /** 시퀀스 편집 — 지금 레시피 블록(엔진 web_state → 마지막 편집 사건 record.blocks → 이 run 의 run_start.blocks) */
 export function currentBlocks(st: Ch12State | null, feed: FeedItem[], ch: ChamberId): { blocks: unknown[] | null; from: string } {
-  const eng = st?.engines?.[ch];
-  if (Array.isArray(eng?.blocks)) return { blocks: eng.blocks, from: "engine" };
+  const eng = engineOf(st, ch);
+  // 엔진 블록 {i, type, label, params} — i(자리 번호)는 블록 정의 키가 아니라 뺀다(웹 검사가 '모르는 키'로 보지 않게)
+  if (Array.isArray(eng?.blocks)) {
+    return { blocks: eng.blocks.map((b) => {
+      if (typeof b !== "object" || b === null) return b;
+      const { i: _i, ...rest } = b as Record<string, unknown>;
+      void _i;
+      return rest;
+    }), from: "engine" };
+  }
   const runId = st?.chambers?.[ch]?.runId ?? null;
   for (let i = feed.length - 1; i >= 0; i--) {
     const e = feed[i];
@@ -163,7 +180,7 @@ export function currentBlocks(st: Ch12State | null, feed: FeedItem[], ch: Chambe
 
 /** 시작한(지금 포함) 블록 수 — 엔진 started_upto, 없으면 블록 번호(1부터 = cur_block + 1) */
 export function startedUpto(st: Ch12State | null, ch: ChamberId, n: number): number {
-  const eng = st?.engines?.[ch];
+  const eng = engineOf(st, ch);
   const v = eng?.startedUpto ?? eng?.started_upto;
   if (typeof v === "number") return Math.max(0, Math.min(n, v));
   const no = st?.chambers?.[ch]?.step?.no;

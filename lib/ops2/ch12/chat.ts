@@ -10,13 +10,17 @@
 //   같은 열쇠 첫 행 payload.cycle = true, 창 안 재발은 skipped "반복" + payload.repeatOf(첫 행 msg_id) — 창이 지나 다시 오면
 //   그동안 억제된 수를 부제 끝(장비 오류)·'반복' 칸(로봇 에러)에. 억제가 남은 채 만료된 다른 열쇠는 다음 장비 오류 때 요약 카드
 //   한 장(msg_id <첫 행>:summary — 한 번만).
+// 전송 폭주 보호(v1 _schedule_post — CHAT_PENDING_MAX 200·CHAT_PENDING_HARD_MAX 1000, 장비 묶음 설정값 — lib/ops2/ch12/chatLimits.ts):
+//   노티파이어마다(payload.pendGroup) 보내지 못한 queued 행이 상한 이상이면 일반 카드는 skipped "대기 상한 초과 — 생략…"(urgent 는
+//   하드 상한까지 통과), 다음에 통과하는 카드 본문 끝에 '(전송 실패로 생략된 알림 N건)' 한 번(payload.dropAck·droppedNote).
 import type { Prisma } from "@/app/generated/prisma/client";
 import { ops2Db } from "@/lib/ops2/db";
 import { deviceBundle } from "@/lib/ops2/browser";
 import { sendsChat, wakeChat, webhookOf, type Channel } from "@/lib/ops2/chat";
 import {
-  buildCh12Items, chatCfgOf, emptyState, errorSummaryCard, NOTIFIERS, type Ch12Envelope, type Ch12Item, type Ch12State,
+  buildCh12Items, chatCfgOf, emptyState, errorSummaryCard, NOTIFIERS, type Ch12ChatCfg, type Ch12Envelope, type Ch12Item, type Ch12State,
 } from "@/lib/ops2/ch12/chatCards";
+import { admit, annotateDropped, DROP_REASON, pendGroupOf, URGENT_KINDS, type Gate } from "@/lib/ops2/ch12/chatLimits";
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -56,6 +60,39 @@ async function seedState(equipment: string, now: Date): Promise<Ch12State> {
 
 type Row = Prisma.Ops2ChatOutboxCreateManyInput;
 
+/** 묶음(v1 ChatNotifier)의 지금 상태 — 보내지 못한 행 수, 마지막 생략 표기 뒤 버린 행 수(하루 안) */
+async function gateOf(equipment: string, group: string, now: Date): Promise<Gate> {
+  const pending = await ops2Db.ops2ChatOutbox.count({ where: { equipment, status: "queued", ...pathEq("pendGroup", group) } });
+  const ack = await ops2Db.ops2ChatOutbox.findFirst({
+    where: { equipment, ...pathEq("pendGroup", group), AND: [pathEq("dropAck", true)] }, orderBy: { id: "desc" }, select: { id: true },
+  });
+  const dropped = await ops2Db.ops2ChatOutbox.count({
+    where: { equipment, status: "skipped", lastError: DROP_REASON, ...pathEq("pendGroup", group),
+             createdAt: { gte: new Date(now.getTime() - DAY_MS) }, ...(ack ? { id: { gt: ack.id } } : {}) },
+  });
+  return { pending, dropped };
+}
+
+/** 전송 폭주 보호(v1 _schedule_post — chatLimits): 보낼 행을 받은 순서대로 묶음마다 상한에 넣어 보고, 넘으면 생략(skipped),
+ *  통과한 행에 그동안 생략한 건수를 한 번 붙인다(본문 끝 '(전송 실패로 생략된 알림 N건)'). */
+async function applyPendingCaps(equipment: string, rows: Row[], meta: Map<Row, { group: string | null; urgent: boolean }>,
+                                cfg: Ch12ChatCfg, now: Date): Promise<void> {
+  const gates = new Map<string, Gate>();
+  for (const row of rows) {
+    const m = meta.get(row);
+    if (!m?.group || row.status !== "queued") continue;
+    let g = gates.get(m.group);
+    if (!g) gates.set(m.group, (g = await gateOf(equipment, m.group, now)));
+    const r = admit(g, m.urgent, cfg);
+    const pl = (isObj(row.payload) ? row.payload : {}) as Obj;
+    if (!r.ok) {
+      Object.assign(row, { status: "skipped", lastError: DROP_REASON, nextAt: null });
+      continue;
+    }
+    if (r.note > 0) row.payload = { ...pl, body: annotateDropped(isObj(pl.body) ? pl.body : {}, r.note), dropAck: true, droppedNote: r.note } as Prisma.InputJsonValue;
+  }
+}
+
 /** ingest 가 커밋한 envelope 들(받은 순서) → outbox. 넣은 행 수 */
 export async function enqueueChatCh12(equipment: string, envs: Ch12Envelope[], now: Date): Promise<number> {
   // 카드가 될 것이 있는지 먼저(빈 상태로) — 없으면 DB 를 더 읽지 않는다
@@ -76,19 +113,23 @@ export async function enqueueChatCh12(equipment: string, envs: Ch12Envelope[], n
   const mode = sendsChat(equipment, dev.runMode);
   const win = cfg.dedupS * 1000;
   const rows: Row[] = [];
+  const meta = new Map<Row, { group: string | null; urgent: boolean }>();
   const add = (it: Ch12Item, title: string, body: Obj, skip: string | null, extra: Obj = {}, msgId = it.msgId) => {
     let ch: Channel = it.channel;
     if (it.fallback && !webhookOf(equipment, ch)) ch = it.fallback;
     const why = !mode ? `보내지 않음(모드 ${dev.runMode ?? "?"})` : !webhookOf(equipment, ch) ? "주소 없음" : skip;
-    rows.push({
+    const group = pendGroupOf(it.kind, ch as Ch12Item["channel"], it.notifier);
+    const row: Row = {
       equipment, kind: it.kind, msgId, status: why ? "skipped" : "queued", lastError: why, createdAt: now,
       nextAt: why ? null : new Date(now.getTime() + (it.delayMs ?? 0)),
       payload: {
         title, body, channel: ch, notifier: it.notifier, chamber: it.chamber ?? null, runId: it.runId ?? null, from: it.from,
         ...(it.startParams ? { startParams: it.startParams } : {}), ...(it.errorLine ? { errorLine: it.errorLine } : {}),
-        ...(it.late ? { late: true } : {}), ...extra,
+        ...(it.late ? { late: true } : {}), ...(group ? { pendGroup: group } : {}), ...extra,
       } as Prisma.InputJsonValue,
-    });
+    };
+    rows.push(row);
+    meta.set(row, { group, urgent: URGENT_KINDS.has(it.kind) });
   };
 
   // ── 만료된 다른 열쇠의 요약 카드(장비 오류 — 다음 장비 오류가 올 때, v1 expired_cards) ──
@@ -158,6 +199,9 @@ export async function enqueueChatCh12(equipment: string, envs: Ch12Envelope[], n
     add(it, b.title, b.body, null, { dedupKey: key, cycle: true, ...(summarySub ? { summarySub } : {}) });
     mem.set(memKey, { msgId: it.msgId, at: now.getTime(), n: 0 });
   }
+
+  // ── 전송 폭주 보호(v1 CHAT_PENDING_MAX·CHAT_PENDING_HARD_MAX — 장비 묶음 설정값) ──
+  await applyPendingCaps(equipment, rows, meta, cfg, now);
 
   const r = await ops2Db.ops2ChatOutbox.createMany({ data: rows, skipDuplicates: true });
   if (rows.some((x) => x.status === "queued")) wakeChat();

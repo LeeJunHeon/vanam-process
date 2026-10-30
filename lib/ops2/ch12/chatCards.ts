@@ -82,8 +82,16 @@ export type Ch12ChatCfg = {
   plcSuppress: boolean;
   /** CHAT_PLC_LINK_CODES */
   plcCodes: string[];
+  /** CHAT_POST_CONCURRENCY — 동시 POST 상한(v1 4). 보내기(lib/ops2/chat.ts)는 하나씩이라 늘 안(chatLimits.SENDER_CONCURRENCY) */
+  postConcurrency: number;
+  /** CHAT_PENDING_MAX — 노티파이어마다 보내지 못한 카드 상한(넘으면 일반 카드 생략·건수 표기, v1 200 — chatLimits) */
+  pendingMax: number;
+  /** CHAT_PENDING_HARD_MAX — urgent 카드도 넘지 못하는 상한(v1 1000) */
+  pendingHardMax: number;
 };
-export const DEFAULT_CFG: Ch12ChatCfg = { dedupS: 60, plcSuppress: true, plcCodes: ["E401", "E402"] };
+export const DEFAULT_CFG: Ch12ChatCfg = {
+  dedupS: 60, plcSuppress: true, plcCodes: ["E401", "E402"], postConcurrency: 4, pendingMax: 200, pendingHardMax: 1000,
+};
 
 export type NotifierState = { errors: string[]; lastStart: Obj | null };
 export type Ch12State = Record<Notifier, NotifierState>;
@@ -116,10 +124,18 @@ export function chatCfgOf(values: Obj | null | undefined): Ch12ChatCfg {
     }
   }
   const list = Array.isArray(codes) ? codes.map((c) => String(c).trim().toUpperCase()).filter(Boolean) : DEFAULT_CFG.plcCodes;
+  // v1 max(1, int(값)) — 숫자가 아니면 기본값(v1 은 설정 조회 실패 시 (4, 200)·1000)
+  const atLeast1 = (x: unknown, dflt: number) => {
+    const n = Number(x);
+    return x !== null && x !== undefined && x !== "" && typeof x !== "boolean" && Number.isFinite(n) ? Math.max(1, Math.trunc(n)) : dflt;
+  };
   return {
     dedupS: Number.isFinite(d) && d >= 0 ? d : DEFAULT_CFG.dedupS,
     plcSuppress: typeof v.CHAT_PLC_LINK_SUPPRESS === "boolean" ? v.CHAT_PLC_LINK_SUPPRESS : DEFAULT_CFG.plcSuppress,
     plcCodes: list,
+    postConcurrency: atLeast1(v.CHAT_POST_CONCURRENCY, DEFAULT_CFG.postConcurrency),
+    pendingMax: atLeast1(v.CHAT_PENDING_MAX, DEFAULT_CFG.pendingMax),
+    pendingHardMax: atLeast1(v.CHAT_PENDING_HARD_MAX, DEFAULT_CFG.pendingHardMax),
   };
 }
 

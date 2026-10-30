@@ -15,10 +15,11 @@ import { reasonLabel, type AdjustState, type StateData } from "../chk/types";
 import type { FeedItem } from "../chk/useChk2";
 import { fmtKst } from "@/lib/ops2/time";
 import Ch12Mimic from "./Ch12Mimic";
-import { RgaChart } from "./Ch12Spectra";
+import { Spectra } from "./Ch12Spectra";
 import { Btn, CmdForm } from "./Ch12Controls";
 import {
-  KINDS, blockControl, blockLabel, chArgs, chamberState, clockOrDash, feedChamber, hasKind, isRunning, pickKind, short, stateInfo,
+  KINDS, blockControl, blockLabel, chArgs, chamberState, clockOrDash, engineOf, feedChamber, hasKind, isRunning, pickKind, short,
+  stateInfo,
 } from "./logic";
 import { OWNER_LABEL, asChk, type Ch12Bundle, type Ch12State } from "./types";
 
@@ -45,9 +46,9 @@ export default function Ch12Chamber(p: Props) {
   const info = stateInfo(bundle, cs?.procState, ch);
   const running = isRunning(bundle, cs);
   const ctl = blockControl(bundle, cs);
-  const eng = st?.engines?.[ch];
+  const eng = engineOf(st, ch);                       // 장비 키 state.engines["proc.chN"]
   // 프리스퍼터 예약 표시(장비 proc.chN web_state.presputter — v1 preSputter_remainigTime_edit·LeftTime_edit·레시피 표시칸)
-  const pre = (eng ?? st?.engines?.[`proc.${ch}`])?.presputter as Record<string, unknown> | undefined;
+  const pre = eng?.presputter as Record<string, unknown> | undefined;
   const label = cdef?.label ?? ch.toUpperCase();
   const can = (kind: string) => allowed(kind, `${kind}@${ch}`);
 
@@ -197,7 +198,7 @@ export default function Ch12Chamber(p: Props) {
         })}
       </div>
 
-      <RgaChart feed={feed} ch={ch} />
+      <Spectra feed={feed} st={st} ch={ch} />
 
       {targets.length > 0 && (
         <Card title="공정 목표값" right={<span className="text-[10px] text-gray-400">그 시각 엔진이 장비에 요청한 값</span>}>

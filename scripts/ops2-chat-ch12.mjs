@@ -6,6 +6,8 @@
 //  - summary: 만료된 다른 열쇠 요약 카드 errorSummaryCard · tail: 그 뒤 카드
 //  - skipped: 억제(PLC 연결계 E401·E402)한 수 · channel: 모든 카드의 채널
 // 그리고 v1 에 없는 새 카드(재시작·이어가기 결과 — 지시 3장 (7))와 sim 규칙·채널은 아래 NEW 에서 문구를 직접 본다.
+// 전송 폭주 보호(lib/ops2/ch12/chatLimits.ts — v1 _schedule_post·_annotate_dropped)는 v1 시험 tests/test_leak_guards.py
+// test_4·4b·9·10 의 숫자와 v1 _annotate_dropped 를 실제로 돌린 결과(아래 LIMIT_V1)로 본다.
 // 새 의존성 없이: node 가 .ts 의 타입만 지우고 실행한다(Node 22.18+/23.6+ 기본). 다른 것이 하나라도 있으면 exit 1.
 import { readFileSync } from "node:fs";
 import { registerHooks } from "node:module";
@@ -19,6 +21,7 @@ registerHooks({
   },
 });
 const C = await import("../lib/ops2/ch12/chatCards.ts");
+const LIM = await import("../lib/ops2/ch12/chatLimits.ts");
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const arg = (k) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : null; };
@@ -160,6 +163,47 @@ const check = (name, cond, got) => NEW.push({ name, ok: !!cond, got });
   const items = C.buildCh12Items([e("event", { level: "error", code: "ERROR_EVENT", message: "m", context: { source: "host", chamber: "shared",
     kind: "error_event", data: { src: "HOST", code: "E401", message: "PLC 응답 없음" } } }, "g1")], { now: new Date(NOW) }, C.emptyState(), cfg);
   check("CHAT_PLC_LINK_SUPPRESS 끄면 E401 카드 보냄", items.length === 1 && !items[0].skip, items.map((i) => i.skip));
+}
+{
+  // ── 전송 폭주 보호(v1 CHAT_POST_CONCURRENCY·CHAT_PENDING_MAX·CHAT_PENDING_HARD_MAX) ──
+  const d = C.chatCfgOf({});
+  check("설정 기본값 = v1(4·200·1000)", d.postConcurrency === 4 && d.pendingMax === 200 && d.pendingHardMax === 1000, d);
+  const c2 = C.chatCfgOf({ CHAT_POST_CONCURRENCY: 2, CHAT_PENDING_MAX: 0, CHAT_PENDING_HARD_MAX: 5.7 });
+  check("설정값 읽기 max(1, int(값))(CHAT_POST_CONCURRENCY·CHAT_PENDING_*)", c2.postConcurrency === 2 && c2.pendingMax === 1 && c2.pendingHardMax === 5, c2);
+  check("동시 POST — 보내기는 하나씩(≤ CHAT_POST_CONCURRENCY, v1 test_4b 의 2 도)", LIM.SENDER_CONCURRENCY <= c2.postConcurrency
+        && LIM.SENDER_CONCURRENCY <= d.postConcurrency, LIM.SENDER_CONCURRENCY);
+  // v1 test_4: 일반 카드 1000 장 → 대기 ≤ 200, 드롭 800 — 자리가 나면 다음 카드(urgent)에 '생략된 알림 800건' 1회, 0 으로
+  const g = { pending: 0, dropped: 0 };
+  const res = Array.from({ length: 1000 }, () => LIM.admit(g, false, d));
+  check("일반 카드 1000 → 통과 200 · 드롭 800", res.filter((r) => r.ok).length === 200 && g.pending === 200 && g.dropped === 800, g);
+  g.pending = 0;                                                     // 보냄(대기 비움)
+  const nx = LIM.admit(g, true, d);
+  check("다음 카드에 드롭 건수 800 한 번 · 0 으로", nx.ok && nx.note === 800 && g.dropped === 0 && LIM.admit(g, false, d).note === 0, [nx, g]);
+  // v1 test_9·10: urgent 는 소프트 상한 통과(드롭 표기 소진), 하드 상한에서는 드롭
+  const u = { pending: 200, dropped: 5 };
+  const r9 = LIM.admit(u, true, d), r9n = LIM.admit(u, false, d);
+  check("urgent 는 CHAT_PENDING_MAX 통과(표기 5) · 일반은 드롭", r9.ok && r9.note === 5 && !r9n.ok && u.dropped === 1, [r9, r9n, u]);
+  const h = { pending: 1000, dropped: 0 };
+  check("urgent 도 CHAT_PENDING_HARD_MAX 에서 드롭", !LIM.admit(h, true, d).ok && h.dropped === 1, h);
+  // v1 _annotate_dropped 를 실제로 돌린 결과(controller/chat_notifier.py:223-243)
+  const LIMIT_V1 = [
+    [C.card("t", "", "INFO", null), 800, {"cardsV2": [{"cardId": "notify-card", "card": {"header": {"title": "Sputter Controller", "subtitle": "Status Notification"}, "sections": [{"widgets": [{"textParagraph": {"text": "<b>ℹ️ t</b>"}}, {"textParagraph": {"text": "(전송 실패로 생략된 알림 800건)"}}]}]}}]}],
+    [{ text: "a" }, 3, { text: "a\n(전송 실패로 생략된 알림 3건)" }],
+    [{ x: 1 }, 2, { x: 1, text: "(전송 실패로 생략된 알림 2건)" }],
+  ];
+  for (const [pl, n, want] of LIMIT_V1) {
+    const out = [];
+    same(LIM.annotateDropped(pl, n), want, "annotate", out);
+    check(`생략 표기(v1 _annotate_dropped) ${JSON.stringify(pl).slice(0, 30)}`, !out.length && JSON.stringify(pl) !== JSON.stringify(want), out);
+  }
+  // 묶음(v1 ChatNotifier 인스턴스)·urgent 종류
+  const grp = [LIM.pendGroupOf("run_start", "process", "CH1"), LIM.pendGroupOf("plc_link", "plc", null), LIM.pendGroupOf("error_event", "plc", "HOST"),
+               LIM.pendGroupOf("client", "client", null), LIM.pendGroupOf("monitor", "monitor", null), LIM.pendGroupOf("oes", "oes", null),
+               LIM.pendGroupOf("error_event", "process", "HOST"), LIM.pendGroupOf("run_end", "process", "TSP")];
+  check("대기 묶음 = v1 노티파이어(CH1·PLC·PLC·CLIENT·없음·없음·HOST·TSP)", grp.join() === "CH1,PLC,PLC,CLIENT,,,HOST,TSP", grp);
+  const urg = ["run_start", "error_event", "heater", "plc_link", "client"].every((k) => LIM.URGENT_KINDS.has(k))
+    && !["run_end", "run_fail", "text", "aggregate", "resumed", "monitor", "oes"].some((k) => LIM.URGENT_KINDS.has(k));
+  check("urgent 종류 = v1 urgent=True 카드(공정 시작·장비 오류·히터·PLC 연결·로봇 클라이언트)", urg, [...LIM.URGENT_KINDS]);
 }
 for (const n of NEW) if (!n.ok) console.log(`  ✗ ${n.name}\n      ${JSON.stringify(n.got).slice(0, 600)}`);
 console.log(`  새 카드·포털 규칙 ${NEW.length} · 맞음 ${NEW.filter((n) => n.ok).length} · 틀림 ${NEW.filter((n) => !n.ok).length}`);

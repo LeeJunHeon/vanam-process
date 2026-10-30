@@ -12,6 +12,7 @@ import type { FeedItem } from "../chk/useChk2";
 import { logLine } from "../chk/text";
 import { fmtKst } from "@/lib/ops2/time";
 import { CmdForm } from "./Ch12Controls";
+import { FactorButton } from "./Ch12Thickness";
 import { KINDS, chamberState, clockOrDash, hasKind, pickKind, short, stateInfo } from "./logic";
 import { OWNER_LABEL, asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types";
 
@@ -41,8 +42,57 @@ function ProcLine({ bundle, st, ch }: { bundle: Ch12Bundle | null; st: Ch12State
   );
 }
 
+// v1 히터 패널 램프(ui/heater_panel.py _LAMPS — 윗줄 인터락 조건, 아랫줄 결과·이상)
+const LAMPS: [string, string, "ok" | "err", string][] = [
+  ["tc_ok", "TC", "ok", "TC1_OK (M0040D) — 열전대 입력 정상"], ["da_ok", "D/A", "ok", "DA_OK (M00410) — D/A 출력 모듈 정상"],
+  ["water_ok", "냉각수", "ok", "WATER_OK (M00411) — CH2 냉각수 신호(WATER_2_SGN)"],
+  ["vac_ok", "진공", "ok", "VAC_OK (M00412) — CH2 메인밸브 인터락(M_V_2_인터락)"],
+  ["itl", "인터락", "ok", "ITL (M00401) — TC1_OK · DA_OK · 냉각수 · 진공 · ¬FAULT"], ["ot", "과온", "err", "OT (M00404) — 과온 트립(래치, 리셋 필요)"],
+  ["tc_err", "TC 이상", "err", "TC_ERR (M00405) — 운전 중 센서 이상(래치, 리셋 필요)"],
+  ["wd_err", "워치독", "err", "WD_ERR (M00406) — 파이썬 워치독 30초 무변화(래치, 리셋 필요)"],
+];
+const BADGE: Record<string, string> = {
+  FAULT: "border-[#c62828] bg-[#c62828] text-white", ITL: "border-[#ef6c00] bg-[#fff3e0] text-[#ef6c00]",
+  RUN: "border-[#2e7d32] bg-[#e8f5e9] text-[#2e7d32]", STOP: "border-[#c8cdd3] bg-[#eef1f4] text-[#5f6b76]",
+};
+const f1 = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v.toFixed(1) : "---");
+
+/** v1 히터 패널(ui/heater_panel.py _render) — 장비 state.heater.panel(heater_panel_text — v1 문구) + 값 */
+export function HeaterStatus({ he }: { he: Record<string, unknown> }) {
+  const p = (he.panel ?? null) as Record<string, unknown> | null;
+  if (!p) return null;
+  const stale = p.stale === true;
+  const mv = he.mv, lim = he.mv_limit;
+  return (
+    <div className="rounded-xl border border-gray-100 px-2.5 py-2" data-heater-panel="">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${stale ? "border-[#c8cdd3] bg-[#eef1f4] text-[#9aa3ab]" : BADGE[String(p.badge)] ?? ""}`}>{String(p.badge ?? "")}</span>
+        <span className="text-[11px] text-gray-500">소유 {String(p.owner_text ?? "—")}</span>
+        <span className={`text-2xl font-bold tabular-nums ${stale ? "text-[#9aa3ab]" : "text-gray-900"}`}>{f1(he.pv)}</span>
+        <span className={`text-base font-bold tabular-nums ${stale ? "text-[#9aa3ab]" : "text-[#6b7280]"}`}>{f1(p.sv_show)}</span>
+        {typeof p.dev === "number" && <span className="text-[11px] text-[#6b7280]">Δ{p.dev >= 0 ? "+" : ""}{p.dev.toFixed(1)}</span>}
+        <span className="text-[11px] text-gray-600">{String(p.state_line ?? "")}</span>
+        <span className="text-[11px] tabular-nums text-gray-500">{typeof mv === "number" && typeof lim === "number" ? `MV ${mv}/${lim}` : "MV -/-"}</span>
+      </div>
+      <p className="mt-1 text-xs font-bold" style={{ color: String(p.status_color ?? "#616161") }} data-heater-status="">{String(p.status_text ?? "")}</p>
+      <div className="mt-1 grid grid-cols-4 gap-1">
+        {LAMPS.map(([k, label, kind, tip]) => {
+          const on = he[k] === true;
+          const off = stale || he.ok === null || he.ok === undefined;
+          const cls = off ? "border-[#9aa3ab] bg-[#eef1f4] text-[#9aa3ab]" : kind === "ok"
+            ? (on ? "border-[#2e7d32] bg-[#e8f5e9] text-[#2e7d32]" : "border-[#9aa3ab] bg-[#eef1f4] text-[#9aa3ab]")
+            : (on ? "border-[#c62828] bg-[#ffebee] text-[#c62828]" : "border-[#2e7d32] bg-[#e8f5e9] text-[#2e7d32]");
+          return <span key={k} title={tip} className={`rounded border px-1 py-0.5 text-center text-[10px] ${cls}`}>{label}</span>;
+        })}
+      </div>
+    </div>
+  );
+}
+
 /** CH2 히터·두께 */
-export function HeaterThicknessPanel({ bundle, st, can, onAsk, plcOk }: Common & { plcOk: boolean }) {
+export function HeaterThicknessPanel({ bundle, st, can, onAsk, plcOk, feed = [], send, notify }: Common & {
+  plcOk: boolean; feed?: FeedItem[]; send?: Parameters<typeof FactorButton>[0]["send"]; notify?: Parameters<typeof FactorButton>[0]["notify"];
+}) {
   const { detail } = useChk2Mode();
   const snap = st?.snapshot;
   const heat = blockOf(bundle, "ch2.heater");
@@ -61,7 +111,8 @@ export function HeaterThicknessPanel({ bundle, st, can, onAsk, plcOk }: Common &
         {heat ? (
           <BlockCard def={heat} snap={snap} link={st?.links?.["ch2.heater"]} big={["pv", "sv", "mv_pct"]} />
         ) : <Missing what="히터 1초 값(ch2.heater)" />}
-        {heEntries.length > 0 && (
+        <HeaterStatus he={he} />
+        {heEntries.length > 0 && (detail || !he.panel) && (
           <div className="grid grid-cols-2 gap-x-4 rounded-xl border border-gray-100 px-2.5 py-1.5 sm:grid-cols-3">
             {heEntries.filter(([k]) => detail || !k.startsWith("_")).slice(0, detail ? 60 : 12).map(([k, v]) => (
               <div key={k} className="flex items-baseline justify-between gap-2 py-0.5 text-[11px]">
@@ -78,6 +129,7 @@ export function HeaterThicknessPanel({ bundle, st, can, onAsk, plcOk }: Common &
             <div className="flex flex-wrap gap-2">
               {ctl(KINDS.heaterReset, "이상 리셋", { note: "히터 이상 표시를 지웁니다(RUN 이면 장비가 거부)." })}
               {ctl(KINDS.thkZero, "두께 영점", { note: "두께 모니터 영점을 맞춥니다(공정 중이면 장비가 거부)." })}
+              {hasKind(bundle, KINDS.thkWindow) && <FactorButton feed={feed} can={can} send={send} notify={notify} />}
             </div>
             {!plcOk && <p className="text-[10px] text-rose-600">PLC 값이 오래됨 — 히터 조작은 장비가 거부할 수 있습니다</p>}
           </div>

@@ -8,7 +8,8 @@
 // 명령은 하나씩, 결과 알림도 따로(챔버K 와 같은 토스트). 기다리는 동안 막는 단위는 '명령@챔버'(PLC 버튼은 target).
 // 정지 쪽(STOP·ALL STOP·부저·히터 정지·PC/TSP 정지)은 막지 않고, 화면 stream 이 끊겨도 웹이 장비와 이어져 있으면 보낸다.
 // 노트북 로컬 화면(hmi/ch12 → Chamber.Total_program v2\hmi): 같은 Ch12Device 를 mode local — 권한 = hello.commandKinds,
-// bench 면 읽기 전용. 레시피·설정·공정 기록·명령 기록·장비 고르기는 없다.
+// bench 면 읽기 전용. 레시피 편집·설정·공정 기록·명령 기록·장비 고르기는 없다 — 대신 장비 폴더 레시피 파일 고르기(Ch12LocalFiles).
+// 알림창(Ch12Popups — v1 경고 5 s·오류창·호스트 15 s, 중복 억제·동시 5개, 오류창 닫으면 오류 표시 해제)은 두 화면 모두.
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { AlertTriangle, BellOff, Clock, Cloud, CloudOff, Code2, Eye, Laptop, Lock, LogIn, OctagonX, WifiOff } from "lucide-react";
 import Chk2Config from "../chk/Chk2Config";
@@ -24,6 +25,8 @@ import Ch12Chamber from "./Ch12Chamber";
 import { HeaterThicknessPanel, LoadLockPanel, PcPanel, RobotPanel, TspPanel } from "./Ch12Aux";
 import { Btn, PlcPanel } from "./Ch12Controls";
 import Ch12History from "./Ch12History";
+import { LocalFiles } from "./Ch12LocalFiles";
+import { PopupStack, usePopups } from "./Ch12Popups";
 import Ch12Recipes from "./Ch12Recipes";
 import Ch12SeqEdit from "./Ch12SeqEdit";
 import { BUZZER_TARGET, KINDS, STOP_KINDS12, feedChamber, hasKind, pickKind, plcStaleSec } from "./logic";
@@ -120,6 +123,11 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const [plcPending, setPlcPending] = useState<Record<string, { want: boolean; at: number }>>({});
   const [seqFor, setSeqFor] = useState<"ch1" | "ch2" | null>(null);
   const [detail, setDetail] = useDetailPref();
+  // 알림창(v1 경고·오류창 규칙 — Ch12Popups): 화면을 연 뒤(장비 시계) 온 popup·호스트 error_event 만
+  const [openedAt] = useState(() => Date.now());
+  const clearRef = useRef<(c: { kind: string; args: Record<string, unknown> }) => void>(() => {});
+  const onPopupClear = useCallback((c: { kind: string; args: Record<string, unknown> }) => clearRef.current(c), []);
+  const popups = usePopups(d.feed, openedAt + d.offsetMs + (d.hello?.web?.clockSkewMs ?? 0) - 5_000, onPopupClear);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -167,8 +175,19 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
       .map(([t, p]) => [t, p.want]),
   );
 
-  const notify = (n: Omit<Notice, "id" | "at">) =>
-    setNotices((l) => [{ ...n, id: `${Date.now()}-${Math.random()}`, at: Date.now() }, ...l].slice(0, 4));
+  const notify = useCallback((n: Omit<Notice, "id" | "at">) =>
+    setNotices((l) => [{ ...n, id: `${Date.now()}-${Math.random()}`, at: Date.now() }, ...l].slice(0, 4)), []);
+
+  // 오류창(clear_on_close)이 닫히면 오류 표시 해제(v1 runtime_state.clear_error — 창 닫기 = 확인, 권한이 있을 때만 보냄)
+  const send = d.send;
+  useEffect(() => {
+    clearRef.current = (c) => {
+      if (!allowed(c.kind, c.kind)) return;
+      void send(c.kind, c.args, "오류창 확인 — 오류 표시 해제").then((r) => {
+        if (!r.ok || r.body.status !== "accepted") notify({ tone: "warn", title: "오류 표시 해제 — 보내지 못함", text: r.body.detail || r.body.error || r.body.reasonCode });
+      });
+    };
+  });
 
   const run = async () => {
     if (!ask) return;
@@ -327,6 +346,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
         </p>
       )}
       <Notices list={notices} onClose={(id) => setNotices((l) => l.filter((n) => n.id !== id))} />
+      <PopupStack list={popups.open} onClose={popups.close} />
 
       {neverConnected ? (
         <section className="rounded-2xl border border-dashed border-gray-200 bg-white p-6 text-center">
@@ -368,7 +388,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
           </div>
 
           <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-            <HeaterThicknessPanel {...cmn} can={canCh("ch2")} plcOk={plcOk} />
+            <HeaterThicknessPanel {...cmn} can={canCh("ch2")} plcOk={plcOk} feed={d.feed} send={d.send} notify={notify} />
             <PcPanel {...cmn} can={canCh("pc")} />
             <TspPanel {...cmn} can={canCh("tsp")} nowMs={now + d.offsetMs} />
           </div>
@@ -383,8 +403,9 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
 
       {local ? (
         <>
+          {!neverConnected && <LocalFiles bundle={bundle} can={(k) => allowed(k, k)} onAsk={setAsk} />}
           <EventFeed bundle={d.bundle} feed={shared} />
-          <p className="text-[11px] text-gray-400">레시피·설정·공정 기록·조작 기록은 웹 화면에서</p>
+          <p className="text-[11px] text-gray-400">레시피 편집·설정·공정 기록·조작 기록은 웹 화면에서</p>
         </>
       ) : (
         <>
