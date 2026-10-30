@@ -7,12 +7,19 @@
 // - 배치가 데이터 오류(SQLSTATE 22xxx·23xxx)로 실패하면 하나씩 따로 — 혼자서도 데이터 오류인 것만 bad_message 로
 //   (하나 때문에 보관함이 막히지 않게). 그 밖(연결 끊김·시간 초과·직렬화 충돌 …)은 버리지 않고 500(장비가 다시 보낸다).
 // - 이미 bad_message 에 있는 id 는 다시 처리하지 않고 바로 acked(같은 묶음이 다시 와도 빠르게).
+// 챔버12(CH12·CH12-SIM — 같은 계약, 장비 v2/ch12/hub.py·uplink.py)만 더 하는 것(챔버K 동작은 그대로):
+// - run_* 의 chamber(ch1·ch2·pc·tsp)·owner·recipeRev 를 ops2_run 열에. CH1·CH2 가 동시에 돌므로 사건이 붙을 열린 run 은
+//   (실행, context.chamber) 마다 — shared 사건은 run 에 붙이지 않는다(context.data.run_id 가 있으면 그것).
+// - snapshot_summary.runIds(챔버별 마지막 run id)를 ops2_summary.run_ids 에, run_id 는 data.runId(없으면 runIds 의 마지막).
+// - 구글챗은 lib/ops2/ch12/chat.ts(v1 챔버12 카드)로.
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { ops2Db } from "@/lib/ops2/db";
 import { closeOthers, eventEnvelope, publishBrowser, type WireEnvelope } from "@/lib/ops2/hub";
 import { clearResync, overriddenCurrent, pendingResync, storedValues } from "@/lib/ops2/config";
 import { enqueueChat } from "@/lib/ops2/chat";
+import { enqueueChatCh12 } from "@/lib/ops2/ch12/chat";
+import { isCh12, isCh12Chamber } from "@/lib/ops2/ch12/ids";
 
 export const LEASE_MS = 30_000;
 const SCHEMA_RETRY_MS = 10 * 60_000;   // 해시가 다른 webSchema 를 받은 뒤 다시 달라고 하지 않는 시간
@@ -291,24 +298,34 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
   }
 
   // ── 사건이 붙을 열린 run: 배치 전 DB 상태에서 시작해 배치 순서대로 따라간다 ──
+  //    챔버12 는 (실행, 챔버)마다 — 열쇠 "실행|챔버"(챔버K 는 "실행|" 하나 — 예전과 같다)
+  const ch12 = isCh12(equipment);
+  const chamberOf = (v: unknown) => (ch12 && isCh12Chamber(v) ? v : "");
+  const evChamber = (e: Envelope) => chamberOf(isObj(e.data.context) ? e.data.context.chamber : null);
   const evInstances = [...new Set(events.map((e) => e.instance))];
   const openRun = new Map<string, string>();
   if (evInstances.length) {
     const open = await tx.ops2Run.findMany({
       where: { equipment, instance: { in: evInstances }, endedAt: null, startedAt: { not: null } },
       orderBy: { startedAt: "desc" },
-      select: { runId: true, instance: true },
+      select: { runId: true, instance: true, chamber: true },
     });
-    for (const r of open) if (!openRun.has(r.instance)) openRun.set(r.instance, r.runId);
+    for (const r of open) {
+      const k = `${r.instance}|${chamberOf(r.chamber)}`;
+      if (!openRun.has(k)) openRun.set(k, r.runId);
+    }
   }
   const eventRun = new Map<string, string | null>();
   for (const e of ok) {
-    if (e.type === "run_start") openRun.set(e.instance, e.data.runId as string);
-    else if (e.type === "run_end" && openRun.get(e.instance) === e.data.runId) openRun.delete(e.instance);
+    const k = `${e.instance}|${e.type === "event" ? evChamber(e) : chamberOf(e.data.chamber)}`;
+    if (e.type === "run_start") openRun.set(k, e.data.runId as string);
+    else if (e.type === "run_end" && openRun.get(k) === e.data.runId) openRun.delete(k);
     else if (e.type === "event") {
       const ctxObj = isObj(e.data.context) ? e.data.context : null;
       const cd = ctxObj && isObj(ctxObj.data) ? ctxObj.data : null;
-      eventRun.set(e.id, (cd && str(cd.run_id)) || openRun.get(e.instance) || null);
+      // 챔버12 shared 사건(PLC·카메라·웹 연결 …)은 run 에 붙이지 않는다
+      const shared = ch12 && !evChamber(e);
+      eventRun.set(e.id, (cd && str(cd.run_id)) || (shared ? null : openRun.get(k)) || null);
     }
   }
 
@@ -328,9 +345,13 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
         ? { startMsgId: e.id, recipeName: str(d.recipeName), startedBy: str(d.by), name: str(d.name),
             stepNo: int(d.stepNo), params: isObj(d.params) ? json(d.params) : undefined,
             blocks: Array.isArray(d.blocks) ? json(d.blocks) : undefined, configVersion: int(d.configVersion),
-            startedAt: e.ts }
+            startedAt: e.ts,
+            // 챔버12 — 챔버K 메시지에는 없는 칸(undefined 면 쓰지 않음)
+            ...(str(d.chamber) ? { chamber: str(d.chamber) } : {}), ...(str(d.owner) ? { owner: str(d.owner) } : {}),
+            ...(int(d.recipeRev) !== null ? { recipeRev: int(d.recipeRev) } : {}) }
         : { endMsgId: e.id, endedAt: e.ts, result: str(d.result), reasonCode: str(d.reasonCode),
-            summary: isObj(d.summary) ? json(d.summary) : undefined };
+            summary: isObj(d.summary) ? json(d.summary) : undefined,
+            ...(str(d.chamber) ? { chamber: str(d.chamber) } : {}) };
       const cur = have.get(runId);
       if (cur) {
         if (isStart ? cur.startMsgId : cur.endMsgId) continue;              // 이미 받음(같은 메시지 다시 등)
@@ -375,6 +396,13 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
       select: { runId: true, instance: true, startedAt: true, endedAt: true },
     });
     const keep = span.flatMap(({ e, from, to }) => {
+      // 챔버12 — runIds(챔버별 마지막 run id)가 있으면 그 run 들에(run_id = data.runId, 없으면 마지막 것)
+      const ids = ch12 && isObj(e.data.runIds)
+        ? [...new Set(Object.values(e.data.runIds).filter((v): v is string => typeof v === "string" && !!v))] : [];
+      if (ids.length) {
+        return [{ msgId: e.id, equipment, instance: e.instance, runId: str(e.data.runId) ?? ids[ids.length - 1], fromTs: from, toTs: to,
+                  rowCount: e.data.rows as number, stats: json(e.data.values), quality: json(e.data.quality), runIds: json(ids) }];
+      }
       const r = runs.find((x) => x.instance === e.instance && x.startedAt! < to && (!x.endedAt || x.endedAt > from));
       return r ? [{ msgId: e.id, equipment, instance: e.instance, runId: r.runId, fromTs: from, toTs: to,
                     rowCount: e.data.rows as number, stats: json(e.data.values), quality: json(e.data.quality) }] : [];
@@ -568,7 +596,7 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
   publishBrowser(ctx.equipment, wire);
   // 구글챗 알림(W-6) — 커밋된 것으로 outbox 에(같은 원인 envelope id 는 한 번만). 실패해도 ingest 는 그대로
   if (done.length) {
-    await enqueueChat(ctx.equipment, done, ctx.now).catch((e) =>
+    await (isCh12(ctx.equipment) ? enqueueChatCh12 : enqueueChat)(ctx.equipment, done, ctx.now).catch((e) =>
       console.error("[ops2/chat] outbox 넣기 실패", ctx.equipment, String((e as Error)?.message ?? e).slice(0, 300)));
   }
 

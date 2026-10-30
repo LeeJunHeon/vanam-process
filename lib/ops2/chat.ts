@@ -11,6 +11,8 @@
 //   보내되 카드에 "늦게 받음". 이상 글은 같은 규칙·사유가 공정당 한 번(공정 밖은 10 분에 한 번) — 나머지는 skipped "반복".
 // - 보내기: 서버 안 타이머(instrumentation.ts → startChat) — 하나씩, 실패면 30 s·2 분·10 분 뒤 다시, 그 세 번도 실패면 failed.
 // - 장비 연결 끊김: 마지막 연락이 OPS2_CHAT_OFFLINE_SEC(기본 180 s) 넘으면 웹이 판단 — 끊김 한 번·다시 연락이 오면 복구 한 번.
+// - 챔버12(CH12·CH12-SIM)는 ingest 가 lib/ops2/ch12/chat.ts(enqueueChatCh12 — v1 챔버12 카드)로 넣는다. 보내기·다시 보내기·
+//   장비 연결 끊김은 여기 그대로(채널 plc·monitor·client·oes 가 더해짐 — 자기 주소만, 공정용으로 넘어가지 않음).
 import { ops2Db } from "@/lib/ops2/db";
 import { deviceBundle } from "@/lib/ops2/browser";
 import { fmtKst } from "@/lib/ops2/time";
@@ -28,7 +30,9 @@ const SEND_TIMEOUT_MS = 10_000;
 const TICK_MS = 5_000;
 const WATCH_MS = 15_000;
 
-export type Channel = "process" | "alert";
+// 챔버12(CH12) 가 더한 채널 — v1 의 따로 둔 웹훅(PLC 끊김·공정 모니터·로봇 요청 공정·OES 이상). 공정용으로 넘어가지 않는다
+// (v1: 주소가 비면 그 알림은 꺼짐). 챔버K 는 process·alert 만 쓴다.
+export type Channel = "process" | "alert" | "plc" | "monitor" | "client" | "oes";
 export type ChatKind = "run_start" | "run_end" | "run_fail" | "alert" | "plc_link" | "device_link";
 const CHANNEL: Record<ChatKind, Channel> = {
   run_start: "process", run_end: "process", run_fail: "process", alert: "alert", plc_link: "alert", device_link: "alert",
@@ -41,16 +45,29 @@ export function envId(equipment: string): string {
 export function webhookEnvNames(equipment: string) {
   return { process: `OPS2_CHAT_WEBHOOK_${envId(equipment)}`, alert: `OPS2_CHAT_ALERT_WEBHOOK_${envId(equipment)}` };
 }
-/** 보낼 주소(없으면 null) — 알림용이 없으면 공정용(v1 과 같음) */
+/** 챔버12 가 더한 채널의 환경변수 이름 — OPS2_CHAT_PLC_WEBHOOK_CH12 등 */
+export function extraWebhookEnvNames(equipment: string) {
+  const id = envId(equipment);
+  return { plc: `OPS2_CHAT_PLC_WEBHOOK_${id}`, monitor: `OPS2_CHAT_MONITOR_WEBHOOK_${id}`,
+           client: `OPS2_CHAT_CLIENT_WEBHOOK_${id}`, oes: `OPS2_CHAT_OES_WEBHOOK_${id}` };
+}
+/** 보낼 주소(없으면 null) — 알림용이 없으면 공정용(v1 과 같음). 챔버12 채널(plc·monitor·client·oes)은 자기 주소만 */
 export function webhookOf(equipment: string, ch: Channel): string | null {
+  if (ch === "plc" || ch === "monitor" || ch === "client" || ch === "oes") {
+    return process.env[extraWebhookEnvNames(equipment)[ch]]?.trim() || null;
+  }
   const n = webhookEnvNames(equipment);
   const p = process.env[n.process]?.trim() || null;
   return ch === "alert" ? process.env[n.alert]?.trim() || p : p;
 }
-/** 주소 있음/없음만(관리 화면) */
+/** 주소 있음/없음만(관리 화면). extra = 챔버12 채널(이름·있음) */
 export function webhookState(equipment: string) {
   const n = webhookEnvNames(equipment);
-  return { names: n, process: !!process.env[n.process]?.trim(), alert: !!process.env[n.alert]?.trim() };
+  const x = extraWebhookEnvNames(equipment);
+  return {
+    names: n, process: !!process.env[n.process]?.trim(), alert: !!process.env[n.alert]?.trim(),
+    extra: Object.fromEntries(Object.entries(x).map(([k, v]) => [k, { name: v, set: !!process.env[v]?.trim() }])),
+  };
 }
 
 /** 개발 노트북 시험용 — 개발 모드(next dev)에서만(인증 우회 DEV_AUTH_BYPASS 와 같은 판정: NODE_ENV 는 빌드 때 인라인되어
@@ -417,6 +434,10 @@ async function drain(w: Worker): Promise<void> {
 
 function wake() {
   g.__ops2Chat?.wake();
+}
+/** 보내기 타이머 깨우기 — 챔버12 outbox 넣기(lib/ops2/ch12/chat.ts)가 쓴다 */
+export function wakeChat(): void {
+  wake();
 }
 
 /** 서버가 켜질 때 한 번(instrumentation.ts) — 같은 프로세스에서 두 번 불러도 타이머는 하나 */

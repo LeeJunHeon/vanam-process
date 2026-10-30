@@ -14,6 +14,7 @@ const PAD_MS = 60_000;           // 명령 기록은 공정 앞뒤 1분까지
 
 // GET /api/ops2/[equipment]/runs/[runId] — 공정 하나(웹 전용, 누구나 읽기): run(시작·끝·결과·사유·설정 버전·params·blocks),
 // 그 run 의 사건(ops2_event run_id, 시각 순), 1분 요약(ops2_summary run_id, 구간 순), 그 시간대의 명령(ops2_command).
+// 챔버12 run(chamber 가 있는 것)의 1분 요약은 run_ids(챔버별 run id 목록)에 이 run 이 든 것도 — CH1·CH2 동시 공정은 같은 요약을 같이 쓴다.
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ equipment: string; runId: string }> }) {
   const auth = await requireSession();
   if (!auth.ok) return auth.response;
@@ -28,7 +29,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ equ
       select: { msgId: true, ts: true, level: true, code: true, ruleId: true, message: true, kind: true, source: true, context: true },
     }),
     ops2Db.ops2Summary.findMany({
-      where: { runId, equipment }, orderBy: { fromTs: "asc" }, take: MAX_SUMMARY + 1,
+      where: run.chamber ? { equipment, OR: [{ runId }, { runIds: { array_contains: [runId] } }] } : { runId, equipment },
+      orderBy: { fromTs: "asc" }, take: MAX_SUMMARY + 1,
       select: { fromTs: true, toTs: true, rowCount: true, stats: true, quality: true, instance: true },
     }),
   ]);

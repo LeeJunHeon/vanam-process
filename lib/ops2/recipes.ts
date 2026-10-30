@@ -1,11 +1,14 @@
 // 챔버K v2 레시피 저장(ops2_recipe) 공통 — /api/ops2/[equipment]/recipes(웹 전용, 노트북 로컬 화면 API 와 무관).
 // 레시피는 기준 장비(CHK2) 것을 CHK2·CHK2-SIM 이 같이 쓴다. 저장할 때 서버도 웹 검사(lib/ops2/chk/recipe.ts)를 돌려
 // 오류·경고 수를 함께 돌려준다 — 오류가 있어도 저장은 된다(작성 중 저장). 검사 기준은 그 장비의 지금 묶음(설정값 포함).
+// 챔버12(CH12·CH12-SIM): kind 는 ch1·ch2(챔버별 블록 레시피), 검사는 lib/ops2/ch12/recipes.ts(블록·v1 행 — 장비와 같은 골든).
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-helpers";
 import { actorOf, deviceBundle, enabledDevice } from "@/lib/ops2/browser";
-import { checkEnvOf, checkHeaterRecipe, checkProcessRecipe, type CheckEnv, type Row } from "@/lib/ops2/chk/recipe";
+import { checkEnvOf, checkHeaterRecipe, checkOutdated, checkProcessRecipe, type CheckEnv, type Row } from "@/lib/ops2/chk/recipe";
+import { CH12_RECIPE_KINDS, isCh12 } from "@/lib/ops2/ch12/ids";
+import { ch12CheckSummary, ch12Outdated, ch12RecipeEnvOf, type Ch12RecipeEnv } from "@/lib/ops2/ch12/recipes";
 import { readLimited } from "@/lib/ops2/body";
 import { stripNul } from "@/lib/ops2/ingest";
 import { baseEquipment, canEditRecipes, operatorEquipments } from "@/lib/ops2/perm";
@@ -18,9 +21,13 @@ const NAME_MAX = 80;
 
 export type RecipeCheckSummary = { errors: number; warnings: number; first: string | null };
 
+/** 검사 환경 — 챔버K(CheckEnv) 또는 챔버12(Ch12RecipeEnv) */
+export type AnyRecipeEnv = CheckEnv | Ch12RecipeEnv;
+
 /** 레시피 하나의 웹 검사 결과(수) — 묶음에 열 정의가 없으면 null */
-export function checkSummary(kind: string, rows: unknown, gas: unknown, env: CheckEnv | null): RecipeCheckSummary | null {
+export function checkSummary(kind: string, rows: unknown, gas: unknown, env: AnyRecipeEnv | null): RecipeCheckSummary | null {
   if (!env) return null;
+  if ("ch12" in env) return ch12CheckSummary(kind, rows, env);
   if (kind === "heater") {
     const steps = Array.isArray(rows) ? (rows.filter((s) => isObj(s)) as Row[]) : [];
     const r = checkHeaterRecipe(steps, isObj(gas) ? (gas as Row) : null, env);
@@ -32,9 +39,9 @@ export function checkSummary(kind: string, rows: unknown, gas: unknown, env: Che
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 
-/** 본문 → {name, rows, gas} 또는 오류 응답. kind 는 POST 만(PUT 은 저장된 것) */
-export async function readRecipeBody(req: NextRequest, needKind: boolean): Promise<
-  { ok: true; kind?: RecipeKind; name: string; rows: Record<string, unknown>[]; gas: Record<string, unknown> | null;
+/** 본문 → {name, rows, gas} 또는 오류 응답. kind 는 POST 만(PUT 은 저장된 것). kinds = 그 장비가 받는 kind(챔버12 ch1·ch2) */
+export async function readRecipeBody(req: NextRequest, needKind: boolean, kinds: readonly string[] = RECIPE_KINDS): Promise<
+  { ok: true; kind?: string; name: string; rows: Record<string, unknown>[]; gas: Record<string, unknown> | null;
     updatedAt?: string } | { ok: false; response: NextResponse }
 > {
   const bad = (error: string, detail: string, status = 400) =>
@@ -48,10 +55,10 @@ export async function readRecipeBody(req: NextRequest, needKind: boolean): Promi
     return bad("bad_json", "JSON 이 아님");
   }
   if (!isObj(body)) return bad("bad_request", "본문은 객체");
-  let kind: RecipeKind | undefined;
+  let kind: string | undefined;
   if (needKind) {
-    if (!RECIPE_KINDS.includes(body.kind as RecipeKind)) return bad("bad_kind", "kind 는 process 또는 heater");
-    kind = body.kind as RecipeKind;
+    if (!kinds.includes(body.kind as string)) return bad("bad_kind", `kind 는 ${kinds.join(" 또는 ")}`);
+    kind = body.kind as string;
   }
   const name = typeof body.name === "string" ? body.name.trim() : "";
   if (!name || [...name].length > NAME_MAX) return bad("bad_name", `이름은 1~${NAME_MAX}자`);
@@ -71,8 +78,12 @@ export async function recipeContext(equipment: string) {
   const actor = actorOf(auth.session);
   const canEdit = canEditRecipes(actor, equipment, await operatorEquipments(ops2Db, actor.employeeId));
   const user = auth.session.user;
+  const ch12 = isCh12(equipment);
   return {
-    ok: true as const, base: baseEquipment(equipment), bundle, env: checkEnvOf(bundle),
+    ok: true as const, base: baseEquipment(equipment), bundle,
+    env: (ch12 ? ch12RecipeEnvOf(bundle) : checkEnvOf(bundle)) as AnyRecipeEnv | null,
+    kinds: (ch12 ? CH12_RECIPE_KINDS : RECIPE_KINDS) as readonly string[],
+    outdated: ch12 ? ch12Outdated(bundle) : checkOutdated(bundle),
     bundleVersion: typeof bundle?.version === "number" ? bundle.version : null,
     canEdit, who: user?.email ?? user?.name ?? "unknown",
   };
@@ -90,7 +101,7 @@ export type RecipeRow = {
 };
 
 /** 목록 한 줄(행 내용 없이) */
-export function listItem(r: RecipeRow, env: CheckEnv | null) {
+export function listItem(r: RecipeRow, env: AnyRecipeEnv | null) {
   return {
     id: r.id, kind: r.kind, name: r.name, rowCount: Array.isArray(r.rows) ? r.rows.length : 0,
     bundleVersion: r.bundleVersion, createdBy: r.createdBy, createdAt: r.createdAt.toISOString(),
@@ -99,6 +110,6 @@ export function listItem(r: RecipeRow, env: CheckEnv | null) {
 }
 
 /** 하나 전체 */
-export function fullItem(r: RecipeRow, env: CheckEnv | null) {
+export function fullItem(r: RecipeRow, env: AnyRecipeEnv | null) {
   return { ...listItem(r, env), rows: Array.isArray(r.rows) ? r.rows : [], gas: r.gas ?? null };
 }

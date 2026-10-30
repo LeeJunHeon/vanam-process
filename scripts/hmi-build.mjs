@@ -1,6 +1,8 @@
 // 노트북 로컬 화면 빌드(W-7) — hmi/main.tsx 를 esbuild 로 JS 하나, hmi/index.css 를 Tailwind(@tailwindcss/postcss)로 CSS 하나,
 // index.html 하나. 파일 이름에 내용 해시. 소스맵 없음, 외부 주소(CDN·글꼴) 요청 없음(시스템 글꼴).
 // 사용법: npm run hmi:build [-- --out <폴더>]   (기본 dist-hmi/ — .gitignore)
+//         npm run hmi:build -- --target ch12 [--out <폴더>]   (챔버12 CH1&2 — hmi/ch12.tsx·hmi/ch12.css, 기본 dist-hmi/ch12/ — .gitignore 안)
+// 대상(--target): chk(기본 — 인자 없으면 예전과 똑같이 챔버K) · ch12. build.json 에 target 도 적는다.
 // 결과 폴더에 build.json(vanam-process 커밋 SHA·작업 트리 깨끗한지·빌드 시각·esbuild·tailwind 버전·파일 목록과 sha256)도.
 // 웹 앱(next build)·Docker 이미지와는 따로 — 이 스크립트만 hmi/ 를 읽는다.
 import { execFileSync } from "node:child_process";
@@ -15,8 +17,18 @@ import tailwind from "@tailwindcss/postcss";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
+const TARGETS = {
+  chk: { entry: "hmi/main.tsx", css: "index.css", out: "dist-hmi", title: "챔버K v2 — 노트북 화면",
+         what: "챔버K v2 노트북 로컬 화면(vanam-process hmi/ — W-7)" },
+  ch12: { entry: "hmi/ch12.tsx", css: "ch12.css", out: "dist-hmi/ch12", title: "챔버12(CH1&2) v2 — 노트북 화면",
+          what: "챔버12(CH1&2) v2 노트북 로컬 화면(vanam-process hmi/ch12.tsx — 8단계)" },
+};
+const tArg = args.indexOf("--target");
+const targetName = tArg >= 0 && args[tArg + 1] ? args[tArg + 1] : "chk";
+const target = TARGETS[targetName];
+if (!target) throw new Error(`모르는 대상 --target ${targetName} (${Object.keys(TARGETS).join("·")})`);
 const outArg = args.indexOf("--out");
-const out = resolve(root, outArg >= 0 && args[outArg + 1] ? args[outArg + 1] : "dist-hmi");
+const out = resolve(root, outArg >= 0 && args[outArg + 1] ? args[outArg + 1] : target.out);
 if (out === root || !relative(root, out) || relative(out, root) === "") throw new Error(`출력 폴더가 저장소 자체: ${out}`);
 
 const sha = (b) => createHash("sha256").update(b).digest("hex");
@@ -28,7 +40,7 @@ mkdirSync(join(out, "assets"), { recursive: true });
 // ── JS ──
 const js = await esbuild.build({
   absWorkingDir: root,
-  entryPoints: { app: "hmi/main.tsx" },
+  entryPoints: { app: target.entry },
   bundle: true, minify: true, format: "esm", target: ["es2020", "chrome100", "edge100"], platform: "browser",
   outdir: join(out, "assets"), entryNames: "[name]-[hash]", sourcemap: false, legalComments: "none",
   jsx: "automatic", tsconfig: join(root, "tsconfig.json"), metafile: true, logLevel: "warning",
@@ -37,7 +49,7 @@ const js = await esbuild.build({
 const jsFile = Object.keys(js.metafile.outputs).find((f) => f.endsWith(".js"));
 
 // ── CSS ──
-const cssSrc = join(root, "hmi", "index.css");
+const cssSrc = join(root, "hmi", target.css);
 const css = await postcss([tailwind({ base: root, optimize: { minify: true } })]).process(readFileSync(cssSrc, "utf8"), { from: cssSrc });
 // 머리 주석의 주소만 뺀다(라이선스 표시는 남김) — 결과물에 외부 주소 문자열이 없게
 const cssText = css.css.replace(/(\/\*![^*]*?) \| https?:\/\/[^ *]+( \*\/)/, "$1$2");
@@ -51,7 +63,7 @@ writeFileSync(join(out, "index.html"), `<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>챔버K v2 — 노트북 화면</title>
+<title>${target.title}</title>
 <link rel="stylesheet" href="/assets/${cssName}">
 </head>
 <body>
@@ -76,7 +88,8 @@ const walk = (d) => {
 walk(out);
 const req = createRequire(import.meta.url);
 const info = {
-  what: "챔버K v2 노트북 로컬 화면(vanam-process hmi/ — W-7)",
+  what: target.what,
+  ...(targetName === "chk" ? {} : { target: targetName }),
   vanamProcess: { commit: git("rev-parse", "HEAD"), branch: git("rev-parse", "--abbrev-ref", "HEAD"),
                   clean: git("status", "--porcelain") === "" },
   builtAt: new Date().toISOString(),
@@ -86,6 +99,6 @@ const info = {
 };
 writeFileSync(join(out, "build.json"), JSON.stringify(info, null, 1) + "\n");
 
-console.log(`hmi 빌드 → ${out}`);
+console.log(`hmi 빌드${targetName === "chk" ? "" : ` (${targetName})`} → ${out}`);
 for (const f of files) console.log(`  ${f.path.padEnd(32)} ${String(f.bytes).padStart(9)} B  ${f.sha256.slice(0, 12)}`);
 console.log(`  커밋 ${info.vanamProcess.commit.slice(0, 7)}${info.vanamProcess.clean ? "" : " (작업 트리에 바뀐 것 있음)"} · esbuild ${info.esbuild} · tailwind ${info.tailwindcss}`);
