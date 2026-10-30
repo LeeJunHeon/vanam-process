@@ -159,7 +159,8 @@ export function Tabs<K extends string>({ tabs, value, onChange, right, small }: 
   tabs: { key: K; label: ReactNode; badge?: ReactNode }[]; value: K; onChange: (k: K) => void; right?: ReactNode; small?: boolean;
 }) {
   return (
-    <div className={`flex min-w-0 items-end gap-1 border-b border-[#D9DDE3] ${small ? "" : "overflow-x-auto"}`} role="tablist">
+    <div className="flex min-w-0 items-end gap-1 border-b border-[#D9DDE3]">
+      <div className="flex min-w-0 items-end gap-1 overflow-x-auto overflow-y-hidden" role="tablist">
       {tabs.map((t) => (
         <button key={t.key} role="tab" aria-selected={value === t.key} onClick={() => onChange(t.key)}
           className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-[10px] border-b-2 font-semibold ${
@@ -168,6 +169,7 @@ export function Tabs<K extends string>({ tabs, value, onChange, right, small }: 
           {t.label}{t.badge}
         </button>
       ))}
+      </div>
       {right && <span className="ml-auto flex shrink-0 items-center pb-1.5">{right}</span>}
     </div>
   );

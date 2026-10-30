@@ -168,11 +168,13 @@ function SeqEditor({ bundle, base, baseRev, revision, lockTop, runBlocks, lock, 
   );
 }
 
-export default function Chk2Seq({ bundle, st, runBlocks, feed, recipes, lock, onAsk, local }: {
+export default function Chk2Seq({ bundle, st, runBlocks, feed, recipes, lock, onAsk, local, onWide }: {
   bundle: Bundle | null; st: StateData | null; runBlocks: RunBlocks | null; feed: FeedItem[];
   recipes: ReturnType<typeof useRecipes> | null; lock: LockFn; onAsk: (a: Ask) => void; local: boolean;
+  onWide?: (wide: boolean) => void;               // 순서 고치기 중에는 넓게(부르는 쪽 격자)
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditingState] = useState(false);
+  const setEditing = (v: boolean) => { setEditingState(v); onWide?.(v); };
   const [stopOpen, setStopOpen] = useState(false);
   const [base, setBase] = useState<{ blocks: unknown[]; revision: number; key: number } | null>(null);
   const [baseWhy, setBaseWhy] = useState<string | null>(null);
@@ -188,10 +190,10 @@ export default function Chk2Seq({ bundle, st, runBlocks, feed, recipes, lock, on
   const [sentRev, setSentRev] = useState<number | null>(null);
   useEffect(() => {
     if (sentRev !== null && revision > sentRev) {
-      const t = setTimeout(() => { setEditing(false); setSentRev(null); }, 0);
+      const t = setTimeout(() => { setEditingState(false); onWide?.(false); setSentRev(null); }, 0);
       return () => clearTimeout(t);
     }
-  }, [revision, sentRev]);
+  }, [revision, sentRev, onWide]);
 
   /** 처음 목록 — 마지막 순서 고침 사건, 없으면 웹 레시피의 그 행 */
   const loadBase = async () => {

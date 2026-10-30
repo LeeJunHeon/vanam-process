@@ -374,7 +374,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
             </div>
           )}
           <div ref={setStatusEl}>
-            <StatusBand bundle={d.bundle} st={st} connected={connected} conn={conn} mode={modeChip} equipment={equipment}
+            <StatusBand bundle={d.bundle} st={st} connected={connected} conn={conn} mode={modeChip} equipment={d.hello.equipment ?? equipment}
               label={web?.label ?? null} lock={lock} onAsk={setAsk} lastRun={d.runs[0] ?? null} startedMs={runStartMs} elapsedS={elapsedS}
               blocks={d.runBlocks?.blocks ?? null} nowMs={now + d.offsetMs} v1Row={v1Row}
               extra={<>{detailInfo}{!d.streamUp && !local && (

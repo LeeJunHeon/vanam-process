@@ -141,13 +141,14 @@ export default function Chk2Hmi({ bundle, snapshot: snap, plcOk, lockOf, pending
   const ctrl = typeof cs === "string" && cs && cs !== "idle" ? casc?.enumLabels?.[cs] ?? cs : "";
   const powerOn = (b: string) => snap?.[b] === true;
 
-  const lamps: [string, string][] = [["air", "Air"], ["g1", "G1"], ["g2", "G2"], ["atm", "ATM"], ["water", "Water"]];
+  const lamps: [string, string][] = [["air", "Air"], ["g1", "G1"], ["g2", "G2"], ["atm", "ATM"], ["water", "Water"]]
+    .map(([k, l]) => [k, fieldOf(`plc.${k}`)?.label ?? l]);
   const ionLock = why("ion");
   return (
     <Card title="계통도" right={<span className={`flex items-center gap-1 text-[11px] ${note.includes("잠금") ? "font-semibold text-[#B54708]" : "text-[#5B6470]"}`}>
       {note.includes("잠금") && <Lock size={12} />}{note}</span>}>
       <div className={`mx-auto w-full max-w-[1280px] ${plcOk ? "" : "opacity-50"}`}>
-        <svg viewBox="0 0 980 600" className="h-auto w-full select-none" role="group" aria-label="챔버K v2 계통도">
+        <svg viewBox="0 50 980 560" className="h-auto w-full select-none" role="group" aria-label="챔버K v2 계통도">
           {/* 배관 */}
           {pipe("M170,170 H236 M262,170 H330", on("ar_valve"))}
           {pipe("M170,290 H236 M262,290 H330", on("o2_valve"))}

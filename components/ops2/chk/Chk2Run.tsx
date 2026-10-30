@@ -113,7 +113,7 @@ function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
   const box = (n: string, label?: string) => <StateBox key={n} on={snap?.[`plc.${n}`] as boolean | undefined} label={label ?? lab(n)} />;
   const lamp = (n: string, label: string) => (
     <span key={n} className="flex items-center gap-1.5 text-xs text-[#5B6470]" title={snap?.[`plc.${n}`] === true ? "감지" : "없음"}>
-      <Dot on={snap?.[`plc.${n}`] === true} dim={snap?.[`plc.${n}`] === undefined} />{label}
+      <Dot on={snap?.[`plc.${n}`] === true} dim={snap?.[`plc.${n}`] === undefined} />{fieldOf(bundle, `plc.${n}`)?.label ?? label}
     </span>
   );
   const group = (title: string, items: ReactNode[]) => (
@@ -300,12 +300,15 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, feed, trend,
   onHmi: () => void; onLog?: () => void; onEditRecipe?: (id: string | null) => void; nowMs: number; skewMs: number;
 }) {
   const { local } = useChk2Mode();
+  const [wide, setWide] = useState(false);       // 순서 고치기 중 — 공정 순서 칸을 한 줄 전체로
   const kind = kindOf(bundle, st);
   const snap = st?.snapshot;
   if (kind === "active" || kind === "stopping") {
     return (
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(300px,1fr)_minmax(0,2fr)] 2xl:grid-cols-[minmax(320px,1fr)_minmax(0,2fr)_minmax(260px,0.9fr)]">
-        <Chk2Seq bundle={bundle} st={st} runBlocks={runBlocks} feed={feed} recipes={recipes} lock={lock} onAsk={onAsk} local={local} />
+        <div className={`min-w-0 ${wide ? "lg:col-span-2 2xl:col-span-3" : ""}`}>
+          <Chk2Seq bundle={bundle} st={st} runBlocks={runBlocks} feed={feed} recipes={recipes} lock={lock} onAsk={onAsk} local={local} onWide={setWide} />
+        </div>
         <div className="min-w-0 space-y-3">
           <KeyValues bundle={bundle} st={st} blocks={runBlocks} />
           <Chk2Trend trend={trend} equipment={equipment} runId={st?.runId ?? null} local={local} nowMs={nowMs} />

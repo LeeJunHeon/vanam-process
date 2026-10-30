@@ -76,7 +76,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
         const px = e.clientX - r.left;
         setHover(px < LEFT || px > LEFT + pw ? null : t0 + ((px - LEFT) / pw) * (t1 - t0));
       }}>
-      <text x={LEFT} y={12} fontSize={11} fontWeight={700} fill="#1B1F24">{title}</text>
+      <text x={LEFT} y={12} fontSize={11} fontWeight={700} fill="#1B1F24">{title}<tspan fontWeight={400} fill="#5B6470"> ({unit})</tspan></text>
       {lines.reduce<{ x: number; el: ReactElement[] }>((acc, l) => {
         const w = 18 + [...l.label].reduce((n, c) => n + (c.charCodeAt(0) > 0x2000 ? 10 : 6), 0);
         acc.el.push(
@@ -86,8 +86,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
           </g>);
         acc.x += w + 10;
         return acc;
-      }, { x: LEFT + 80, el: [] }).el}
-      <text x={LEFT - 6} y={TOP - 4} fontSize={10} fill="#5B6470" textAnchor="end">{unit}</text>
+      }, { x: LEFT + 110, el: [] }).el}
       {yTicks.map((v) => (
         <g key={v}>
           <line x1={LEFT} x2={LEFT + pw} y1={y(v)} y2={y(v)} stroke="#E3E6EA" />

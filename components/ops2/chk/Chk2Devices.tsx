@@ -366,7 +366,7 @@ export function ShutterCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => vo
       <div className="flex flex-wrap gap-x-3 gap-y-1 pt-1.5 text-xs text-[#5B6470]">
         {lamps.map(([k, l]) => (
           <span key={k} className="flex items-center gap-1" title={snap?.[`plc.${k}`] === true ? "감지" : "없음"}>
-            <Dot on={snap?.[`plc.${k}`] === true} dim={snap?.[`plc.${k}`] === undefined} />{l}
+            <Dot on={snap?.[`plc.${k}`] === true} dim={snap?.[`plc.${k}`] === undefined} />{fieldOf(d, k)?.label ?? l}
           </span>
         ))}
       </div>
