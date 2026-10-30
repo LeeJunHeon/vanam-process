@@ -11,14 +11,15 @@
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject, type ReactNode } from "react";
 import { AlertTriangle, ArrowLeft, BookOpen, FilePlus2, Pause, Play, Save, SkipForward, Square, Trash2, Upload, X } from "lucide-react";
 import {
-  checkEnvOf, checkHeaterRecipe, checkOutdated, checkProcessRecipe, delaySeconds, manualRow, pyTruthy, rowHasContent,
-  GOLDEN_EXPORT_VERSION, type RecipeCheck, type Row,
+  checkEnvOf, checkHeaterRecipe, checkOutdated, checkProcessRecipe, manualRow,
+  GOLDEN_EXPORT_VERSION, type Row,
 } from "@/lib/ops2/chk/recipe";
 import { fmtKst } from "@/lib/ops2/time";
 import { Card, SimpleConfirm, type Ask, type Notice } from "./kit";
 import { useChk2Mode } from "./mode";
 import { HeaterTable, ProcessTable, isBlockRow, newUid, toERows, type ERow } from "./Chk2RecipeEditor";
 import Chk2BlockEditor, { blockRowLines } from "./Chk2BlockEditor";
+import { heaterLines, processLines, rowLine, v } from "./recipeText";
 import { RECIPE_ERROR, type RecipeFull, type RecipeItem, type RecipeKind, type useRecipes } from "./useRecipes";
 import type { Bundle, StateData } from "./types";
 
@@ -32,41 +33,6 @@ const fromFull = (r: RecipeFull): Draft => {
   return { ...d, base: snap(d) };
 };
 const gasOrNull = (g: Row) => (Object.keys(g).length ? g : null);
-const v = (x: unknown) => (x === undefined || x === null || x === "" ? "?" : String(x));
-
-/** 공정 행 한 줄 요약(가스·파워·압력·시간) */
-function rowLine(r: Row): string {
-  const gas = [r.ar === true && `Ar ${v(r.ar_flow)} sccm`, r.o2 === true && `O₂ ${v(r.o2_flow)} sccm`].filter(Boolean).join(" + ") || "가스 없음";
-  const pw = [r.use_dc === true && `DC ${v(r.dc_power)} W`, r.use_rf === true && `RF ${v(r.rf_power)} W`,
-              r.use_rf_pulse === true && `RF Pulse ${v(r.rf_pulse_power)} W`].filter(Boolean).join(" + ") || "파워 없음";
-  const time = `공정 ${v(r.process_time)}분${pyTruthy(r.shutter_delay) ? ` · 셔터 딜레이 ${v(r.shutter_delay)}분` : ""}`;
-  return `${gas} · ${pw} · 압력 ${v(r.working_pressure)} mTorr · ${time}`;
-}
-const heaterLine = (r: Row) => (r.use_heater === true ? `히터 목표 ${v(r.heater_temp)} °C` : "히터 안 씀");
-
-/** 레시피 시작 확인창 요약 — 이름·행 수(v1·블록·딜레이)·첫 공정 행(v1 행은 가스·파워·시간·히터, 블록 행은 블록 수·장비·시간) */
-function processLines(name: string, rows: Row[], check: RecipeCheck | null): string[] {
-  const content = rows.filter(rowHasContent);
-  const isDelay = (r: Row) => !isBlockRow(r) && delaySeconds(r.process_name) !== null;
-  const delays = content.filter(isDelay).length;
-  const blocks = content.filter(isBlockRow).length;
-  const procs = content.filter((r) => !isDelay(r) && !isBlockRow(r));
-  const i = rows.findIndex((r) => rowHasContent(r) && !isDelay(r));
-  const heat = procs.filter((r) => r.use_heater === true).length;
-  const first = i < 0 ? [] : isBlockRow(rows[i])
-    ? blockRowLines(rows[i], check?.rows[i] ?? null).map((l, k) => (k ? l : `첫 공정 행(${i + 1}행): ${l}`))
-    : [`첫 공정 행(${i + 1}행): ${rowLine(rows[i])}`, `첫 공정 행 ${heaterLine(rows[i])}${heat ? ` · 히터 쓰는 행 ${heat}개` : ""}`];
-  return [`레시피 '${name}' · ${content.length}행(일반 행 ${procs.length} · 블록 행 ${blocks} · 딜레이 행 ${delays})`, ...first];
-}
-
-function heaterLines(name: string, steps: Row[], gas: Row | null): string[] {
-  const g = gas && (gas.use_ar === true || gas.use_o2 === true)
-    ? `가스 ${[gas.use_ar === true && `Ar ${v(gas.ar_flow)} sccm`, gas.use_o2 === true && `O₂ ${v(gas.o2_flow)} sccm`]
-        .filter(Boolean).join(" + ")} · 압력 ${v(gas.wp_mtorr)} mTorr`
-    : "가스 없이";
-  return [`히터 레시피 '${name}' · 스텝 ${steps.length}개`, `히터 목표 ${steps.map((s) => `${v(s.target_c)}°C`).join(" → ")}`, g];
-}
-
 function CheckBadge({ c }: { c: RecipeItem["check"] }) {
   if (!c) return <span className="text-[10px] text-gray-300">—</span>;
   if (c.errors) return <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[10px] font-semibold text-rose-700" title={c.first ?? ""}>오류 {c.errors}</span>;
@@ -87,11 +53,12 @@ const Btn = ({ onClick, disabled, title, tone = "gray", children }: {
   </button>
 );
 
-export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, dirtyRef, listOnly }: {
+export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, dirtyRef, listOnly, openReq }: {
   bundle: Bundle | null; st: StateData | null; recipes: ReturnType<typeof useRecipes>;
   can: (kind: string) => boolean; onAsk: (a: Ask) => void; notify: (n: Omit<Notice, "id" | "at">) => void;
   dirtyRef: MutableRefObject<boolean>;           // 저장 안 한 변경 — 장비를 바꿀 때 화면이 묻는다
   listOnly?: boolean;                            // 장비 정의(열)를 받지 못한 장비 — 목록 보기만
+  openReq?: { id: string | null; n: number } | null;   // 운전 탭 '레시피 편집' — 이 레시피를 연다(n 이 바뀔 때마다)
 }) {
   const { detail } = useChk2Mode();
   const [reveal, setReveal] = useState(false);   // 검사 문구를 모두 보이기(저장·적재를 누른 뒤, 저장된 레시피)
@@ -141,6 +108,15 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
     setReveal(true);
     setDraft(fromFull(r.data.recipe));
   });
+  // 운전 탭 '레시피 편집' — 그 레시피를 연다(없으면 목록)
+  const reqN = openReq?.n;
+  useEffect(() => {
+    if (!reqN || !openReq) return;
+    const it = openReq.id ? recipes.list?.find((r) => r.id === openReq.id) : undefined;
+    const t = setTimeout(() => { if (it) { setTab(it.kind); open(it); } }, 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 요청(n)마다 한 번
+  }, [reqN]);
   const create = (kind: RecipeKind) => leave(() => {
     const d = { id: null, kind, name: "", rows: toERows([{}]), gas: {}, updatedAt: null };
     setSaveAs(null);
@@ -485,9 +461,8 @@ export default function Chk2Recipes({ bundle, st, recipes, can, onAsk, notify, d
             )}
             {draft.kind === "process" && blockAt >= 0 ? (
               <Chk2BlockEditor key={blockUid} row={draft.rows[blockAt].data} rc={pCheck?.rows[blockAt] ?? null}
-                env={env?.blocks ?? null} bundle={bundle} readOnly={readOnly} rowNo={blockAt + 1}
-                startWhy={rowWhy(blockAt)} onStart={() => askStartRow(blockAt)} onClose={() => setBlockUid(null)} dirty={dirty}
-                onRow={(data) => setDraft((d) => (d ? { ...d, rows: d.rows.map((r) => (r.uid === blockUid ? { ...r, data } : r)) } : d))} />
+                env={env?.blocks ?? null} bundle={bundle} readOnly={readOnly}
+                onRow={(data: Row) => setDraft((d) => (d ? { ...d, rows: d.rows.map((r) => (r.uid === blockUid ? { ...r, data } : r)) } : d))} />
             ) : draft.kind === "process" ? (
               <ProcessTable cols={bundle?.recipe?.processColumns ?? []} rows={draft.rows} check={pCheck} bundle={bundle}
                 readOnly={readOnly} reveal={reveal} canStart={rowWhy} onStart={askStartRow} onEditBlocks={setBlockUid} onToBlocks={setToBlocks}

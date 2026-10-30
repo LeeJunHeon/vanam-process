@@ -2,7 +2,7 @@
 // 묶음에 이름이 없으면(v10 이하 옛 장비) 지금처럼 코드·이름 그대로. 원시 코드·키는 '상세'에서만(부르는 쪽이 detail 로).
 import type { BlockDef as BDef, BParamDef } from "@/lib/ops2/chk/blocks";
 import type { ColDef } from "@/lib/ops2/chk/recipe";
-import { CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, stateLabel, type Bundle } from "./types";
+import { CMD_STATUS, RUN_RESULT, commandLabel, fmtValue, reasonLabel, stateLabel, type Bundle, type FieldDef } from "./types";
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === "object" && !Array.isArray(v);
@@ -22,6 +22,22 @@ export function fmtClock(sec: number): string {
   const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), x = t % 60;
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`;
 }
+
+// ───────────── 값 ─────────────
+/** 스냅샷 값 하나를 글로(묶음 정의 fmt·enumLabels). 값이 비고 그 값의 상태 열(stateColumn — 묶음 12)이 ok 가 아니면
+ *  상태 이름(상태 열 enumLabels)을 alt 로 — 카드·HMI·그래프 툴팁이 모두 이 규칙(장비 종류를 따로 보지 않는다) */
+export function fieldText(f: FieldDef, v: unknown, snap?: Record<string, unknown>, blocks?: { fields: FieldDef[] }[]):
+  { text: string; alt: string | null } {
+  const text = typeof v === "string" && f.enumLabels?.[v] ? f.enumLabels[v] : fmtValue(v, f.fmt);
+  if (text || !f.stateColumn || !snap) return { text, alt: null };
+  const st = snap[f.stateColumn];
+  if (typeof st !== "string" || st === "" || st === "ok") return { text, alt: null };
+  const sf = blocks?.flatMap((b) => b.fields).find((x) => x.column === f.stateColumn);
+  return { text: "", alt: sf?.enumLabels?.[st] ?? st };
+}
+
+/** event context.source → 출처 이름(묶음 13 eventSources, 없으면 source 그대로) */
+export const sourceLabel = (b: Bundle | null, src: string) => b?.eventSources?.find((x) => x.source === src)?.label ?? src;
 
 // ───────────── 블록 ─────────────
 export const blockDef = (b: Bundle | null, type: string): BDef | undefined =>
@@ -92,7 +108,7 @@ export function runTitle(r: { name: string | null; recipeName: string | null; st
 
 // ───────────── 로그(사건) ─────────────
 export type FeedLike = { type: string; data: Obj };
-export type LogLine = { level: string; kind: string; text: string; raw: string; main: boolean };
+export type LogLine = { level: string; kind: string; text: string; raw: string; main: boolean; source?: string };
 
 const ADJ_RESULT: Record<string, string> = {
   applied: "바로 적용", scheduled: "다음 블록부터", confirmed: "장비 확인", failed: "장비 적용 실패", rejected: "거부",
@@ -155,9 +171,19 @@ export function logLine(b: Bundle | null, e: FeedLike): LogLine {
       text = `${s(cd.index ?? cd.no)} ${bn} 끝 — ${res}${el !== null ? `, ${fmtDur(el)}` : ""}`
         + `${cd.reason ? ` (${reasonLabel(b, s(cd.reason))})` : ""}`;
     } else text = `${s(cd.index ?? cd.no)}/${s(cd.total)} ${bn} 시작`;
+  } else if (source === "process" && ["skip", "pause", "resume", "edit", "pause_long"].includes(kind)) {
+    // 묶음 13 — 건너뛰기·일시정지·재개·순서 고치기(context.data: by·no·type·label·remainS·pausedSec·summary·revision)
+    const bn = cd.type === "delay" ? "딜레이 행" : cd.type ? `${blockName(b, s(cd.type))}${cd.label ? `(${s(cd.label)})` : ""}` : "";
+    const who = cd.by ? ` · ${s(cd.by)}` : cd.source ? ` · ${s(cd.source)}` : "";
+    const ps = num(cd.pausedSec), rs = num(cd.remainS);
+    text = kind === "skip" ? `${s(cd.no)} ${bn} 건너뜀${who}`
+      : kind === "pause" ? `${s(cd.no)} ${bn} 일시정지${rs !== null ? ` · 남은 ${fmtDur(rs)}` : ""}${who}`
+      : kind === "resume" ? `${s(cd.no)} ${bn} 재개${ps !== null ? ` · 멈춘 시간 ${fmtDur(ps)}` : ""}${who}`
+      : kind === "edit" ? `판 ${s(cd.revision)} · ${s(cd.summary) || "순서 고침"}${who}`
+      : `일시정지 ${ps !== null ? fmtDur(ps) : ""} — 한도 ${num(cd.maxSec) !== null ? fmtDur(num(cd.maxSec) as number) : "-"}, 곧 정지 순서`;
   } else {
     const label = reasonLabel(b, code);
     text = [label !== code && label !== name ? label : "", s(d.message)].filter(Boolean).join(" — ");
   }
-  return { level, kind: name, text, raw, main };
+  return { level, kind: name, text, raw, main, source: source ? sourceLabel(b, source) : undefined };
 }
