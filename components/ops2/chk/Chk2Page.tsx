@@ -203,7 +203,6 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
     return null;
   };
   const lock = (kind: string) => lockOf(kind);
-  const can = (kind: string) => !lockOf(kind);
   const canKey = (kind: string, key: string) => !lockOf(kind, key);
   const cancel = useCallback(() => setAsk(null), []);
 
@@ -420,7 +419,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
           onAsk={setAsk} note={mimicNote} viewOnly={local} />
       )}
       {curTab === "recipe" && !local && (
-        <Chk2Recipes bundle={d.bundle} st={st} recipes={recipes} can={can} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef}
+        <Chk2Recipes bundle={d.bundle} st={st} recipes={recipes} lock={lock} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef}
           listOnly={neverConnected} openReq={recipeReq} />
       )}
       {curTab === "log" && (

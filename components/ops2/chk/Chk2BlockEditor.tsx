@@ -11,11 +11,12 @@
 // 아래: 실행 순서 미리보기(blocks.ts expandBlocks — 평소 블록별 한 줄, 장비 스텝 문구는 '상세'에서).
 // 블록 JSON 은 장비가 받는 그대로(모르는 키도 지우지 않는다 — 장비와 같은 검사). 편집 모델(EBlock·toJson·fromJson) 그대로.
 import { Fragment, useMemo, useState, type DragEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, GripVertical, Lock, Repeat } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, GripVertical, Lock } from "lucide-react";
 import { Trash2 } from "lucide-react";
 import type { Row, RowCheck } from "@/lib/ops2/chk/recipe";
 import { expectedTime, type BParamDef, type BlockDef, type BlockEnv, type ExpBlock, type Uses } from "@/lib/ops2/chk/blocks";
 import { useChk2Mode } from "./mode";
+import { DurationInput } from "./inputs";
 import { blockNames, blockSummary, humanize, paramLabel } from "./text";
 import { stateLabel, type Bundle } from "./types";
 
@@ -82,27 +83,6 @@ export function blockRowLines(row: Row, rc: RowCheck | null): string[] {
     `쓰는 장비: ${usesText(rc?.uses ?? null)}`,
     t ? `예상 시간: 대기·메인 합 ${fmtSec(t.sec)}${t.open ? ` + 끝을 모르는 대기 ${t.open}개(압력·파워·히터·조건)` : ""}` : "예상 시간: -",
   ];
-}
-
-export function BlockRowSummary({ row, rc, onEdit }: { row: Row; rc: RowCheck | null; onEdit: () => void }) {
-  const { detail } = useChk2Mode();
-  const errs = rc?.errors.length ?? 0, warns = rc?.warnings.length ?? 0;
-  const t = rc?.expanded ? expectedTime(rc.expanded) : null;
-  return (
-    <span className="flex flex-wrap items-center gap-1.5">
-      <Repeat size={12} className="text-indigo-500" />
-      <b className="text-indigo-700">블록 행</b>
-      <span className="text-gray-500">블록 {countBlocks(row.blocks)}개 · {timeText(t)}
-        {detail && rc?.expanded && ` · 펼친 단계 ${stepCount(rc.expanded)}개`}</span>
-      <span className={`rounded px-1 text-[10px] font-semibold ${errs ? "bg-rose-50 text-rose-700" : warns ? "bg-amber-50 text-amber-700"
-        : rc?.expanded ? "bg-emerald-50 text-emerald-700" : "bg-gray-100 text-gray-500"}`}>
-        {errs ? `오류 ${errs}` : warns ? `경고 ${warns}` : rc?.expanded ? "검사 통과" : "블록 없음"}
-      </span>
-      <button onClick={onEdit} className="rounded-lg border border-indigo-200 px-1.5 py-0.5 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-50">
-        블록 편집
-      </button>
-    </span>
-  );
 }
 
 const NUM_RE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
@@ -263,6 +243,18 @@ function ParamField({ p, d, params, env, bundle, error, readOnly, set }: {
   }
   const unit = d.type === "cond_wait" && (p.name === "value" || p.name === "tol")
     ? defs.condFields.find((f) => f.field === params.field)?.unit ?? "" : p.unit;
+  // 초 단위 시간은 분·초 칸(저장은 초 그대로) — 값이 숫자가 아니면(검사 오류) 글 칸 그대로
+  if (unit === "s" && (p.type === "float" || p.type === "int") && (value === undefined || typeof value === "number")) {
+    const [lo, hi] = bounds(p, cfg);
+    return (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <DurationInput sec={typeof value === "number" ? value : null} onChange={(x) => set(p.name, x === null ? undefined : x)}
+          error={!!error} disabled={readOnly} label={paramLabel(p)} intOnly={p.type === "int"} />
+        {value === undefined && <span className="text-[10px] text-[#8A929D]">{defaultText(p, cfg, "s", detail)}</span>}
+        {(lo !== null || hi !== null) && <span className="text-[10px] text-[#8A929D]">{lo !== null ? fmtSec(lo) : ""}~{hi !== null ? fmtSec(hi) : ""}</span>}
+      </span>
+    );
+  }
   return <NumField p={p} value={value} cfg={cfg} unit={unit} error={error} readOnly={readOnly} onChange={(v) => set(p.name, v)} />;
 }
 
@@ -491,6 +483,22 @@ export function newBlockParams(d: BlockDef | undefined): Record<string, unknown>
   return {};
 }
 
+export type TreeAct = "up" | "down" | "copy" | "delete";
+/** 목록 조작 — 위로·아래로·복사(아래에)·삭제. 맨 위 lockTop 개 앞으로는 못 간다. 고른 블록(sel)도 같이 돌려준다 */
+export function treeAct(tree: EBlock[], id: string, a: TreeAct, sel: string | null, lockTop = 0): { tree: EBlock[]; sel: string | null } {
+  let nextSel: string | null = sel;
+  const top = tree.some((x) => x.uid === id);
+  const next = mapTree(tree, id, (l, i) => {
+    const n = [...l];
+    if (a === "up" && i > 0 && !(top && i - 1 < lockTop)) [n[i - 1], n[i]] = [n[i], n[i - 1]];
+    if (a === "down" && i < n.length - 1) [n[i + 1], n[i]] = [n[i], n[i + 1]];
+    if (a === "copy") { const c = cloneE(n[i]); n.splice(i + 1, 0, c); nextSel = c.uid; }
+    if (a === "delete") { n.splice(i, 1); if (sel === id) nextSel = n[Math.min(i, n.length - 1)]?.uid ?? null; }
+    return n;
+  });
+  return { tree: next, sel: nextSel };
+}
+
 export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, errors, warnings, lockTop = 0, doneText }: {
   tree: EBlock[]; onTree: (t: EBlock[]) => void; sel: string | null; onSel: (id: string | null) => void;
   env: BlockEnv; bundle: Bundle | null; readOnly: boolean; errors: string[]; warnings: string[];
@@ -506,19 +514,10 @@ export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, err
   const selDef = selPlace && isObj(selPlace.e.data) && typeof selPlace.e.data.type === "string" ? env.byType.get(selPlace.e.data.type) : undefined;
   const canInto = !!selDef?.container && !lockedOf(selPlace);
 
-  const act = (id: string, a: "up" | "down" | "copy" | "delete") => {
-    let nextSel: string | null = sel;
-    const top = places.get(id)?.parent === null;
-    const next = mapTree(tree, id, (l, i) => {
-      const n = [...l];
-      if (a === "up" && i > 0 && !(top && i - 1 < lockTop)) [n[i - 1], n[i]] = [n[i], n[i - 1]];
-      if (a === "down" && i < n.length - 1) [n[i + 1], n[i]] = [n[i], n[i + 1]];
-      if (a === "copy") { const c = cloneE(n[i]); n.splice(i + 1, 0, c); nextSel = c.uid; }
-      if (a === "delete") { n.splice(i, 1); if (sel === id) nextSel = n[Math.min(i, n.length - 1)]?.uid ?? null; }
-      return n;
-    });
-    onTree(next);
-    onSel(nextSel);
+  const act = (id: string, a: TreeAct) => {
+    const r = treeAct(tree, id, a, sel, lockTop);
+    onTree(r.tree);
+    onSel(r.sel);
   };
   const add = (type: string) => {
     const d = env.byType.get(type);
@@ -681,26 +680,3 @@ export function BlockPane({ tree, sel, env, bundle, readOnly, errors, warnings, 
 }
 
 export { stepCount, mapTree };
-
-/** 블록 행 편집(목록 + 설정 두 칸) — 레시피 탭 블록 행 */
-export default function Chk2BlockEditor({ row, rc, env, bundle, readOnly, onRow }: {
-  row: Row; rc: RowCheck | null; env: BlockEnv | null; bundle: Bundle | null; readOnly: boolean; onRow: (r: Row) => void;
-}) {
-  const [tree, setTree] = useState<EBlock[]>(() => (Array.isArray(row.blocks) ? row.blocks.map(fromJson) : []));
-  const [sel, setSel] = useState<string | null>(() => tree[0]?.uid ?? null);
-  const errors = rc?.errors ?? [], warnings = rc?.warnings ?? [];
-  if (!env) return <p className="rounded-[10px] bg-[#F5F6F8] p-2 text-[11px] text-[#5B6470]">이 장비 정의에는 블록 정의가 없어(옛 장비) 블록 편집을 쓸 수 없습니다.</p>;
-  const commit = (next: EBlock[]) => { setTree(next); onRow({ ...row, blocks: next.map(toJson) }); };
-  return (
-    <div className="space-y-2">
-      <TopMessages errors={errors} bundle={bundle} />
-      <div className="grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-        <BlockTree tree={tree} onTree={commit} sel={sel} onSel={setSel} env={env} bundle={bundle} readOnly={readOnly}
-          errors={errors} warnings={warnings} />
-        <div className="rounded-[12px] border border-[#D9DDE3] bg-white p-3 lg:self-start">
-          <BlockPane tree={tree} sel={sel} env={env} bundle={bundle} readOnly={readOnly} errors={errors} warnings={warnings} onTree={commit} />
-        </div>
-      </div>
-    </div>
-  );
-}
