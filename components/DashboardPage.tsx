@@ -44,6 +44,38 @@ function dday(base: string, target: string): string {
   return diff > 0 ? `D-${diff}` : `D+${-diff}`;
 }
 
+// 지연·예정·납기 목록 카드 — 렌더 밖에 두어 매 렌더마다 새 컴포넌트가 되지 않게 한다
+function Section({
+  icon,
+  title,
+  accent,
+  children,
+  empty,
+  count,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  accent: string;
+  children: React.ReactNode;
+  empty: string;
+  count: number;
+}) {
+  return (
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white">
+      <div className={`flex items-center gap-1.5 border-b border-gray-50 px-3 py-2.5 ${accent}`}>
+        {icon}
+        <span className="text-[13px] font-bold">{title}</span>
+        <span className="text-[11px] font-semibold opacity-60">{count}</span>
+      </div>
+      {count === 0 ? (
+        <div className="px-3 py-5 text-center text-[12px] text-gray-300">{empty}</div>
+      ) : (
+        <div className="max-h-60 divide-y divide-gray-50 overflow-y-auto">{children}</div>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -124,35 +156,6 @@ export default function DashboardPage() {
       <p className="mt-0.5 truncate text-[11px] text-gray-400">
         {o.company ? `${o.company} · ` : ""}공정 {o.done}/{o.total} · 납기 {o.dueAt.slice(5)}
       </p>
-    </div>
-  );
-
-  const Section = ({
-    icon,
-    title,
-    accent,
-    children,
-    empty,
-    count,
-  }: {
-    icon: React.ReactNode;
-    title: string;
-    accent: string;
-    children: React.ReactNode;
-    empty: string;
-    count: number;
-  }) => (
-    <div className="flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white">
-      <div className={`flex items-center gap-1.5 border-b border-gray-50 px-3 py-2.5 ${accent}`}>
-        {icon}
-        <span className="text-[13px] font-bold">{title}</span>
-        <span className="text-[11px] font-semibold opacity-60">{count}</span>
-      </div>
-      {count === 0 ? (
-        <div className="px-3 py-5 text-center text-[12px] text-gray-300">{empty}</div>
-      ) : (
-        <div className="max-h-60 divide-y divide-gray-50 overflow-y-auto">{children}</div>
-      )}
     </div>
   );
 

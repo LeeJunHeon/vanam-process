@@ -196,14 +196,15 @@ export function ConnBadge({
   onToggle?: (v: boolean) => void;
   onRefresh?: () => void;
 }) {
-  const [, tick] = useState(0);
-  // 마지막 갱신 경과를 초 단위로 갱신한다(값 자체는 nowMs 기준)
+  // 마지막 갱신 경과를 초 단위로 갱신한다(값 자체는 nowMs 기준).
+  // 현재 시각은 렌더 중에 읽지 않고 1초마다 state 로 받는다. 새 조회 직후(now 가 아직 이전 초)는 0초로 본다.
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => tick((v) => v + 1), 1000);
+    const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  const staleSec = lastFetchMs ? Math.floor((Date.now() - lastFetchMs) / 1000) : null;
+  const staleSec = lastFetchMs ? Math.floor((Math.max(now, lastFetchMs) - lastFetchMs) / 1000) : null;
   const stale = !paused && staleSec !== null && staleSec > 15;
 
   return (

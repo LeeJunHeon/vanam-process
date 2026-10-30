@@ -1,7 +1,6 @@
-import NextAuth from "next-auth";
+import NextAuth, { type NextAuthRequest } from "next-auth";
 import { authConfig } from "./auth.config";
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
 import { DEV_AUTH_BYPASS } from "./lib/dev-auth-bypass";
 
 // Edge Runtime용 — Prisma 미포함 authConfig만 사용
@@ -9,7 +8,7 @@ const { auth } = NextAuth(authConfig);
 const isLocal =
   !process.env.NEXTAUTH_URL || process.env.NEXTAUTH_URL.includes("localhost");
 
-export default auth((req: NextRequest & { auth: any }) => {
+export default auth((req: NextAuthRequest) => {
   const bp = process.env.NEXT_PUBLIC_BASE_PATH || "";
   const pathname =
     bp && req.nextUrl.pathname.startsWith(bp)

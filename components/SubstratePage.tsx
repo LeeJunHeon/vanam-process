@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, Trash2, ImageOff, Pencil } from "lucide-react";
 import SubstrateFormModal from "@/components/SubstrateFormModal";
 import type { EditTarget } from "@/components/SubstrateFormModal";
-import { errorMessage } from "@/lib/fetchError";
+import { errorMessage, fetchJson } from "@/lib/fetchError";
 import { photoUrl } from "@/lib/photoUrl";
 
 type Photo = { id: number; originalName: string; mimeType: string | null };
@@ -40,26 +40,36 @@ export default function SubstratePage() {
   const [preview, setPreview] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  // 목록 조회. state 는 응답 콜백에서만 바꾼다.
+  const fetchList = useCallback(
+    () =>
+      fetchJson<Receipt[]>(`/api/receipts?q=${encodeURIComponent(q)}`)
+        .then(
+          (rows) => setItems(rows),
+          (e) => setError(errorMessage(e, "목록을 불러오지 못했습니다.")),
+        )
+        .finally(() => setLoading(false)),
+    [q],
+  );
+
+  // 검색어를 바꾸면 바로 로딩 표시를 켜고 이전 오류를 지운다(조회는 아래 effect 가 한다)
+  const changeQ = (v: string) => {
+    setQ(v);
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/receipts?q=${encodeURIComponent(q)}`);
-      if (!res.ok) {
-        const d = await res.json().catch(() => null);
-        throw new Error(d?.error ?? `조회 실패 (${res.status})`);
-      }
-      setItems(await res.json());
-    } catch (e) {
-      setError(errorMessage(e, "목록을 불러오지 못했습니다."));
-    } finally {
-      setLoading(false);
-    }
-  }, [q]);
+  };
 
+  // 다시 불러오기(저장·삭제 뒤, 다시 시도) — 로딩 표시를 켜고 이전 오류를 지운 뒤 조회한다
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return fetchList();
+  }, [fetchList]);
+
+  // 첫 조회·검색어 변경. 이때의 로딩 표시·오류 지움은 초기값과 changeQ 가 맡는다
   useEffect(() => {
-    load();
-  }, [load]);
+    fetchList();
+  }, [fetchList]);
 
   const remove = async (id: number) => {
     if (!confirm("이 기록을 삭제할까요?")) return;
@@ -85,7 +95,7 @@ export default function SubstratePage() {
           />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => changeQ(e.target.value)}
             placeholder="담당자·출처·요청처·메모 검색"
             className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-400"
           />

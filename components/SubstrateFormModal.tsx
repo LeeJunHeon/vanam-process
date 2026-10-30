@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { X, Trash2 } from "lucide-react";
 import { useSession } from "next-auth/react";
 import PhotoUploader from "@/components/ui/PhotoUploader";
@@ -52,9 +52,12 @@ export default function SubstrateFormModal({ target, lockedProcess, onClose, onS
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
-  useEffect(() => {
+  // target 이 바뀌면 기존 사진 목록을 그 기록 것으로 되돌린다 — effect 대신 렌더 중에 맞춘다(React 문서: prop 이 바뀔 때 state 조정)
+  const [prevTarget, setPrevTarget] = useState(target);
+  if (target !== prevTarget) {
+    setPrevTarget(target);
     setExisting(target?.photos ?? []);
-  }, [target]);
+  }
 
   // 담당자는 서버가 세션에서 결정한다. 화면에는 확인용으로만 보여준다.
   const managerLabel = session?.user?.name || session?.user?.email || "-";
