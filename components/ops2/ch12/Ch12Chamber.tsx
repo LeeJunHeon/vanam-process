@@ -15,6 +15,7 @@ import { reasonLabel, type AdjustState, type StateData } from "../chk/types";
 import type { FeedItem } from "../chk/useChk2";
 import { fmtKst } from "@/lib/ops2/time";
 import Ch12Mimic from "./Ch12Mimic";
+import { RgaChart } from "./Ch12Spectra";
 import { Btn, CmdForm } from "./Ch12Controls";
 import {
   KINDS, blockControl, blockLabel, chArgs, chamberState, clockOrDash, feedChamber, hasKind, isRunning, pickKind, short, stateInfo,
@@ -45,6 +46,8 @@ export default function Ch12Chamber(p: Props) {
   const running = isRunning(bundle, cs);
   const ctl = blockControl(bundle, cs);
   const eng = st?.engines?.[ch];
+  // 프리스퍼터 예약 표시(장비 proc.chN web_state.presputter — v1 preSputter_remainigTime_edit·LeftTime_edit·레시피 표시칸)
+  const pre = (eng ?? st?.engines?.[`proc.${ch}`])?.presputter as Record<string, unknown> | undefined;
   const label = cdef?.label ?? ch.toUpperCase();
   const can = (kind: string) => allowed(kind, `${kind}@${ch}`);
 
@@ -173,6 +176,11 @@ export default function Ch12Chamber(p: Props) {
             <span className="text-[11px] font-semibold text-gray-500">프리스퍼터 예약</span>
             <CmdForm bundle={bundle} kind={pickKind(bundle, KINDS.preReserve)} chamber={ch} label="예약" can={can} onAsk={ask} />
             <CmdForm bundle={bundle} kind={pickKind(bundle, KINDS.preCancel)} chamber={ch} label="예약 취소" can={can} onAsk={ask} />
+            {pre && (
+              <span className="text-[11px] text-gray-500">
+                {short(pre.status_text)} · 남은 {short(pre.left_text)} · 레시피 {short(pre.recipe_display)}
+              </span>
+            )}
           </div>
         )}
       </Card>
@@ -188,6 +196,8 @@ export default function Ch12Chamber(p: Props) {
           );
         })}
       </div>
+
+      <RgaChart feed={feed} ch={ch} />
 
       {targets.length > 0 && (
         <Card title="공정 목표값" right={<span className="text-[10px] text-gray-400">그 시각 엔진이 장비에 요청한 값</span>}>

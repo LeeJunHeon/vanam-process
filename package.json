@@ -9,6 +9,7 @@
     "lint": "eslint",
     "ops2:golden": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-golden.mjs",
     "ops2:chat-ch12": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-chat-ch12.mjs",
+    "ops2:ch12-ui": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-ch12-ui-check.mjs",
     "hmi:build": "node scripts/hmi-build.mjs",
     "hmi:copy": "node scripts/hmi-copy.mjs",
     "postinstall": "prisma generate"
