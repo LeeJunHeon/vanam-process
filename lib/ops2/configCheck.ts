@@ -38,7 +38,7 @@ export function checkParamValue(p: ParamDefLite, v: unknown): string | null {
 /** config_ack 사유 코드 → 사람 말(묶음 reasons 가 없을 때도) */
 export const CONFIG_REASON: Record<string, string> = {
   CONFIG_INVALID: "설정 검사 실패 — 아래 오류(키 사이 규칙 포함)를 고치세요",
-  CONFIG_HASH_MISMATCH: "설정 정의가 장비와 다름 — 장비 묶음을 다시 읽은 뒤 다시",
+  CONFIG_HASH_MISMATCH: "설정 정의가 장비와 다름 — 장비 정의를 다시 읽은 뒤 다시",
   CONFIG_VERSION_STALE: "장비에 이미 더 새 버전이 있음 — 화면을 다시 읽고 다시",
   CONFIG_SECRET_FROM_WEB: "비밀값은 웹에서 보낼 수 없음",
   CONFIG_LOCKED_KEY: "실행 모드·장비 ID 는 웹에서 바꿀 수 없음(노트북 설정 파일로만)",

@@ -5,6 +5,8 @@
 // 그 run 의 사건(수준 색·사유 라벨·시각, 경고·오류만 보기), 그 시간대 명령, 1분 요약 그래프(필드 고르기 — 묶음 snapshot 정의).
 // W-9: 이름은 text.runTitle("UI 검토 1 · 1/2행 · Ti 증착"), 레시피 값은 열 label·단위, 그래프 값은 장비별로 묶어 접기(detail 필드는
 // '상세'), 사건은 로그와 같은 규칙(text.logLine), run id·instance·원래 이름·원시 코드는 '상세'에서만.
+// W-10: 원래 순서(run_start 블록 — 판 1)와 실제 실행된 순서(run_end summary.executed — 건너뜀·멈춘 시간·판)를 나란히,
+//   판 목록(시작 + 순서 고침 사건 — 누가·언제·무엇을).
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ChevronDown, ChevronRight, History, RefreshCw } from "lucide-react";
 import { useChk2Mode } from "./mode";
@@ -14,7 +16,9 @@ import type { ExpBlock } from "@/lib/ops2/chk/blocks";
 import { Card } from "./kit";
 import { ExpandedView, fmtSec } from "./Chk2BlockEditor";
 import Chk2SummaryChart, { type PickField, type SummaryRow } from "./Chk2SummaryChart";
-import { CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, type Bundle } from "./types";
+import { CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, type Bundle, type RunSummary } from "./types";
+import { blockName, fmtDur } from "./text";
+import { Chip } from "./kit";
 
 type RunItem = {
   runId: string; name: string | null; recipeName: string | null; startedBy: string | null; stepNo: number | null;
@@ -38,16 +42,17 @@ type Detail = {
 };
 
 const LEVEL_TONE: Record<string, string> = {
-  error: "bg-rose-50 text-rose-700", critical: "bg-rose-100 text-rose-800", warn: "bg-amber-50 text-amber-700", info: "bg-gray-100 text-gray-500",
+  error: "bg-[#FEE4E2] text-[#B42318]", critical: "bg-[#FEE4E2] text-[#B42318]", warn: "bg-[#FFFAEB] text-[#B54708]", info: "bg-[#EEF0F3] text-[#5B6470]",
 };
+const RESULT_TEXT: Record<string, string> = { done: "끝", skipped: "건너뜀", aborted: "중단", error: "오류", failed: "실패" };
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const kstToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 
 function ResultBadge({ r }: { r: Pick<RunItem, "endedAt" | "result"> }) {
   return (
     <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-      !r.endedAt ? "bg-gray-800 text-white" : r.result === "done" ? "bg-emerald-50 text-emerald-700"
-      : r.result === "error" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700"}`}>
+      !r.endedAt ? "bg-[#3A424D] text-white" : r.result === "done" ? "bg-[#F5F6F8] text-[#5B6470]"
+      : r.result === "error" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#FFFAEB] text-[#B54708]"}`}>
       {!r.endedAt ? "진행 중" : RUN_RESULT[r.result ?? ""] ?? r.result ?? "-"}
     </span>
   );
@@ -113,9 +118,18 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
     params: isObj(b.params) ? b.params : {}, steps: [],
   })) : []), [d]);
 
-  if (err) return <div className="space-y-2"><Back onBack={onBack} /><p className="text-xs text-rose-600">{err}</p></div>;
-  if (!d) return <div className="space-y-2"><Back onBack={onBack} /><p className="text-xs text-gray-400">읽는 중…</p></div>;
+  if (err) return <div className="space-y-2"><Back onBack={onBack} /><p className="text-xs text-[#B42318]">{err}</p></div>;
+  if (!d) return <div className="space-y-2"><Back onBack={onBack} /><p className="text-xs text-[#5B6470]">읽는 중…</p></div>;
   const r = d.run;
+  const summary = isObj(r.summary) ? r.summary as RunSummary : null;
+  const executed = Array.isArray(summary?.executed) ? summary.executed : [];
+  const edits = d.events.flatMap((e) => {
+    const c = isObj(e.context) ? e.context : null;
+    const x = c && isObj(c.data) ? c.data : null;
+    if (c?.kind !== "edit" || !x) return [];
+    return [{ id: e.msgId, ts: e.ts, rev: typeof x.revision === "number" ? x.revision : "?", by: String(x.by ?? x.source ?? "-"),
+              what: String(x.summary ?? "순서 고침") }];
+  });
   const lines = d.events.map((e) => ({ e, ...logLine(bundle, { type: "event", data: { level: e.level, code: e.code, ruleId: e.ruleId, message: e.message, context: e.context } }) }));
   const seenEv = detail ? lines : lines.filter((x) => x.main);
   const events = onlyIssue ? seenEv.filter((x) => x.level !== "info") : seenEv;
@@ -132,11 +146,11 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <Back onBack={onBack} />
-        <b className="text-sm text-gray-900">{runTitle(r)}</b>
-        {detail && <span className="font-mono text-[10px] text-gray-400">{r.name}</span>}
+        <b className="text-sm text-[#1B1F24]">{runTitle(r)}</b>
+        {detail && <span className="font-mono text-[10px] text-[#5B6470]">{r.name}</span>}
         <ResultBadge r={r} />
-        {r.reasonCode && <span className="text-xs text-gray-600">{reasonLabel(bundle, r.reasonCode)}{detail && <span className="ml-1 font-mono text-[10px] text-gray-400">{r.reasonCode}</span>}</span>}
-        <button onClick={() => void load()} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-50">
+        {r.reasonCode && <span className="text-xs text-[#5B6470]">{reasonLabel(bundle, r.reasonCode)}{detail && <span className="ml-1 font-mono text-[10px] text-[#5B6470]">{r.reasonCode}</span>}</span>}
+        <button onClick={() => void load()} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-[#5B6470] hover:bg-[#F5F6F8]">
           <RefreshCw size={12} /> 다시 읽기
         </button>
       </div>
@@ -144,24 +158,24 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
         {[["시작", r.startedAt ? fmtKst(r.startedAt) : "시작 기록 없음"], ["끝", fmtKst(r.endedAt)], ["소요", r.startedAt && r.endedAt ? fmtSec((Date.parse(r.endedAt) - Date.parse(r.startedAt)) / 1000) : "-"],
           ["누가", r.startedBy ?? "-"], ["행 번호", r.stepNo ?? "-"], ["설정 버전", r.configVersion ?? "-"],
           ...(detail ? [["run id", r.runId], ["실행(instance)", r.instance]] : [])].map(([k, v]) => (
-          <div key={String(k)} className="min-w-0"><dt className="text-gray-400">{k}</dt><dd className="truncate font-semibold text-gray-700" title={String(v)}>{String(v)}</dd></div>
+          <div key={String(k)} className="min-w-0"><dt className="text-[#5B6470]">{k}</dt><dd className="truncate font-semibold text-[#1B1F24]" title={String(v)}>{String(v)}</dd></div>
         ))}
       </dl>
 
       <section>
         <div className="mb-1 flex flex-wrap items-center gap-2">
-          <h4 className="text-xs font-bold text-gray-800">1분 요약 그래프</h4>
-          <span className="text-[11px] text-gray-400">1분 요약 그래프(평균·최대) — 옅은 구간은 값 품질이 낮을 때</span>
-          {cols && <button onClick={() => setCols(null)} className="ml-auto px-1.5 text-[10px] text-gray-400 underline">기본으로</button>}
+          <h4 className="text-xs font-bold text-[#1B1F24]">1분 요약 그래프</h4>
+          <span className="text-[11px] text-[#5B6470]">1분 요약 그래프(평균·최대) — 옅은 구간은 값 품질이 낮을 때</span>
+          {cols && <button onClick={() => setCols(null)} className="ml-auto px-1.5 text-[10px] text-[#5B6470] underline">기본으로</button>}
         </div>
         <div className="mb-1.5 flex flex-wrap items-start gap-1.5">
           {byBlock.map((g) => {
             const on = g.fields.filter((f) => picked.includes(f.column)).length;
             const o = openBlk[g.blk] ?? false;
             return (
-              <div key={g.blk} className={`rounded-lg border ${o ? "w-full border-gray-200 p-1.5" : "border-gray-100"}`}>
+              <div key={g.blk} className={`rounded-lg border ${o ? "w-full border-[#D9DDE3] p-1.5" : "border-[#E3E6EA]"}`}>
                 <button onClick={() => setOpenBlk((m) => ({ ...m, [g.blk]: !o }))}
-                  className={`flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] font-semibold ${on ? "text-blue-700" : "text-gray-600"}`}>
+                  className={`flex items-center gap-0.5 px-1.5 py-0.5 text-[11px] font-semibold ${on ? "text-[#1D4ED8]" : "text-[#5B6470]"}`}>
                   {o ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {g.label}{on > 0 && ` (${on})`}
                 </button>
                 {o && (
@@ -171,7 +185,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
                       return (
                         <button key={f.column} onClick={() => setCols(sel ? picked.filter((c) => c !== f.column) : [...picked, f.column])}
                           title={detail ? `${f.column} · ${f.summary ?? "mean"}` : f.desc || undefined}
-                          className={`rounded-md border px-1.5 py-0.5 text-[10px] ${sel ? "border-blue-300 bg-blue-50 font-semibold text-blue-700" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                          className={`rounded-md border px-1.5 py-0.5 text-[10px] ${sel ? "border-[#C7D5FB] bg-[#E8EEFC] font-semibold text-[#1D4ED8]" : "border-[#D9DDE3] text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
                           {f.label.split(" · ").pop()}{f.unit && ` ${f.unit}`}
                         </button>
                       );
@@ -183,65 +197,99 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
           })}
         </div>
         <Chk2SummaryChart rows={d.summaries} fields={fields} t0={t0} t1={t1} />
-        {d.truncated.summaries && <p className="text-[10px] text-amber-700">요약은 앞에서부터 {d.limits.summaries}개(24시간분)까지만</p>}
+        {d.truncated.summaries && <p className="text-[10px] text-[#B54708]">요약은 앞에서부터 {d.limits.summaries}개(24시간분)까지만</p>}
       </section>
 
       <div className="grid gap-3 xl:grid-cols-2">
         <section>
-          <h4 className="mb-1 text-xs font-bold text-gray-800">레시피 값</h4>
-          {pText.length ? <p className="text-[11px] leading-relaxed text-gray-700">{pText.join(" · ")}</p>
-            : <p className="text-[11px] text-gray-400">{exp.length ? "블록 행 — 아래 블록 기록" : "없음"}</p>}
+          <h4 className="mb-1 text-xs font-bold text-[#1B1F24]">레시피 값</h4>
+          {pText.length ? <p className="text-[11px] leading-relaxed text-[#1B1F24]">{pText.join(" · ")}</p>
+            : <p className="text-[11px] text-[#5B6470]">{exp.length ? "블록 행 — 아래 블록 기록" : "없음"}</p>}
           {detail && params.length > 0 && (
-            <p className="mt-1 text-[10px] leading-relaxed text-gray-400">
+            <p className="mt-1 text-[10px] leading-relaxed text-[#5B6470]">
               {params.map(([k, v]) => <span key={k} className="mr-2 inline-block font-mono">{k} {typeof v === "object" ? JSON.stringify(v) : String(v)}</span>)}
             </p>
           )}
-          <h4 className="mb-1 mt-2 text-xs font-bold text-gray-800">블록 기록({exp.length})</h4>
-          {exp.length ? <div className="max-h-96 overflow-y-auto rounded-xl bg-gray-50 p-2"><ExpandedView exp={exp} bundle={bundle} showParams /></div>
-            : <p className="text-[11px] text-gray-400">블록 기록 없음</p>}
+          <div className="mt-2 grid gap-3 2xl:grid-cols-2">
+            <div className="min-w-0">
+              <h4 className="mb-1 text-xs font-bold text-[#1B1F24]">원래 순서(판 1 · {exp.length}개)</h4>
+              {exp.length ? <div className="max-h-96 overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2"><ExpandedView exp={exp} bundle={bundle} showParams /></div>
+                : <p className="text-[11px] text-[#5B6470]">블록 기록 없음</p>}
+            </div>
+            <div className="min-w-0">
+              <h4 className="mb-1 text-xs font-bold text-[#1B1F24]">실제 실행{executed.length ? `(${executed.length}개)` : ""}</h4>
+              {executed.length ? (
+                <ol className="max-h-96 space-y-1 overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2">
+                  {executed.map((x, i) => (
+                    <li key={`${x.no}-${i}`} className="flex flex-wrap items-baseline gap-1.5 rounded-[8px] bg-white px-2 py-1 text-[11px]">
+                      <span className="font-mono text-[10px] text-[#5B6470]">{x.no}</span>
+                      <b className="text-[#1B1F24]">{x.type === "delay" ? "딜레이 행" : blockName(bundle, x.type)}{x.label && x.label !== blockName(bundle, x.type) ? ` · ${x.label}` : ""}</b>
+                      {x.result === "skipped" ? <Chip tone="warn">건너뜀</Chip> : x.result !== "done" ? <Chip tone="alarm">{RESULT_TEXT[x.result] ?? x.result}</Chip> : null}
+                      {(x.pausedSec ?? 0) > 0 && <Chip tone="warn">멈춤 {fmtDur(x.pausedSec ?? 0)}</Chip>}
+                      {(x.revision ?? 1) > 1 && <Chip>판 {x.revision}</Chip>}
+                      <span className="ml-auto tabular-nums text-[#5B6470]">{typeof x.start === "number" && typeof x.end === "number" ? fmtDur(x.end - x.start) : ""}</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : <p className="text-[11px] text-[#5B6470]">{r.endedAt ? "실행 기록 없음(장비 정의 13 이전 공정)" : "공정이 끝나면 실행된 순서가 남습니다"}</p>}
+              {summary && (
+                <p className="mt-1 text-[11px] text-[#5B6470]">
+                  마지막 판 {summary.revision ?? 1} · 건너뜀 {summary.skips ?? 0}번 · 일시정지 {summary.pauses ?? 0}번
+                  {(summary.pausedSec ?? 0) > 0 && ` · 멈춘 시간 ${fmtDur(summary.pausedSec ?? 0)}`}
+                </p>
+              )}
+            </div>
+          </div>
+          <h4 className="mb-1 mt-3 text-xs font-bold text-[#1B1F24]">판 목록</h4>
+          <ol className="space-y-0.5 text-[11px] text-[#1B1F24]">
+            <li><Chip>판 1</Chip> <span className="text-[#5B6470]">{r.startedAt ? fmtKst(r.startedAt) : "-"}</span> · 시작 · {r.startedBy ?? "-"}</li>
+            {edits.map((e) => (
+              <li key={e.id}><Chip>판 {e.rev}</Chip> <span className="text-[#5B6470]">{fmtKst(e.ts)}</span> · 순서 고침 · {e.by} — {e.what}</li>
+            ))}
+          </ol>
         </section>
         <section>
           <div className="mb-1 flex items-center gap-2">
-            <h4 className="text-xs font-bold text-gray-800">로그 {seenEv.length}{d.truncated.events && `(앞 ${d.limits.events}개까지)`}</h4>
+            <h4 className="text-xs font-bold text-[#1B1F24]">로그 {seenEv.length}{d.truncated.events && `(앞 ${d.limits.events}개까지)`}</h4>
             <button onClick={() => setOnlyIssue((v) => !v)}
-              className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold ${onlyIssue ? "bg-rose-50 text-rose-600" : "text-gray-400 hover:bg-gray-50"}`}>
+              className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold ${onlyIssue ? "bg-[#FEE4E2] text-[#B42318]" : "text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
               경고·오류만 {issues}
             </button>
           </div>
-          <div className="max-h-96 overflow-y-auto rounded-xl border border-gray-100">
+          <div className="max-h-96 overflow-y-auto rounded-[10px] border border-[#E3E6EA]">
             <table className="w-full text-[11px]">
               <tbody>
                 {events.map(({ e, kind, text, raw, level }) => (
-                  <tr key={e.msgId} className="border-t border-gray-50 align-top" title={raw}>
-                    <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-gray-400">{fmtKst(e.ts).slice(6)}</td>
+                  <tr key={e.msgId} className="border-t border-[#E3E6EA] align-top" title={raw}>
+                    <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-[#5B6470]">{fmtKst(e.ts).slice(6)}</td>
                     <td className="px-1 py-1"><span className={`whitespace-nowrap rounded px-1 text-[10px] font-semibold ${LEVEL_TONE[level] ?? LEVEL_TONE.info}`}>{kind}</span></td>
-                    <td className="px-1.5 py-1 text-gray-700">
+                    <td className="px-1.5 py-1 text-[#1B1F24]">
                       {text}
-                      {detail && <span className="ml-1 font-mono text-[10px] text-gray-300">{raw}</span>}
+                      {detail && <span className="ml-1 font-mono text-[10px] text-[#8A929D]">{raw}</span>}
                     </td>
                   </tr>
                 ))}
-                {!events.length && <tr><td className="p-3 text-center text-gray-400">로그 없음</td></tr>}
+                {!events.length && <tr><td className="p-3 text-center text-[#5B6470]">로그 없음</td></tr>}
               </tbody>
             </table>
           </div>
-          <h4 className="mb-1 mt-2 text-xs font-bold text-gray-800">그 시간대 명령 {d.commands.length}{d.truncated.commands && `(앞 ${d.limits.commands}개까지)`}</h4>
-          <div className="max-h-60 overflow-y-auto rounded-xl border border-gray-100">
+          <h4 className="mb-1 mt-2 text-xs font-bold text-[#1B1F24]">그 시간대 명령 {d.commands.length}{d.truncated.commands && `(앞 ${d.limits.commands}개까지)`}</h4>
+          <div className="max-h-60 overflow-y-auto rounded-[10px] border border-[#E3E6EA]">
             <table className="w-full text-[11px]">
               <tbody>
                 {d.commands.map((c) => (
-                  <tr key={c.id} className="border-t border-gray-50 align-top">
-                    <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-gray-400">{fmtKst(c.requestedAt).slice(6)}</td>
-                    <td className="px-1.5 py-1 text-gray-700">{c.label ?? commandLabel(bundle, c.kind)} <span className="text-gray-400">({c.requestedBy}{detail ? `, ${c.origin}` : ""})</span></td>
+                  <tr key={c.id} className="border-t border-[#E3E6EA] align-top">
+                    <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-[#5B6470]">{fmtKst(c.requestedAt).slice(6)}</td>
+                    <td className="px-1.5 py-1 text-[#1B1F24]">{c.label ?? commandLabel(bundle, c.kind)} <span className="text-[#5B6470]">({c.requestedBy}{detail ? `, ${c.origin}` : ""})</span></td>
                     <td className="whitespace-nowrap px-1.5 py-1">
-                      <span className={c.status === "accepted" ? "text-emerald-700" : c.status === "rejected" ? "text-rose-600" : "text-gray-500"}>
+                      <span className={c.status === "accepted" ? "text-[#5B6470]" : c.status === "rejected" ? "text-[#B42318]" : "text-[#5B6470]"}>
                         {CMD_STATUS[c.status] ?? c.status}
                       </span>
-                      {c.reasonCode && <span className="block text-[10px] text-gray-500">{reasonLabel(bundle, c.reasonCode)}{c.detail ? ` — ${c.detail}` : ""}</span>}
+                      {c.reasonCode && <span className="block text-[10px] text-[#5B6470]">{reasonLabel(bundle, c.reasonCode)}{c.detail ? ` — ${c.detail}` : ""}</span>}
                     </td>
                   </tr>
                 ))}
-                {!d.commands.length && <tr><td className="p-3 text-center text-gray-400">명령 없음</td></tr>}
+                {!d.commands.length && <tr><td className="p-3 text-center text-[#5B6470]">명령 없음</td></tr>}
               </tbody>
             </table>
           </div>
@@ -252,7 +300,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
 }
 
 const Back = ({ onBack }: { onBack: () => void }) => (
-  <button onClick={onBack} className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-semibold text-gray-600 hover:bg-gray-100">
+  <button onClick={onBack} className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-xs font-semibold text-[#5B6470] hover:bg-[#EEF0F3]">
     <ArrowLeft size={14} /> 목록
   </button>
 );
@@ -297,17 +345,17 @@ export default memo(function Chk2History({ equipment, bundle, refreshKey }: { eq
     <Card title={<><History size={15} /> 공정 기록</>}>
       {open ? <RunDetail equipment={equipment} runId={open} bundle={bundle} onBack={() => setOpen(null)} /> : (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500">
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#5B6470]">
             <label className="flex items-center gap-1">시작일(KST)
               <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)}
-                className="rounded-md border border-gray-200 px-1.5 py-0.5 text-[11px]" />
+                className="rounded-md border border-[#D9DDE3] px-1.5 py-0.5 text-[11px]" />
             </label>
             <label className="flex items-center gap-1">~
               <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)}
-                className="rounded-md border border-gray-200 px-1.5 py-0.5 text-[11px]" />
+                className="rounded-md border border-[#D9DDE3] px-1.5 py-0.5 text-[11px]" />
             </label>
             <label className="flex items-center gap-1">결과
-              <select value={result} onChange={(e) => setResult(e.target.value)} className="rounded-md border border-gray-200 px-1 py-0.5 text-[11px]">
+              <select value={result} onChange={(e) => setResult(e.target.value)} className="rounded-md border border-[#D9DDE3] px-1 py-0.5 text-[11px]">
                 <option value="">전체</option>
                 <option value="done">정상</option>
                 <option value="aborted">중단</option>
@@ -315,15 +363,15 @@ export default memo(function Chk2History({ equipment, bundle, refreshKey }: { eq
                 <option value="running">진행 중</option>
               </select>
             </label>
-            <span className="text-gray-400">장비 {equipment}</span>
-            <button onClick={() => void fetchPage(null)} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-gray-50">
+            <span className="text-[#5B6470]">장비 {equipment}</span>
+            <button onClick={() => void fetchPage(null)} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-[#F5F6F8]">
               <RefreshCw size={12} /> 다시 읽기
             </button>
           </div>
-          {err && <p className="text-xs text-rose-600">{err}</p>}
-          <div className="overflow-x-auto rounded-xl border border-gray-100">
+          {err && <p className="text-xs text-[#B42318]">{err}</p>}
+          <div className="overflow-x-auto rounded-[10px] border border-[#E3E6EA]">
             <table className="min-w-full text-xs">
-              <thead className="bg-gray-50 text-[11px] text-gray-500">
+              <thead className="bg-[#F5F6F8] text-[11px] text-[#5B6470]">
                 <tr>
                   {["시작", "끝", "이름 / 레시피", "누가", "결과", "사유", "소요"].map((h) => (
                     <th key={h} className={`px-2 py-1.5 font-semibold ${h === "소요" ? "text-right" : "text-left"}`}>{h}</th>
@@ -332,28 +380,28 @@ export default memo(function Chk2History({ equipment, bundle, refreshKey }: { eq
               </thead>
               <tbody>
                 {(list ?? []).map((r) => (
-                  <tr key={r.runId} onClick={() => setOpen(r.runId)} className="cursor-pointer border-t border-gray-100 hover:bg-blue-50/40">
-                    <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-gray-600">
-                      {r.startedAt ? fmtKst(r.startedAt) : <span className="rounded bg-gray-100 px-1 text-[10px] text-gray-500">시작 기록 없음</span>}
+                  <tr key={r.runId} onClick={() => setOpen(r.runId)} className="cursor-pointer border-t border-[#E3E6EA] hover:bg-[#E8EEFC]/40">
+                    <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">
+                      {r.startedAt ? fmtKst(r.startedAt) : <span className="rounded bg-[#EEF0F3] px-1 text-[10px] text-[#5B6470]">시작 기록 없음</span>}
                     </td>
-                    <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-gray-500">{fmtKst(r.endedAt)}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">{fmtKst(r.endedAt)}</td>
                     <td className="px-2 py-1.5">
-                      <span className="font-semibold text-gray-900">{runTitle(r)}</span>
-                      {detail && <span className="block font-mono text-[10px] text-gray-400">{r.name} · {r.runId}</span>}
+                      <span className="font-semibold text-[#1B1F24]">{runTitle(r)}</span>
+                      {detail && <span className="block font-mono text-[10px] text-[#5B6470]">{r.name} · {r.runId}</span>}
                     </td>
-                    <td className="px-2 py-1.5 text-gray-500">{r.startedBy ?? "-"}</td>
+                    <td className="px-2 py-1.5 text-[#5B6470]">{r.startedBy ?? "-"}</td>
                     <td className="px-2 py-1.5"><ResultBadge r={r} /></td>
-                    <td className="px-2 py-1.5 text-[11px] text-gray-600">{r.reasonCode ? reasonLabel(bundle, r.reasonCode) : ""}</td>
-                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-gray-600">{r.durationS !== null ? fmtSec(r.durationS) : "-"}</td>
+                    <td className="px-2 py-1.5 text-[11px] text-[#5B6470]">{r.reasonCode ? reasonLabel(bundle, r.reasonCode) : ""}</td>
+                    <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-[#5B6470]">{r.durationS !== null ? fmtSec(r.durationS) : "-"}</td>
                   </tr>
                 ))}
-                {list !== null && !list.length && <tr><td colSpan={7} className="p-3 text-center text-gray-400">이 기간·조건의 공정 기록이 없습니다</td></tr>}
-                {list === null && <tr><td colSpan={7} className="p-3 text-center text-gray-400">읽는 중…</td></tr>}
+                {list !== null && !list.length && <tr><td colSpan={7} className="p-3 text-center text-[#5B6470]">이 기간·조건의 공정 기록이 없습니다</td></tr>}
+                {list === null && <tr><td colSpan={7} className="p-3 text-center text-[#5B6470]">읽는 중…</td></tr>}
               </tbody>
             </table>
           </div>
           {next && (
-            <button onClick={() => void fetchPage(next)} className="w-full rounded-xl border border-gray-200 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50">
+            <button onClick={() => void fetchPage(next)} className="w-full rounded-[10px] border border-[#D9DDE3] py-1.5 text-xs font-semibold text-[#5B6470] hover:bg-[#F5F6F8]">
               더 보기
             </button>
           )}

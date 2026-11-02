@@ -11,15 +11,27 @@
 //   local = 노트북 로컬 화면, 같은 주소의 /api/v1/*(챔버K v2 chk/local_server.py — 로그인 없음·127.0.0.1).
 //   local 은 명령 결과가 POST 응답 {id, ok, reason, detail} 로 바로 오고, 명령 기록·공정 기록 API 가 없다.
 //   stream 은 브라우저가 스스로 다시 붙으면 Last-Event-ID 로 그 뒤부터 이어 받는다(id = seq).
+// W-10: state.run.blocks(묶음 13)는 바뀌었을 때·10 초마다만 온다 — 마지막 목록을 run·blocksVersion 과 함께 기억(runBlocks).
+//   추세(15분·1시간)는 받은 state 의 주요 값을 2 초 간격으로 브라우저에 쌓는다(1시간까지 — 화면을 연 뒤부터).
 import { useCallback, useEffect, useRef, useState } from "react";
 import { newerState } from "./logic";
-import type { Bundle, CmdRow, Envelope, EventData, Hello, RunRow, StateData } from "./types";
+import type { Bundle, CmdRow, Envelope, EventData, Hello, RunBlock, RunRow, StateData } from "./types";
 
 const BP = process.env.NEXT_PUBLIC_BASE_PATH || "";   // EventSource 는 BasePathFetch 가 고치지 않는다
 const FEED_KEEP = 300;
 const HELLO_EVERY_MS = 10_000;
 const RETRY_MS = [1_000, 2_000, 5_000, 10_000];
 const FEED_TYPES = ["event", "run_start", "run_end", "cmd_result", "config_ack"] as const;
+const TREND_EVERY_MS = 2_000;
+const TREND_KEEP_MS = 3_600_000;
+/** 추세에 쌓는 열(값·목표) — 압력·유량·파워·히터 */
+export const TREND_COLS = [
+  "mfc.pressure_mtorr", "mfc.sp_mtorr", "mfc.ar_sccm", "mfc.ar_set", "mfc.o2_sccm", "mfc.o2_set",
+  "dc.p", "dc.set_w", "rf.fwd_w", "rf.set_w", "rfp.fwd_w", "rfp.set_w", "heater.pv", "heater.pv2", "heater.sv", "heater.r1",
+] as const;
+/** 추세 점 — t 는 장비 시계(ms) */
+export type TrendPt = { t: number; v: Record<string, number | null> };
+export type RunBlocks = { runId: string | null; version: number | null; blocks: RunBlock[] };
 
 export type FeedItem = Envelope<Record<string, unknown>>;
 export type FeedEvent = Envelope<EventData>;
@@ -48,6 +60,8 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web") {
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [commands, setCommands] = useState<CmdRow[]>([]);
   const [runs, setRuns] = useState<RunRow[]>([]);
+  const [runBlocks, setRunBlocks] = useState<RunBlocks | null>(null);
+  const [trend, setTrend] = useState<TrendPt[]>([]);
   const [streamUp, setStreamUp] = useState(false);
   const [streamEver, setStreamEver] = useState(false);  // 한 번이라도 붙었나("연결 중…" / "다시 연결 중…")
   const [offsetMs, setOffsetMs] = useState(0);         // 웹 서버 시계 − 이 브라우저 시계
@@ -163,7 +177,23 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web") {
       };
       s.addEventListener("state", (ev) => {
         const env = parse(ev) as Envelope<StateData> | null;
-        if (env) setState((cur) => (newerState(cur, env) ? env : cur));
+        if (!env) return;
+        setState((cur) => (newerState(cur, env) ? env : cur));
+        const run = env.data.run;
+        if (run && Array.isArray(run.blocks)) {
+          setRunBlocks({ runId: env.data.runId ?? null, version: run.blocksVersion ?? null, blocks: run.blocks });
+        }
+        const snap = env.data.snapshot, t = Date.parse(env.ts);
+        if (snap && Number.isFinite(t)) {
+          setTrend((cur) => {
+            const last = cur[cur.length - 1];
+            if (last && t - last.t < TREND_EVERY_MS && t >= last.t) return cur;
+            const v: Record<string, number | null> = {};
+            for (const c of TREND_COLS) v[c] = typeof snap[c] === "number" && Number.isFinite(snap[c]) ? (snap[c] as number) : null;
+            const keep = cur.filter((p) => p.t > t - TREND_KEEP_MS && p.t < t);
+            return [...keep, { t, v }];
+          });
+        }
       });
       s.addEventListener("hello", (ev) => {
         if (fresh(parse(ev))) void loadHello();
@@ -229,5 +259,6 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web") {
     void loadSchema();
   }, [cfgVer, bundle, loadSchema]);
 
-  return { hello, bundle, state, feed, commands, runs, streamUp, streamEver, offsetMs, error, authLost, send, loadSchema };
+  return { hello, bundle, state, feed, commands, runs, runBlocks, trend, streamUp, streamEver, offsetMs, error, authLost, send,
+           loadSchema, loadRuns };
 }
