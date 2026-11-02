@@ -4,7 +4,7 @@
 // pc.rf·pc.set), TSP(tsp·tsp.ig·tsp.proc + 매일 예약 TSP_DAILY_*), 로봇 연결 상태(state.robot 또는 엔진 robot — 없으면 로봇 사건).
 // 블록이 묶음에 없으면(장비가 아직 그 열을 내지 않음) 그 카드만 안내 줄. 조작 버튼은 묶음 명령 정의가 있을 때만(CmdForm).
 import { Bot, Flame, Layers3, Sparkles, Timer } from "lucide-react";
-import { BlockCard } from "../chk/Chk2Cards";
+import { BlockCard } from "./BlockCard";
 import { Card, type Ask } from "../chk/kit";
 import { paramValue } from "../chk/logic";
 import { useChk2Mode } from "../chk/mode";

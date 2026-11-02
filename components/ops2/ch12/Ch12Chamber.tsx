@@ -6,7 +6,7 @@
 // 남은 시간 = <c>.proc.remain_s(지금 블록), ETA = eta_remaining_s(공정 끝까지 — 확정 전 null 이면 '—', 웹이 추정하지 않음).
 // 건너뛰기·일시정지는 블록 정의(skippable·pausable·pause 뜻 — 묶음 blocks.defs)로 버튼을 막고, 마지막 판단은 장비.
 import { AlertTriangle, ListOrdered, Pause, Play, SkipForward, Square } from "lucide-react";
-import { BlockCard } from "../chk/Chk2Cards";
+import { BlockCard } from "./BlockCard";
 import Chk2Adjust from "../chk/Chk2Adjust";
 import { EventFeed } from "../chk/Chk2Logs";
 import { Card, type Ask } from "../chk/kit";

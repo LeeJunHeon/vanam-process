@@ -48,7 +48,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ equi
   const where: Prisma.Sql[] = [Prisma.sql`equipment = ${equipment}`, Prisma.sql`${at} IS NOT NULL`];
   if (from) where.push(Prisma.sql`${at} >= ${kstDay(from)}`);
   if (to) where.push(Prisma.sql`${at} < ${kstDay(to, 1)}`);
-  if (chamber) where.push(Prisma.sql`chamber = ${chamber}`);
+  const chamberCond = Prisma.sql`chamber = ${chamber}`;
+  if (chamber) where.push(chamberCond);
   if (result === "running") where.push(Prisma.sql`ended_at IS NULL`);
   else if (result) where.push(Prisma.sql`result = ${result}`);
   if (cursor) {
@@ -58,11 +59,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ equi
     if (cut < 0 || !id || !Number.isFinite(t.getTime())) return bad("cursor 모양이 틀림");
     where.push(Prisma.sql`(${at} < ${t} OR (${at} = ${t} AND run_id < ${id}))`);
   }
-  const rows = await ops2Db.$queryRaw<Row[]>`
-    SELECT run_id, name, recipe_name, started_by, step_no, started_at, ended_at, result, reason_code, config_version, ${at} AS at,
-           chamber, owner, recipe_rev
-    FROM "process"."ops2_run" WHERE ${Prisma.join(where, " AND ")}
+  // 배포 순서가 어긋나 prisma/sql/ops2-ch12.sql 이 아직 DB 에 없으면 chamber·owner·recipe_rev 열이 없다(Postgres 42703).
+  // 그때도 챔버K 이력이 오류 나지 않게 그 열 없이 다시 조회한다(세 열은 null). 챔버12 챔버 거르기는 열이 없으면 결과가 없다.
+  const query = (withCh12: boolean) => ops2Db.$queryRaw<Row[]>`
+    SELECT run_id, name, recipe_name, started_by, step_no, started_at, ended_at, result, reason_code, config_version, ${at} AS at
+           ${withCh12 ? Prisma.sql`, chamber, owner, recipe_rev` : Prisma.sql`, NULL::text AS chamber, NULL::text AS owner, NULL::int AS recipe_rev`}
+    FROM "process"."ops2_run" WHERE ${Prisma.join(withCh12 ? where : where.filter((w) => w !== chamberCond), " AND ")}
     ORDER BY at DESC, run_id DESC LIMIT ${take + 1}`;
+  let rows: Row[];
+  try {
+    rows = await query(true);
+  } catch (e) {
+    if (!/column .*(chamber|owner|recipe_rev)|42703/i.test(String((e as Error)?.message ?? e))) throw e;
+    rows = chamber ? [] : await query(false);
+  }
   const d = (v: Date | string | null) => (v === null ? null : new Date(v));     // 드라이버가 글로 줄 수도 있다
   const page = rows.slice(0, take);
   const last = page[page.length - 1];
