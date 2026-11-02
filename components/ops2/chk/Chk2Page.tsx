@@ -21,7 +21,7 @@ import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
 import Chk2Config from "./Chk2Config";
 import Chk2History from "./Chk2History";
 import Chk2Recipes from "./Chk2Recipes";
-import { Card, ConfirmDialog, InfoBand, Issue, Notices, SimpleConfirm, Tabs, type Ask, type Notice } from "./kit";
+import { FS, Card, ConfirmDialog, InfoBand, Issue, Notices, SimpleConfirm, Tabs, type Ask, type Notice } from "./kit";
 import { STALE_SEC_DEFAULT, STOP_KINDS, paramValue, plcFresh } from "./logic";
 import { reasonLabel } from "./types";
 import { useChk2, type Chk2Mode } from "./useChk2";
@@ -83,10 +83,10 @@ export default function Chk2Page() {
   return (
     <div className="min-h-full space-y-3 bg-[#EEF0F3] p-3 text-[#1B1F24] sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-lg font-bold text-[#1B1F24]">챔버K v2</h2>
+        <h2 className={`${FS.title} font-bold text-[#1B1F24]`}>챔버K v2</h2>
         {devices && devices.length > 0 && (
           <select value={picked ?? ""} onChange={(e) => pick(e.target.value)} aria-label="장비 고르기"
-            className="h-10 rounded-[10px] border border-[#D9DDE3] bg-white px-2 text-sm font-semibold text-[#1B1F24]">
+            className={`h-10 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body} font-semibold text-[#1B1F24]`}>
             {devices.map((d) => (
               <option key={d.equipment} value={d.equipment}>
                 {d.equipment}{d.label ? ` · ${d.label}` : ""}{d.runMode ? ` (${d.runMode})` : ""}
@@ -96,7 +96,7 @@ export default function Chk2Page() {
         )}
       </div>
       {devices && !devices.length && (
-        <Card><p className="text-xs text-[#5B6470]">등록된 v2 장비가 없습니다. 장비 관리(v2)에서 장비를 등록하세요.</p></Card>
+        <Card><p className={`${FS.body} text-[#5B6470]`}>등록된 v2 장비가 없습니다. 장비 관리(v2)에서 장비를 등록하세요.</p></Card>
       )}
       {picked && <Chk2Device key={picked} equipment={picked} dirtyRef={dirtyRef} />}
       {switchTo && (
@@ -314,7 +314,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail }}>
         {d.authLost ? <Issue level="alarm"><LogIn size={14} className="mr-1 inline" />로그인이 끊겼습니다 — 새로고침하세요. 조작이 잠겼습니다.</Issue>
           : d.error ? <Issue level="alarm">{d.error}</Issue>
-          : <section className="animate-pulse rounded-[12px] border border-[#D9DDE3] bg-white p-6 text-center text-sm text-[#5B6470]">장비 정보를 읽는 중…</section>}
+          : <section className={`animate-pulse rounded-[12px] border border-[#D9DDE3] bg-white p-6 text-center ${FS.body} text-[#5B6470]`}>장비 정보를 읽는 중…</section>}
       </Chk2ModeContext.Provider>
     );
   }
@@ -331,13 +331,13 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const curTab = shownTabs.some((t) => t.key === tab) ? tab : shownTabs[0].key;
   const detailBtn = (
     <button onClick={() => setDetail(!detail)} aria-pressed={detail} title="켜면 원시 코드·키·run id·장비 스텝 문구 등 개발용 정보까지 보입니다"
-      className={`flex h-8 items-center gap-1 rounded-[8px] px-2.5 text-[11px] font-semibold ${
+      className={`flex h-8 items-center gap-1 rounded-[8px] px-2.5 ${FS.small} font-semibold ${
         detail ? "bg-[#3A424D] text-white" : "border border-[#D9DDE3] bg-white text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
       <Code2 size={12} /> 상세 보기 {detail ? "켬" : "끔"}
     </button>
   );
   const detailInfo = detail && (
-    <span className="flex flex-wrap items-center gap-2 font-mono text-[10px] text-[#5B6470]">
+    <span className={`flex flex-wrap items-center gap-2 font-mono ${FS.small} text-[#5B6470]`}>
       {d.hello.version && <span>{d.hello.version}</span>}
       {d.hello.instance && <span>실행 {d.hello.instance.slice(0, 8)}</span>}
       {web && <span>{web.sse ? "명령 통로(SSE)" : "명령 통로 없음 — POST 응답으로만"}</span>}
@@ -347,9 +347,9 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   return (
     <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail }}>
       {local && (
-        <div className="flex flex-wrap items-center gap-2 rounded-[12px] bg-[#3A424D] px-4 py-2 text-xs text-white">
+        <div className={`flex flex-wrap items-center gap-2 rounded-[12px] bg-[#3A424D] px-4 py-2 ${FS.body} text-white`}>
           <Laptop size={15} /> <b>노트북 로컬 화면</b>
-          <span className={`ml-auto flex items-center gap-1 rounded-[8px] px-2 py-0.5 text-[11px] ${
+          <span className={`ml-auto flex items-center gap-1 rounded-[8px] px-2 py-0.5 ${FS.small} ${
             !up?.enabled ? "bg-white/10 text-white/80" : up.connected ? "bg-white/15" : "bg-[#B54708] text-white"}`}
             title={up?.lastError ? `마지막 오류: ${up.lastError}` : undefined}>
             {up?.enabled && up.connected ? <Cloud size={12} /> : <CloudOff size={12} />}
@@ -361,8 +361,8 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
 
       {neverConnected ? (
         <section className="rounded-[12px] border border-dashed border-[#C9CED6] bg-white p-6 text-center">
-          <p className="text-base font-bold text-[#1B1F24]">장비 프로그램(v2) 연결 대기</p>
-          <p className="mt-1 text-xs text-[#5B6470]">
+          <p className={`${FS.card} font-bold text-[#1B1F24]`}>장비 프로그램(v2) 연결 대기</p>
+          <p className={`mt-1 ${FS.body} text-[#5B6470]`}>
             이 장비는 아직 v2 프로그램이 웹에 연결된 적이 없습니다. 장비 노트북에서 v2 를 실행하면 화면이 채워집니다.
           </p>
         </section>
@@ -378,8 +378,8 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
               label={web?.label ?? null} lock={lock} onAsk={setAsk} lastRun={d.runs[0] ?? null} startedMs={runStartMs} elapsedS={elapsedS}
               blocks={d.runBlocks?.blocks ?? null} nowMs={now + d.offsetMs} v1Row={v1Row}
               extra={<>{detailInfo}{!d.streamUp && !local && (
-                <span className="flex items-center gap-1 text-[11px] text-[#5B6470]"><WifiOff size={12} /> {d.streamEver ? "다시 연결 중…" : "연결 중…"}</span>)}
-                {Math.abs(skew) > SKEW_WARN_MS && <span className="text-[11px] font-semibold text-[#B54708]">장비 시계 차 {(skew / 1000).toFixed(1)} s</span>}</>} />
+                <span className={`flex items-center gap-1 ${FS.small} text-[#5B6470]`}><WifiOff size={12} /> {d.streamEver ? "다시 연결 중…" : "연결 중…"}</span>)}
+                {Math.abs(skew) > SKEW_WARN_MS && <span className={`${FS.small} font-semibold text-[#B54708]`}>장비 시계 차 {(skew / 1000).toFixed(1)} s</span>}</>} />
           </div>
         </>
       )}
@@ -415,7 +415,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
           onEditRecipe={local ? undefined : (id) => { setRecipeReq({ id, n: Date.now() }); goTab("recipe"); }} />
       )}
       {curTab === "hmi" && (
-        <Chk2Hmi bundle={d.bundle} snapshot={snap} plcOk={plcOk} lockOf={(t) => lockOf("PLC_BUTTON", `PLC_BUTTON:${t}`)} pending={pending}
+        <Chk2Hmi bundle={d.bundle} snapshot={snap} links={st?.links} plcOk={plcOk} lockOf={(t) => lockOf("PLC_BUTTON", `PLC_BUTTON:${t}`)} pending={pending}
           onAsk={setAsk} note={mimicNote} viewOnly={local} />
       )}
       {curTab === "recipe" && !local && (
@@ -436,7 +436,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
               <Chk2History equipment={equipment} bundle={d.bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
             </>
           )}
-          {local && <p className="text-[11px] text-[#5B6470]">레시피·설정·공정 기록·조작 기록은 웹 화면에서</p>}
+          {local && <p className={`${FS.small} text-[#5B6470]`}>레시피·설정·공정 기록·조작 기록은 웹 화면에서</p>}
         </div>
       )}
       {curTab === "config" && !local && !neverConnected && (

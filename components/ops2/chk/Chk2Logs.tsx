@@ -6,7 +6,7 @@
 // W-10a: 명령 상태·런 결과 배지와 사유 줄도 아이콘 + 글자(kit Tag) — 색만으로 뜻을 전하지 않는다. '경고·오류만' 단추는 켜짐 표시(체크).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertOctagon, AlertTriangle, CheckSquare, Hourglass, Send, Square } from "lucide-react";
-import { Card, Tag, type TagKind } from "./kit";
+import { FS, Card, Tag, type TagKind } from "./kit";
 import { fmtKst } from "@/lib/ops2/time";
 import { useChk2Mode } from "./mode";
 import { logLine, runTitle } from "./text";
@@ -36,18 +36,18 @@ export function EventFeed({ bundle, feed }: { bundle: Bundle | null; feed: FeedI
   return (
     <Card title="로그" right={
       <button onClick={() => setOnlyIssue((v) => !v)} aria-pressed={onlyIssue}
-        className={`flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold ${onlyIssue ? "bg-[#FEE4E2] text-[#B42318]" : "text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
+        className={`flex items-center gap-1 rounded-lg px-2 py-1 ${FS.small} font-semibold ${onlyIssue ? "bg-[#FEE4E2] text-[#B42318]" : "text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
         {onlyIssue ? <CheckSquare size={12} aria-hidden /> : <Square size={12} aria-hidden />} 경고·오류만{issues > 0 && ` ${issues}`}
       </button>
     }>
       {!shown.length ? (
-        <p className="py-6 text-center text-xs text-[#8A929D]">{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다 — 장비가 연결되면 쌓입니다"}</p>
+        <p className={`py-6 text-center ${FS.body} text-[#8A929D]`}>{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다 — 장비가 연결되면 쌓입니다"}</p>
       ) : (
         <div ref={box}
           onScroll={() => { const el = box.current; if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
           className="h-64 space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 font-mono [overflow-anchor:none]">
           {shown.map((r) => (
-            <p key={r.e.id} className="flex gap-2 text-[11px] leading-snug" title={r.raw}>
+            <p key={r.e.id} className={`flex gap-2 ${FS.small} leading-snug`} title={r.raw}>
               <span className="shrink-0 text-[#8A929D]">{fmtKst(r.e.ts)}</span>
               <span className={`flex shrink-0 items-center gap-1 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.level === "warn" ? <AlertTriangle size={11} /> : r.level === "error" || r.level === "critical" ? <AlertOctagon size={11} /> : null}{r.kind}
@@ -93,12 +93,12 @@ export function CommandLog({ bundle, commands }: { bundle: Bundle | null; comman
   return (
     <Card title="조작 기록">
       {!commands.length ? (
-        <p className="py-5 text-center text-xs text-[#8A929D]">조작 기록이 없습니다</p>
+        <p className={`py-5 text-center ${FS.body} text-[#8A929D]`}>조작 기록이 없습니다</p>
       ) : (
         <div className="space-y-1">
           {commands.map((c) => (
             <div key={c.id}>
-              <p className="flex flex-wrap items-baseline gap-x-2 text-[11px] leading-snug">
+              <p className={`flex flex-wrap items-baseline gap-x-2 ${FS.small} leading-snug`}>
                 <span className="shrink-0 font-mono text-[#8A929D]">{fmtKst(c.requestedAt)}</span>
                 <span className="font-medium text-[#1B1F24]">{c.label ?? commandLabel(bundle, c.kind)}</span>
                 {argText(c.args) && <span className="font-bold text-[#1B1F24]">{argText(c.args)}</span>}
@@ -108,7 +108,7 @@ export function CommandLog({ bundle, commands }: { bundle: Bundle | null; comman
                 <CmdStatusTag status={c.status} className="ml-auto shrink-0" />
               </p>
               {c.reasonCode && (
-                <p className={`flex items-center gap-1 truncate pl-1 text-[10px] ${c.status === "rejected" ? "text-[#B42318]" : "text-[#B54708]"}`}
+                <p className={`flex items-center gap-1 truncate pl-1 ${FS.small} ${c.status === "rejected" ? "text-[#B42318]" : "text-[#B54708]"}`}
                   title={c.detail ?? undefined}>
                   {c.status === "rejected" ? <AlertOctagon size={10} className="shrink-0" aria-label="거부" /> : <AlertTriangle size={10} className="shrink-0" aria-label="주의" />}
                   <span className="truncate">{reasonLabel(bundle, c.reasonCode)}{detail && ` (${c.reasonCode})`}</span>
@@ -133,9 +133,9 @@ export function RunList({ bundle, runs }: { bundle: Bundle | null; runs: RunRow[
   return (
     <Card title="런 이력">
       {!runs.length ? (
-        <p className="py-5 text-center text-xs text-[#8A929D]">기록된 공정이 없습니다</p>
+        <p className={`py-5 text-center ${FS.body} text-[#8A929D]`}>기록된 공정이 없습니다</p>
       ) : (
-        <table className="w-full text-xs">
+        <table className={`w-full ${FS.body}`}>
           <thead>
             <tr className="text-left text-[#5B6470]">
               <th className="py-1.5 pr-3 font-medium whitespace-nowrap">시작</th>
@@ -150,12 +150,12 @@ export function RunList({ bundle, runs }: { bundle: Bundle | null; runs: RunRow[
                 <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{fmtKst(r.startedAt)}</td>
                 <td className="py-2 pr-3">
                   <span className="block max-w-[260px] truncate" title={`${r.name ?? ""} · ${r.runId}`}>{runTitle(r)}</span>
-                  {r.startedBy && <span className="text-[10px] text-[#5B6470]">{r.startedBy}</span>}
-                  {detail && <span className="block font-mono text-[10px] text-[#8A929D]">{r.name} · {r.runId}</span>}
+                  {r.startedBy && <span className={`${FS.small} text-[#5B6470]`}>{r.startedBy}</span>}
+                  {detail && <span className={`block font-mono ${FS.small} text-[#8A929D]`}>{r.name} · {r.runId}</span>}
                 </td>
                 <td className="py-2 pr-3">
                   <RunResultTag endedAt={r.endedAt} result={r.result} />
-                  {r.reasonCode && <p className="mt-0.5 text-[10px] text-[#5B6470]">{reasonLabel(bundle, r.reasonCode)}</p>}
+                  {r.reasonCode && <p className={`mt-0.5 ${FS.small} text-[#5B6470]`}>{reasonLabel(bundle, r.reasonCode)}</p>}
                 </td>
                 <td className="py-2 whitespace-nowrap text-right tabular-nums">{dur(r.startedAt, r.endedAt)}</td>
               </tr>

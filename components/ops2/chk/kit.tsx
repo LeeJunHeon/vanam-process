@@ -22,6 +22,20 @@ export const T = {
   warn: "#B54708", warnBg: "#FFFAEB", alarm: "#B42318", alarmBg: "#FEE4E2", infoBg: "#EEF3FF", infoBorder: "#C7D5FB",
 } as const;
 
+/** 글자 크기 체계(W-10b) — CHK v2 모든 탭·상태 띠·확인창·작은 창이 이것만 쓴다(1920·1280 같은 값, 12px 미만 없음).
+ *  title 화면 제목·상태 띠 공정 상태 22px · card 카드 제목 15px · big 큰 실시간 값 28px(남색 — 숫자에만) · unit 큰 값 단위 13px ·
+ *  body 본문·줄 라벨·줄 값 14px · small 보조 설명·시각·작은 칩 12px. 굵기·색은 쓰는 쪽(값은 600 남색). */
+export const FS = {
+  title: "text-[22px] leading-[28px]",
+  card: "text-[15px] leading-[22px]",
+  big: "text-[28px] leading-[34px] tabular-nums",
+  unit: "text-[13px]",
+  body: "text-[14px]",
+  small: "text-[12px]",
+} as const;
+/** 같은 체계의 px(SVG fontSize) */
+export const FSPX = { title: 22, card: 15, big: 28, unit: 13, body: 14, small: 12 } as const;
+
 export function Card({
   title, right, children, className = "", tight,
 }: { title?: ReactNode; right?: ReactNode; children: ReactNode; className?: string; tight?: boolean }) {
@@ -29,7 +43,7 @@ export function Card({
     <section className={`min-w-0 rounded-[12px] border border-[#D9DDE3] bg-white ${tight ? "p-3" : "p-4 sm:p-5"} ${className}`}>
       {(title || right) && (
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          {title && <h3 className="flex min-w-0 items-center gap-1.5 text-sm font-bold text-[#1B1F24]">{title}</h3>}
+          {title && <h3 className={`flex min-w-0 items-center gap-1.5 font-bold text-[#1B1F24] ${FS.card}`}>{title}</h3>}
           {right}
         </div>
       )}
@@ -56,10 +70,10 @@ const CHIP: Record<Tone, string> = {
 export function Chip({ tone = "neutral", icon, title, children, className = "" }: {
   tone?: Tone; icon?: ReactNode; title?: string; children: ReactNode; className?: string;
 }) {
-  const ic = icon ?? (tone === "warn" ? <AlertTriangle size={11} /> : tone === "alarm" ? <AlertOctagon size={11} /> : null);
+  const ic = icon ?? (tone === "warn" ? <AlertTriangle size={12} /> : tone === "alarm" ? <AlertOctagon size={12} /> : null);
   return (
     <span title={title}
-      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-semibold leading-tight ${CHIP[tone]} ${className}`}>
+      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 font-semibold leading-tight ${FS.small} ${CHIP[tone]} ${className}`}>
       {ic}{children}
     </span>
   );
@@ -85,8 +99,8 @@ export function Tag({ kind, icon: Icon, title, children, className = "" }: {
   const [cls, Def] = TAG[kind];
   const I = Icon ?? Def;
   return (
-    <span title={title} className={`inline-flex items-center gap-0.5 whitespace-nowrap rounded px-1 py-px text-[10px] font-semibold leading-tight ${cls} ${className}`}>
-      <I size={10} className="shrink-0" aria-hidden />{children}
+    <span title={title} className={`inline-flex items-center gap-0.5 whitespace-nowrap rounded px-1.5 py-px font-semibold leading-tight ${FS.small} ${cls} ${className}`}>
+      <I size={12} className="shrink-0" aria-hidden />{children}
     </span>
   );
 }
@@ -105,27 +119,33 @@ export function ErrText({ children, className = "" }: { children: ReactNode; cla
 export function StateBox({ on, label, title, unknown }: { on: boolean | null | undefined; label: ReactNode; title?: string; unknown?: boolean }) {
   const u = unknown || on === null || on === undefined;
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-xs" title={title}>
-      <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-[2px] border ${
+    <span className={`inline-flex min-w-0 items-center gap-1.5 ${FS.body}`} title={title}>
+      <span className={`inline-block h-3 w-3 shrink-0 rounded-[2px] border ${
         u ? "border-dashed border-[#8A929D] bg-white" : on ? "border-[#3A424D] bg-[#3A424D]" : "border-[#8A929D] bg-white"}`} />
       <span className={`truncate ${on && !u ? "font-semibold text-[#1B1F24]" : "text-[#5B6470]"}`}>{label}</span>
     </span>
   );
 }
 
-/** 실시간 값 — 남색 굵게, 단위는 보조색 작게(늘 붙임). 값이 없으면 "—" 또는 상태 이름(alt) */
-export function Val({ text, unit, size = "md", dim, alt }: {
-  text: string; unit?: string; size?: "sm" | "md" | "lg" | "xl"; dim?: boolean; alt?: string | null;
+/** 실시간 값 — 남색(줄 값 14px/600, 큰 값 28px/700 + 단위 13px), 단위는 보조색(늘 붙임).
+ *  값이 없으면 같은 글꼴로 "—", 또는 상태 이름(alt) — altWarn(연결 안 됨·영점 안 됨·음수·형식 오류)일 때만 주의색 + 아이콘,
+ *  나머지 상태(하한 아래·꺼짐 등 대기 때 정상)는 기본색 글자만 */
+export function Val({ text, unit, size = "row", dim, alt, altWarn }: {
+  text: string; unit?: string; size?: "row" | "big"; dim?: boolean; alt?: string | null; altWarn?: boolean;
 }) {
-  const cls = size === "xl" ? "text-3xl" : size === "lg" ? "text-2xl" : size === "md" ? "text-base" : "text-xs";
+  const big = size === "big";
+  const cls = big ? `${FS.big} font-bold` : `${FS.body} font-semibold tabular-nums`;
   if (!text) {
-    return alt
-      ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-[#B54708]"><AlertTriangle size={12} />{alt}</span>
-      : <span className={`${cls} font-bold text-[#8A929D]`}>—</span>;
+    if (alt) {
+      return altWarn
+        ? <span className={`inline-flex items-center gap-1 font-semibold text-[#B54708] ${FS.body}`}><AlertTriangle size={14} />{alt}</span>
+        : <span className={`whitespace-nowrap font-semibold text-[#1B1F24] ${big ? `${FS.card} leading-[34px]` : FS.body}`}>{alt}</span>;
+    }
+    return <span className={`${cls} text-[#8A929D]`}>—</span>;
   }
   return (
-    <span className={`whitespace-nowrap ${cls} font-bold leading-tight tabular-nums ${dim ? "text-[#8A929D]" : "text-[#133A7C]"}`}>
-      {text}{unit && <span className="ml-0.5 text-[11px] font-normal text-[#5B6470]">{unit}</span>}
+    <span className={`whitespace-nowrap ${cls} ${dim ? "text-[#8A929D]" : "text-[#133A7C]"}`}>
+      {text}{unit && <span className={`ml-1 font-normal text-[#5B6470] ${big ? FS.unit : FS.small}`}>{unit}</span>}
     </span>
   );
 }
@@ -133,7 +153,7 @@ export function Val({ text, unit, size = "md", dim, alt }: {
 /** 라벨 — 값 한 줄(라벨 왼쪽 보조색, 값 오른쪽) */
 export function KV({ k, children, title }: { k: ReactNode; children: ReactNode; title?: string }) {
   return (
-    <div className="flex min-w-0 items-baseline justify-between gap-2 py-0.5 text-xs" title={title}>
+    <div className={`flex min-h-[26px] min-w-0 items-baseline justify-between gap-2 py-0.5 ${FS.body}`} title={title}>
       <span className="shrink-0 truncate text-[#5B6470]">{k}</span>
       <span className="min-w-0 truncate text-right">{children}</span>
     </div>
@@ -153,7 +173,7 @@ export function Btn({ kind = "neutral", size = "md", lock, disabled, onClick, ti
   kind?: BtnKind; size?: "sm" | "md" | "lg"; lock?: string | null; disabled?: boolean; onClick?: () => void; title?: string;
   children: ReactNode; className?: string; ariaLabel?: string;
 }) {
-  const h = size === "lg" ? "h-11 px-4 text-sm" : size === "md" ? "h-10 px-3 text-xs" : "h-8 px-2.5 text-xs";
+  const h = size === "lg" ? `h-11 px-4 ${FS.body}` : size === "md" ? `h-10 px-3 ${FS.body}` : `h-8 px-2.5 ${FS.small}`;
   const locked = !!lock;
   return (
     <button type="button" onClick={onClick} disabled={locked || disabled} aria-label={ariaLabel}
@@ -161,7 +181,7 @@ export function Btn({ kind = "neutral", size = "md", lock, disabled, onClick, ti
       className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] font-semibold
         outline-offset-2 focus-visible:outline-2 focus-visible:outline-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-45
         ${h} ${BTN[kind]} ${className}`}>
-      {locked && <Lock size={12} />}{children}
+      {locked && <Lock size={13} />}{children}
     </button>
   );
 }
@@ -169,7 +189,7 @@ export function Btn({ kind = "neutral", size = "md", lock, disabled, onClick, ti
 /** 정보 띠(bench 등) */
 export function InfoBand({ children, icon }: { children: ReactNode; icon?: ReactNode }) {
   return (
-    <div className="flex items-start gap-2 rounded-[12px] border border-[#C7D5FB] bg-[#EEF3FF] px-4 py-2.5 text-xs text-[#1B1F24]">
+    <div className={`flex items-start gap-2 rounded-[12px] border border-[#C7D5FB] bg-[#EEF3FF] px-4 py-2.5 text-[#1B1F24] ${FS.body}`}>
       <span className="mt-0.5 shrink-0 text-[#1D4ED8]">{icon ?? <Info size={15} />}</span>
       <span className="min-w-0">{children}</span>
     </div>
@@ -179,7 +199,7 @@ export function InfoBand({ children, icon }: { children: ReactNode; icon?: React
 /** 이상 한 줄(주의·알람) — 아이콘 + 글자 */
 export function Issue({ level, children }: { level: "warn" | "alarm"; children: ReactNode }) {
   return (
-    <p className={`flex items-start gap-1.5 rounded-[10px] px-3 py-2 text-xs ${
+    <p className={`flex items-start gap-1.5 rounded-[10px] px-3 py-2 ${FS.body} ${
       level === "alarm" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#FFFAEB] text-[#B54708]"}`}>
       {level === "alarm" ? <AlertOctagon size={14} className="mt-px shrink-0" /> : <AlertTriangle size={14} className="mt-px shrink-0" />}
       <span className="min-w-0">{children}</span>
@@ -189,7 +209,7 @@ export function Issue({ level, children }: { level: "warn" | "alarm"; children: 
 
 /** 데이터 없을 때 안내 */
 export function Empty({ children }: { children: ReactNode }) {
-  return <p className="py-6 text-center text-xs text-[#5B6470]">{children}</p>;
+  return <p className={`py-6 text-center text-[#5B6470] ${FS.body}`}>{children}</p>;
 }
 
 /** 탭 — 선택은 #1D4ED8 밑줄·#E8EEFC 배경 */
@@ -202,7 +222,7 @@ export function Tabs<K extends string>({ tabs, value, onChange, right, small }: 
       {tabs.map((t) => (
         <button key={t.key} role="tab" aria-selected={value === t.key} onClick={() => onChange(t.key)}
           className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-[10px] border-b-2 font-semibold ${
-            small ? "h-9 px-3 text-xs" : "h-11 px-4 text-sm"} ${
+            small ? `h-9 px-3 ${FS.body}` : `h-11 px-4 ${FS.card}`} ${
             value === t.key ? "border-[#1D4ED8] bg-[#E8EEFC] text-[#1D4ED8]" : "border-transparent text-[#5B6470] hover:text-[#1B1F24]"}`}>
           {t.label}{t.badge}
         </button>
@@ -262,7 +282,7 @@ export function FieldValue({ f, v, dim, snap, blocks }: {
   const t = fieldText(f, v, snap, blocks);
   return (
     <KV k={f.label} title={tip}>
-      <Val text={dim ? "" : t.text} unit={f.unit} size="sm" alt={dim ? null : t.alt} />
+      <Val text={dim ? "" : t.text} unit={f.unit} alt={dim ? null : t.alt} altWarn={t.warn} />
     </KV>
   );
 }
@@ -275,8 +295,8 @@ export function BigValue({ f, v, dim, snap, blocks }: {
   const t = fieldText(f, v, snap, blocks);
   return (
     <div className="min-w-0 px-3 py-2">
-      <p className="truncate text-[11px] text-[#5B6470]">{f.label}</p>
-      <Val text={dim ? "" : t.text} unit={f.unit} size="lg" alt={dim ? null : t.alt} />
+      <p className={`truncate text-[#5B6470] ${FS.small}`}>{f.label}</p>
+      <Val text={dim ? "" : t.text} unit={f.unit} size="big" alt={dim ? null : t.alt} altWarn={t.warn} />
     </div>
   );
 }
@@ -312,27 +332,27 @@ export function ConfirmDialog({ ask, onOk, onCancel }: { ask: Ask | null; onOk: 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
       <div className="w-full max-w-md rounded-[12px] bg-white p-5">
-        <p className="text-sm font-bold text-[#1B1F24]">조작 확인</p>
-        <p className="mt-2 text-sm text-[#1B1F24]">
+        <p className={`font-bold text-[#1B1F24] ${FS.card}`}>조작 확인</p>
+        <p className={`mt-2 text-[#1B1F24] ${FS.body}`}>
           <span className="font-semibold">{ask.label}</span>
           {ask.detail && <span> {ask.detail}</span>} — 명령을 장비에 보냅니다.
         </p>
         {ask.lines && ask.lines.length > 0 && (
-          <ul className="mt-2 space-y-0.5 rounded-[10px] border border-[#E3E6EA] p-2.5 text-xs leading-relaxed text-[#1B1F24]">
+          <ul className={`mt-2 space-y-0.5 rounded-[10px] border border-[#E3E6EA] p-2.5 leading-relaxed text-[#1B1F24] ${FS.body}`}>
             {ask.lines.map((l, i) => <li key={i}>{l}</li>)}
           </ul>
         )}
         {ask.note && (
-          <p className={`mt-2 rounded-[10px] p-2.5 text-xs leading-relaxed ${ask.stop ? "bg-[#FFFAEB] text-[#B54708]" : "bg-[#F5F6F8] text-[#5B6470]"}`}>
+          <p className={`mt-2 rounded-[10px] p-2.5 leading-relaxed ${FS.body} ${ask.stop ? "bg-[#FFFAEB] text-[#B54708]" : "bg-[#F5F6F8] text-[#5B6470]"}`}>
             {ask.note}
           </p>
         )}
         {ask.danger && <div className="mt-2"><Issue level="alarm">물리적 위험이 있는 조작입니다. 장비 주변에 사람이 없는지 반드시 확인하세요.</Issue></div>}
-        <p className="mt-3 text-[11px] text-[#5B6470]">이 조작은 실행자 계정과 함께 기록됩니다.</p>
+        <p className={`mt-3 text-[#5B6470] ${FS.small}`}>이 조작은 실행자 계정과 함께 기록됩니다.</p>
         <div className="mt-4 flex justify-end gap-2">
           <Btn kind="ghost" onClick={onCancel}>취소</Btn>
           <button ref={okRef} onClick={onOk}
-            className={`h-10 rounded-[10px] px-4 text-xs font-semibold text-white outline-offset-2 focus:outline-2 focus:outline-[#1D4ED8] ${
+            className={`h-10 rounded-[10px] px-4 font-semibold text-white ${FS.body} outline-offset-2 focus:outline-2 focus:outline-[#1D4ED8] ${
               ask.danger || ask.stop || ask.red ? "bg-[#B42318]" : "bg-[#1D4ED8]"}`}>
             실행
           </button>
@@ -355,8 +375,8 @@ export function SimpleConfirm({ title, text, ok, danger, onOk, onCancel, alt }: 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
       <div className="w-full max-w-md rounded-[12px] bg-white p-5">
-        <p className="text-sm font-bold text-[#1B1F24]">{title}</p>
-        <div className="mt-2 text-sm text-[#1B1F24]">{text}</div>
+        <p className={`font-bold text-[#1B1F24] ${FS.card}`}>{title}</p>
+        <div className={`mt-2 text-[#1B1F24] ${FS.body}`}>{text}</div>
         <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Btn kind="ghost" onClick={onCancel}>취소</Btn>
           {alt && <Btn onClick={alt.onClick}>{alt.label}</Btn>}
@@ -378,7 +398,7 @@ export function Modal({ title, children, onClose, footer }: { title: string; chi
     <div className="fixed inset-0 z-[65] flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true">
       <div className="w-full max-w-md rounded-[12px] bg-white p-5">
         <div className="mb-3 flex items-center justify-between">
-          <p className="text-sm font-bold text-[#1B1F24]">{title}</p>
+          <p className={`font-bold text-[#1B1F24] ${FS.card}`}>{title}</p>
           <button onClick={onClose} aria-label="닫기" className="rounded p-1 text-[#5B6470] hover:bg-[#F5F6F8]"><X size={16} /></button>
         </div>
         {children}
@@ -402,7 +422,7 @@ export function Notices({ list, onClose }: { list: Notice[]; onClose: (id: strin
     <div className="pointer-events-none fixed bottom-4 right-4 z-[80] flex w-[min(24rem,calc(100vw-2rem))] flex-col-reverse gap-2">
       {list.map((n) => (
         <div key={n.id} role="status"
-          className={`pointer-events-auto flex items-start gap-2 rounded-[12px] border p-3 text-xs shadow-lg ${TONE[n.tone]}`}>
+          className={`pointer-events-auto flex items-start gap-2 rounded-[12px] border p-3 shadow-lg ${FS.body} ${TONE[n.tone]}`}>
           <div className="min-w-0 flex-1 leading-relaxed">
             <p className="font-bold">{n.title}</p>
             {n.text && <p className="mt-0.5">{n.text}</p>}

@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import { CONFIG_REASON, checkParamValue } from "@/lib/ops2/configCheck";
 import { fmtKst } from "@/lib/ops2/time";
-import { Card, ErrText, Issue, SimpleConfirm, Tag, type Notice } from "./kit";
+import { FS, Card, ErrText, Issue, SimpleConfirm, Tag, type Notice } from "./kit";
 import { reasonLabel, type Bundle, type ParamDef, type Perms, type StateData } from "./types";
 import { useChk2Mode } from "./mode";
 
@@ -84,7 +84,7 @@ function SafetyBadge({ s, title }: { s?: string; title?: string }) {
 function ParamInput({ p, value, onChange, readOnly, error }: {
   p: ParamDef; value: unknown; onChange: (v: unknown) => void; readOnly: boolean; error: string | null;
 }) {
-  const cls = `rounded-md border px-1.5 py-0.5 text-[11px] disabled:bg-[#F5F6F8] disabled:text-[#5B6470] ${error ? "border-[#B42318] bg-[#FEE4E2]" : "border-[#D9DDE3]"}`;
+  const cls = `rounded-md border px-1.5 py-0.5 ${FS.small} disabled:bg-[#F5F6F8] disabled:text-[#5B6470] ${error ? "border-[#B42318] bg-[#FEE4E2]" : "border-[#D9DDE3]"}`;
   if (p.type === "bool") {
     return (
       <select disabled={readOnly} value={value === true ? "true" : value === false ? "false" : ""} className={cls}
@@ -111,7 +111,7 @@ function VersionDetail({ v }: { v: Version }) {
   const ch = Array.isArray(v.changes) ? (v.changes as { key: string; old: unknown; new: unknown }[]) : [];
   const errs = arr(v.errors);
   return (
-    <div className="space-y-1.5 rounded-[10px] bg-[#F5F6F8] p-2 text-[11px]">
+    <div className={`space-y-1.5 rounded-[10px] bg-[#F5F6F8] p-2 ${FS.small}`}>
       <p className="text-[#5B6470]">
         버전 <b>{v.version}</b> · {v.kind} · {v.createdBy} · {fmtKst(v.createdAt)} · <StatusBadge s={v.ackStatus} />
         {v.reasonCode && <ErrText className="ml-1">{CONFIG_REASON[v.reasonCode] ?? v.reasonCode}</ErrText>}
@@ -276,22 +276,22 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
             <span className="flex rounded-[10px] bg-[#EEF0F3] p-0.5">
               {([["edit", "편집"], ["history", "이력"]] as const).map(([k, l]) => (
                 <button key={k} onClick={() => setTab(k)}
-                  className={`rounded-lg px-2.5 py-1 text-xs font-semibold ${tab === k ? "bg-white text-[#1B1F24] shadow-sm" : "text-[#5B6470]"}`}>{l}</button>
+                  className={`rounded-lg px-2.5 py-1 ${FS.body} font-semibold ${tab === k ? "bg-white text-[#1B1F24] shadow-sm" : "text-[#5B6470]"}`}>{l}</button>
               ))}
             </span>
           )}
-          <button onClick={() => setOpen((o) => !o)} className="rounded-lg px-2 py-1 text-[11px] font-semibold text-[#1D4ED8] hover:bg-[#E8EEFC]">
+          <button onClick={() => setOpen((o) => !o)} className={`rounded-lg px-2 py-1 ${FS.small} font-semibold text-[#1D4ED8] hover:bg-[#E8EEFC]`}>
             {open ? "접기" : "열기"}
           </button>
         </span>
       }>
       {!open ? (
-        <p className="text-[11px] text-[#5B6470]">장비 설정 버전 v{st?.configVersion ?? "-"}
+        <p className={`${FS.small} text-[#5B6470]`}>장비 설정 버전 v{st?.configVersion ?? "-"}
           {st?.configPending && ` · 대기 중 ${Object.keys(st.configPending.idle ?? {}).length + Object.keys(st.configPending.restart ?? {}).length}개 키`}
           {" "}· 장비별 버전(CHK2·CHK2-SIM 따로) · 적용·되돌리기는 관리자</p>
-      ) : err ? <p className="text-xs"><ErrText>{err}</ErrText></p> : !ov ? <p className="text-xs text-[#5B6470]">읽는 중…</p> : (
+      ) : err ? <p className={`${FS.body}`}><ErrText>{err}</ErrText></p> : !ov ? <p className={`${FS.body} text-[#5B6470]`}>읽는 중…</p> : (
         <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#5B6470]">
+          <div className={`flex flex-wrap items-center gap-2 ${FS.small} text-[#5B6470]`}>
             <span>장비 버전 <b className="text-[#1B1F24]">v{ov.deviceVersion ?? "-"}</b>{detail && ov.currentRow && ` (${ov.currentRow.kind})`}</span>
             {ov.base && ov.base.version !== ov.deviceVersion && (
               <Tag kind="info" title="장비에 보내지 않은 기준 — 다음 적용이 이 값 위에 만들어진다">
@@ -314,13 +314,13 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
               {ov.canApply && (
                 <button disabled={!connected || busy || ov.resyncPending} onClick={() => setAsk("resync")}
                   title="장비에 명령을 보내지 않고, 장비에 저장된 값으로 다음 적용의 기준을 다시 만든다"
-                  className="flex items-center gap-1 rounded-[10px] border border-[#D9DDE3] px-2.5 py-1 text-xs font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40">
+                  className={`flex items-center gap-1 rounded-[10px] border border-[#D9DDE3] px-2.5 py-1 ${FS.body} font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40`}>
                   <DownloadCloud size={13} /> {ov.resyncPending ? "기준 다시 읽는 중…" : "장비 저장 값으로 기준 다시 읽기"}
                 </button>
               )}
               {ov.canRollback && (
                 <button disabled={!connected || busy} onClick={() => setAsk("rollback")}
-                  className="flex items-center gap-1 rounded-[10px] border border-[#D9DDE3] px-2.5 py-1 text-xs font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40">
+                  className={`flex items-center gap-1 rounded-[10px] border border-[#D9DDE3] px-2.5 py-1 ${FS.body} font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40`}>
                   <RotateCcw size={13} /> 이전 버전으로 되돌리기
                 </button>
               )}
@@ -334,7 +334,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
 
           {tab === "edit" ? (
             <>
-              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+              <div className={`flex flex-wrap items-center gap-2 ${FS.small}`}>
                 <select value={group} onChange={(e) => { setGroup(e.target.value); setQ(""); setOnlyChanged(false); }}
                   className="rounded-md border border-[#D9DDE3] px-1 py-0.5">
                   {groups.map((g) => (
@@ -352,14 +352,14 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                     <button disabled={!canApply || busy || !changed.length || bad.length > 0 || !ov.current}
                       title={bad.length ? `웹 검사 오류 ${bad.length}개` : !connected ? "장비 끊김" : undefined}
                       onClick={() => setAsk("apply")}
-                      className="flex items-center gap-1 rounded-[10px] bg-[#1D4ED8] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#1E40AF] disabled:opacity-40">
+                      className={`flex items-center gap-1 rounded-[10px] bg-[#1D4ED8] px-2.5 py-1.5 ${FS.body} font-semibold text-white hover:bg-[#1E40AF] disabled:opacity-40`}>
                       <Save size={13} /> 적용({changed.length})
                     </button>
                   )}
                 </span>
               </div>
               <div className="overflow-x-auto rounded-[10px] border border-[#E3E6EA]">
-                <table className="min-w-full text-[11px]">
+                <table className={`min-w-full ${FS.small}`}>
                   <thead className="bg-[#F5F6F8] text-[#5B6470]">
                     <tr>{["키", "지금 값", "새 값", "형식·범위", "기본값", "등급·적용", "설명"].map((h) => <th key={h} className="px-2 py-1.5 text-left font-semibold">{h}</th>)}</tr>
                   </thead>
@@ -371,8 +371,8 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                       return (
                         <tr key={p.key} className={`border-t border-[#E3E6EA] align-top ${rejected.has(p.key) ? "bg-[#FEE4E2]/60" : changed.includes(p.key) ? "bg-[#E8EEFC]/40" : ""}`}>
                           <td className="px-2 py-1.5">
-                            <p className="text-xs font-bold text-[#1B1F24]">{p.label || p.key}</p>
-                            <p className="font-mono text-[10px] text-[#5B6470]">{p.key}</p>
+                            <p className={`${FS.body} font-bold text-[#1B1F24]`}>{p.label || p.key}</p>
+                            <p className={`font-mono ${FS.small} text-[#5B6470]`}>{p.key}</p>
                             <span className="flex flex-wrap gap-0.5">
                               {p.webLocked && <Tag kind="lock">노트북 설정 파일로만</Tag>}
                               {overridden.has(p.key) && (
@@ -395,18 +395,18 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                           </td>
                           <td className="px-2 py-1.5 text-[#5B6470]">
                             {detail ? p.type : TYPE_TEXT[p.type ?? ""] ?? p.type}{range && ` · ${range}`}{p.unit && ` ${p.unit}`}
-                            {p.enum && <p className="text-[10px]">{p.enum.map(String).join(" · ")}</p>}
-                            {p.pattern && <p className="font-mono text-[10px]">/{p.pattern}/</p>}
+                            {p.enum && <p className={`${FS.small}`}>{p.enum.map(String).join(" · ")}</p>}
+                            {p.pattern && <p className={`font-mono ${FS.small}`}>/{p.pattern}/</p>}
                           </td>
                           <td className="px-2 py-1.5 tabular-nums text-[#5B6470]">{show(p.default)}</td>
                           <td className="px-2 py-1.5">
                             <SafetyBadge s={p.safety} title={p.safety === "H" ? "공정 중 변경 금지·관리자 전용" : undefined} />
-                            <p className="mt-0.5 text-[10px] text-[#5B6470]">{APPLY_TEXT[p.apply ?? ""] ?? p.apply}</p>
-                            {detail && <p className="font-mono text-[10px] text-[#8A929D]">{p.safety} · {p.apply}</p>}
+                            <p className={`mt-0.5 ${FS.small} text-[#5B6470]`}>{APPLY_TEXT[p.apply ?? ""] ?? p.apply}</p>
+                            {detail && <p className={`font-mono ${FS.small} text-[#8A929D]`}>{p.safety} · {p.apply}</p>}
                           </td>
                           <td className="max-w-xs px-2 py-1.5 text-[#5B6470]">
-                            {p.desc}{detail && p.note && <p className="text-[10px] text-[#5B6470]">{p.note}</p>}
-                            {detail && p.v1Source && <p className="text-[10px] text-[#5B6470]">v1 {p.v1Key ?? ""} · {p.v1Source}</p>}
+                            {p.desc}{detail && p.note && <p className={`${FS.small} text-[#5B6470]`}>{p.note}</p>}
+                            {detail && p.v1Source && <p className={`${FS.small} text-[#5B6470]`}>v1 {p.v1Key ?? ""} · {p.v1Source}</p>}
                           </td>
                         </tr>
                       );
@@ -416,13 +416,13 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                 </table>
               </div>
               {rules.length > 0 && (
-                <div className="rounded-lg bg-[#F5F6F8] p-2 text-[11px] text-[#5B6470]">
+                <div className={`rounded-lg bg-[#F5F6F8] p-2 ${FS.small} text-[#5B6470]`}>
                   <p className="font-semibold">바꾼 키가 걸린 키 사이 규칙(판단은 장비 — 어기면 CONFIG_INVALID)</p>
                   <ul className="list-disc pl-4">{rules.map((r) => <li key={r.id}><span className="font-mono">{r.id}</span> {r.desc} <span className="text-[#5B6470]">({r.keys.join(", ")})</span></li>)}</ul>
                 </div>
               )}
               {lastResult?.action === "apply" && (lastResult.ack?.ackStatus === "rejected" || lastResult.command?.status === "rejected") && (
-                <div className="rounded-lg bg-[#FEE4E2] p-2 text-[11px] text-[#B42318]">
+                <div className={`rounded-lg bg-[#FEE4E2] p-2 ${FS.small} text-[#B42318]`}>
                   <div className="flex flex-wrap items-center gap-2">
                     <p className="flex items-center gap-1 font-semibold">
                       <AlertOctagon size={13} className="shrink-0" aria-hidden /> 버전 {lastResult.version ?? "-"} 거부 — {(() => { const rc = lastResult.ack?.reasonCode ?? lastResult.command?.reasonCode; return rc ? `${CONFIG_REASON[rc] ?? reasonLabel(bundle, rc)} (${rc})` : ""; })()}
@@ -442,7 +442,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
           ) : (
             <div className="grid gap-3 xl:grid-cols-2">
               <div className="space-y-1.5">
-                <div className="flex items-center gap-2 text-[11px] text-[#5B6470]">
+                <div className={`flex items-center gap-2 ${FS.small} text-[#5B6470]`}>
                   <History size={13} /> 버전 {ov.versions.length}개(새것부터)
                   <span className="ml-auto flex items-center gap-1"><GitCompare size={12} /> 비교
                     {[0, 1].map((i) => (
@@ -455,7 +455,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                   </span>
                 </div>
                 <div className="max-h-[480px] overflow-y-auto rounded-[10px] border border-[#E3E6EA]">
-                  <table className="min-w-full text-[11px]">
+                  <table className={`min-w-full ${FS.small}`}>
                     <thead className="bg-[#F5F6F8] text-[#5B6470]"><tr>{["버전", "종류", "누가", "언제", "상태", "사유", "바뀐 키", "메모"].map((h) => <th key={h} className="px-2 py-1.5 text-left font-semibold">{h}</th>)}</tr></thead>
                     <tbody>
                       {ov.versions.map((v) => (
@@ -480,9 +480,9 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                 </div>
               </div>
               <div className="space-y-2">
-                {picked ? <VersionDetail v={picked} /> : <p className="text-[11px] text-[#5B6470]">버전을 누르면 바뀐 키(전 → 후)와 장비 결과</p>}
+                {picked ? <VersionDetail v={picked} /> : <p className={`${FS.small} text-[#5B6470]`}>버전을 누르면 바뀐 키(전 → 후)와 장비 결과</p>}
                 {cmpRows && (
-                  <div className="rounded-[10px] border border-[#E3E6EA] p-2 text-[11px]">
+                  <div className={`rounded-[10px] border border-[#E3E6EA] p-2 ${FS.small}`}>
                     <p className="mb-1 font-semibold text-[#1B1F24]">v{cmpRows[0].version} ↔ v{cmpRows[1].version} 다른 키</p>
                     {(() => {
                       const a = cmpRows[0].paramValues ?? {}, b = cmpRows[1].paramValues ?? {};
@@ -503,9 +503,9 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
       {ask === "apply" && ov && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-[12px] bg-white p-4">
-            <p className="text-sm font-bold text-[#1B1F24]">설정 적용 확인 — 장비 {equipment}</p>
-            <p className="mt-1 text-xs text-[#5B6470]">지금 v{ov.deviceVersion} → 새 버전 v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1} · 바뀐 키 {changed.length}개(비밀값은 보내지 않음)</p>
-            <table className="mt-2 w-full text-[11px]">
+            <p className={`${FS.card} font-bold text-[#1B1F24]`}>설정 적용 확인 — 장비 {equipment}</p>
+            <p className={`mt-1 ${FS.body} text-[#5B6470]`}>지금 v{ov.deviceVersion} → 새 버전 v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1} · 바뀐 키 {changed.length}개(비밀값은 보내지 않음)</p>
+            <table className={`mt-2 w-full ${FS.small}`}>
               <thead><tr className="text-left text-[#5B6470]"><th className="pr-2 font-medium">키</th><th className="pr-2 font-medium">전 → 새</th><th className="font-medium">등급·적용</th></tr></thead>
               <tbody>{changed.map((k) => {
                 const p = params.find((x) => x.key === k)!;
@@ -521,16 +521,16 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
             {busyNow && changed.some((k) => params.find((x) => x.key === k)?.safety === "H") && (
               <div className="mt-2"><Issue level="alarm">공정·히터 운전 중 — H 등급 키가 있어 장비가 거부합니다(CONFIG_H_IN_PROCESS).</Issue></div>
             )}
-            <label className="mt-2 block text-[11px] text-[#5B6470]">메모(선택)
-              <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className="mt-0.5 w-full rounded-md border border-[#D9DDE3] px-2 py-1 text-xs" />
+            <label className={`mt-2 block ${FS.small} text-[#5B6470]`}>메모(선택)
+              <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className={`mt-0.5 w-full rounded-md border border-[#D9DDE3] px-2 py-1 ${FS.body}`} />
             </label>
-            <p className="mt-2 text-[11px] text-[#5B6470]">이 조작은 실행자 계정과 함께 기록됩니다.</p>
+            <p className={`mt-2 ${FS.small} text-[#5B6470]`}>이 조작은 실행자 계정과 함께 기록됩니다.</p>
             <div className="mt-3 flex justify-end gap-2">
-              <button onClick={() => setAsk(null)} className="rounded-[10px] px-3 py-1.5 text-xs font-semibold text-[#5B6470] hover:bg-[#F5F6F8]">취소</button>
+              <button onClick={() => setAsk(null)} className={`rounded-[10px] px-3 py-1.5 ${FS.body} font-semibold text-[#5B6470] hover:bg-[#F5F6F8]`}>취소</button>
               <button disabled={busy} onClick={() => {
                 setAsk(null);
                 void post({ action: "apply", baseVersion: ov.deviceVersion, changes: Object.fromEntries(changed.map((k) => [k, edits[k]])), note });
-              }} className="rounded-[10px] bg-[#1D4ED8] px-3 py-1.5 text-xs font-semibold text-white">적용</button>
+              }} className={`rounded-[10px] bg-[#1D4ED8] px-3 py-1.5 ${FS.body} font-semibold text-white`}>적용</button>
             </div>
           </div>
         </div>
@@ -545,7 +545,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
         <SimpleConfirm title="장비 저장 값으로 기준 다시 읽기" ok="다시 읽기"
           text={<>장비 {equipment} 에 저장된 설정 값(노트북 설정 파일이 정한 값은 빼고)을 다시 받아 새 버전
             v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1}을 만듭니다. <b>장비에는 아무 명령도 보내지 않습니다.</b>{" "}
-            다음 적용은 이 값 위에 만들어집니다.{detail && <span className="block font-mono text-[11px] text-[#5B6470]">묶음 params[].stored · kind resync</span>}</>}
+            다음 적용은 이 값 위에 만들어집니다.{detail && <span className={`block font-mono ${FS.small} text-[#5B6470]`}>묶음 params[].stored · kind resync</span>}</>}
           onCancel={() => setAsk(null)} onOk={() => { setAsk(null); void post({ action: "resync" }); }} />
       )}
     </Card>

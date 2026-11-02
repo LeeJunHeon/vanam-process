@@ -8,7 +8,7 @@
 // StatusBar = 스크롤로 띠가 안 보일 때 위에 붙는 얇은 줄(같은 버튼·같은 동작). run id·원시 이름은 '상세'에서만.
 import type { ReactNode } from "react";
 import { BellOff, Lock, OctagonX, PauseCircle, Square } from "lucide-react";
-import { Btn, Chip, Issue, type Ask, type Tone } from "./kit";
+import { FS, Btn, Chip, Issue, type Ask, type Tone } from "./kit";
 import { fmtKst } from "@/lib/ops2/time";
 import { useChk2Mode } from "./mode";
 import { fmtClock, fmtDur, runTitle } from "./text";
@@ -72,13 +72,13 @@ export function StatusBar({ bundle, st, connected, lock, onAsk }: {
   const step = st?.step;
   return (
     <div className="flex items-center gap-3 whitespace-nowrap rounded-[12px] border border-[#D9DDE3] bg-white/95 px-3 py-1.5 shadow-md backdrop-blur">
-      <span className="text-[11px] font-semibold text-[#5B6470]">{STATE_WORD[kind ?? ""] ?? "대기"}</span>
-      <b className={`truncate text-sm ${connected ? "text-[#1B1F24]" : "text-[#8A929D]"}`}>
+      <span className={`${FS.small} font-semibold text-[#5B6470]`}>{STATE_WORD[kind ?? ""] ?? "대기"}</span>
+      <b className={`truncate ${FS.body} ${connected ? "text-[#1B1F24]" : "text-[#8A929D]"}`}>
         {st ? (st.procState === "IDLE" ? "대기 중" : stateLabel(bundle, st.procState)) : "상태 없음"}
       </b>
       {st?.paused && <Chip tone="warn" icon={<PauseCircle size={11} />}>일시정지</Chip>}
-      {step && <span className="text-[11px] text-[#5B6470]">블록 {step.no}/{step.total}</span>}
-      {typeof r === "number" && r >= 0 && <span className="text-sm font-bold tabular-nums text-[#133A7C]">남은 {fmtClock(r)}</span>}
+      {step && <span className={`${FS.small} text-[#5B6470]`}>블록 {step.no}/{step.total}</span>}
+      {typeof r === "number" && r >= 0 && <span className={`${FS.card} font-bold tabular-nums text-[#133A7C]`}>남은 {fmtClock(r)}</span>}
       <span className="ml-auto"><StopButtons lock={lock} onAsk={onAsk} small /></span>
     </div>
   );
@@ -124,9 +124,9 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
 
   return (
     <section className="min-w-0 rounded-[12px] border border-[#D9DDE3] bg-white p-4 sm:p-5">
-      <div className="flex flex-wrap items-center gap-2 text-xs">
-        <b className="text-sm text-[#1B1F24]">{label || equipment}</b>
-        {label && <span className="font-mono text-[11px] text-[#5B6470]">{equipment}</span>}
+      <div className={`flex flex-wrap items-center gap-2 ${FS.body}`}>
+        <b className={`${FS.card} text-[#1B1F24]`}>{label || equipment}</b>
+        {label && <span className={`font-mono ${FS.small} text-[#5B6470]`}>{equipment}</span>}
         <Chip tone={conn.tone}>{conn.label}</Chip>
         {mode === "bench" && <Chip tone="dark" icon={<Lock size={11} />}>읽기 전용(bench)</Chip>}
         {mode === "sim" && <Chip tone="info">SIM — 모의 장비</Chip>}
@@ -136,19 +136,19 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 flex-1">
-          <p className={`truncate text-2xl font-bold tracking-tight ${connected ? "text-[#1B1F24]" : "text-[#8A929D]"}`}>
+          <p className={`truncate ${FS.title} font-bold tracking-tight ${connected ? "text-[#1B1F24]" : "text-[#8A929D]"}`}>
             {!st ? "상태 없음" : st.procState === "IDLE" ? "대기 중" : stateLabel(bundle, st.procState)}
-            {detail && st?.procState && <span className="ml-2 align-middle font-mono text-[11px] font-normal text-[#8A929D]">{st.procState}</span>}
+            {detail && st?.procState && <span className={`ml-2 align-middle font-mono ${FS.small} font-normal text-[#8A929D]`}>{st.procState}</span>}
           </p>
-          {!st && <p className="mt-1 text-xs text-[#5B6470]">장비 프로그램이 웹에 연결되면 실시간 상태가 표시됩니다</p>}
+          {!st && <p className={`mt-1 ${FS.body} text-[#5B6470]`}>장비 프로그램이 웹에 연결되면 실시간 상태가 표시됩니다</p>}
           {(recText || (active && step)) && (
-            <p className="mt-1 text-xs text-[#5B6470]">
+            <p className={`mt-1 ${FS.body} text-[#5B6470]`}>
               {recText && <>레시피 <b className="text-[#1B1F24]">{recText}</b></>}
               {detail && st?.runId && <span className="ml-2 font-mono text-[#8A929D]">run {st.runId}</span>}
             </p>
           )}
           {active && st && (
-            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-[#1B1F24]">
+            <p className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 ${FS.body} text-[#1B1F24]`}>
               {step && <span className="tabular-nums text-[#5B6470]">블록 {step.no}/{step.total}</span>}
               <b>{blockTitle(bundle, st, v1Row)}</b>
               {target && <span className="text-[#5B6470]">{target}</span>}
@@ -156,7 +156,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
             </p>
           )}
           {st && !active && lastRun && (
-            <p className="mt-1 text-xs text-[#5B6470]">
+            <p className={`mt-1 ${FS.body} text-[#5B6470]`}>
               마지막 공정 {fmtKst(lastRun.startedAt ?? lastRun.endedAt).slice(0, 11)} · {runTitle(lastRun)} ·{" "}
               {lastRun.result ? RUN_RESULT[lastRun.result] ?? lastRun.result : "끝 기록 없음"}
               {lastRun.reasonCode && ` (${reasonLabel(bundle, lastRun.reasonCode)})`}
@@ -174,7 +174,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
               <div className="h-full rounded-full bg-[#133A7C] transition-all" style={{ width: `${progress * 100}%` }} />
             </div>
           )}
-          <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-[#5B6470]">
+          <p className={`flex flex-wrap gap-x-4 gap-y-1 ${FS.body} text-[#5B6470]`}>
             {startedMs !== null && <span>시작 <b className="tabular-nums text-[#1B1F24]">{hm(new Date(startedMs))}</b></span>}
             {elapsedS !== null && <span>경과 <b className="tabular-nums text-[#1B1F24]">{fmtDur(elapsedS)}</b></span>}
             {rem.sec !== null && <span>남은 시간 <b className="tabular-nums text-[#1B1F24]">{fmtDur(rem.sec)}{rem.open ? " 이상" : ""}</b></span>}
@@ -194,14 +194,14 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
             </Issue>
           )}
           {hr && (
-            <p className="text-xs text-[#5B6470]">
+            <p className={`${FS.body} text-[#5B6470]`}>
               히터 레시피 <b className="text-[#1B1F24]">{hr.name || "이름 없음"}</b> · 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"}
               {hr.held && <Chip tone="warn" className="ml-1.5" icon={<PauseCircle size={11} />}>일시정지</Chip>}
               {detail && hr.state ? <span className="ml-1 font-mono text-[#8A929D]">{hr.state}</span> : null}
             </p>
           )}
           {(st?.heater?.owner || (st?.heater?.gas && st.heater.gas !== "IDLE")) && !hr && (
-            <p className="text-xs text-[#5B6470]">
+            <p className={`${FS.body} text-[#5B6470]`}>
               {st?.heater?.owner && `히터: ${HEATER_OWNER[st.heater.owner] ?? st.heater.owner} 소유`}
               {st?.heater?.handedOver && " · 공정에서 넘겨받음"}
               {st?.heater?.gas && st.heater.gas !== "IDLE" && ` · ${GAS_STATE[st.heater.gas] ?? st.heater.gas}`}

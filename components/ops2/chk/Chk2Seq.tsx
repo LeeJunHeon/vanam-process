@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ListOrdered, PauseCircle, Play, RefreshCw, SkipForward } from "lucide-react";
 import { checkBlocks, type BlockEnv } from "@/lib/ops2/chk/blocks";
 import { checkEnvOf } from "@/lib/ops2/chk/recipe";
-import { Btn, Card, Chip, Empty, Issue, type Ask } from "./kit";
+import { FS, Btn, Card, Chip, Empty, Issue, type Ask } from "./kit";
 import { BlockPane, BlockTree, TopMessages, fromJson, toJson, type EBlock } from "./Chk2BlockEditor";
 import { blockName, blockSummary, fmtClock, fmtDur } from "./text";
 import { DONE_STATUS, OPEN_TYPES, blockTarget, topOf } from "./runview";
@@ -50,17 +50,17 @@ function SeqItem({ b, bundle, st, current, lock, onAsk, revision, pauseMax }: {
   return (
     <li className={`rounded-[10px] border px-3 py-2 ${current ? "border-[#C7D5FB] bg-[#E8EEFC]" : done ? "border-transparent bg-[#F5F6F8]" : "border-[#E3E6EA] bg-white"}`}>
       <div className="flex items-start gap-2">
-        <span className={`mt-0.5 flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 font-mono text-[10px] font-bold ${
+        <span className={`mt-0.5 flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 font-mono ${FS.small} font-bold ${
           current ? "bg-[#133A7C] text-white" : done ? "bg-[#E3E6EA] text-[#5B6470]" : "border border-[#C9CED6] text-[#5B6470]"}`}>{b.no === "delay" ? "D" : b.no}</span>
         <div className="min-w-0 flex-1">
-          <p className={`flex flex-wrap items-center gap-1.5 text-xs font-semibold ${done ? "text-[#5B6470]" : "text-[#1B1F24]"}`}>
+          <p className={`flex flex-wrap items-center gap-1.5 ${FS.body} font-semibold ${done ? "text-[#5B6470]" : "text-[#1B1F24]"}`}>
             <span className="truncate">{name}</span>
             {b.auto && <Chip>자동으로 붙음</Chip>}
             {b.status === "skipped" && <Chip tone="warn" icon={<SkipForward size={11} />}>건너뜀</Chip>}
             {(b.status === "aborted" || b.status === "error" || b.status === "failed") && <Chip tone="alarm">{RESULT[b.status]}</Chip>}
             {paused && <Chip tone="warn" icon={<PauseCircle size={11} />}>일시정지 {fmtClock(pausedS)}{pauseMax > 0 ? ` / ${fmtClock(pauseMax)}` : ""}</Chip>}
           </p>
-          <p className="text-[11px] text-[#5B6470]">
+          <p className={`${FS.small} text-[#5B6470]`}>
             {done ? `${RESULT[b.status] ?? b.status}${took !== null ? ` · ${fmtDur(took)}` : ""}${(b.pausedSec ?? 0) > 0 ? ` · 멈춤 ${fmtDur(b.pausedSec ?? 0)}` : ""}`
               : current ? [target, paused ? "멈춤" : cur !== null ? `남은 ${fmtClock(cur)}` : OPEN_TYPES.has(b.type) ? "도달 대기 중" : "진행 중"].filter(Boolean).join(" · ")
               : typeof b.durationS === "number" ? fmtDur(b.durationS) : OPEN_TYPES.has(b.type) ? "도달까지" : ""}
@@ -80,14 +80,14 @@ function SeqItem({ b, bundle, st, current, lock, onAsk, revision, pauseMax }: {
                     note: pauseMax > 0 ? `한도 ${fmtDur(pauseMax)}를 넘으면 정지 순서로 갑니다(5분 전 경고).` : "한도 없음(설정 PROCESS_PAUSE_MAX_SEC 0)." })}>
                   <PauseCircle size={13} /> 일시정지
                 </Btn>
-              ) : <span className="text-[11px] text-[#5B6470]">일시정지 못 함 — {b.pauseText || "이 블록은 멈출 수 없음"}</span>}
+              ) : <span className={`${FS.small} text-[#5B6470]`}>일시정지 못 함 — {b.pauseText || "이 블록은 멈출 수 없음"}</span>}
               {b.skip ? (
                 <Btn size="sm" lock={lock("PROCESS_SKIP")}
                   onClick={() => onAsk({ kind: "PROCESS_SKIP", label: "블록 건너뛰기", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
                     args: { no: b.no, revision }, lines: [`${name}: ${b.skipText ?? ""}`], red: true })}>
                   <SkipForward size={13} /> 건너뛰기
                 </Btn>
-              ) : !paused && <span className="text-[11px] text-[#5B6470]">건너뛰기 못 함 — {b.skipText || "이 블록은 건너뛸 수 없음"}</span>}
+              ) : !paused && <span className={`${FS.small} text-[#5B6470]`}>건너뛰기 못 함 — {b.skipText || "이 블록은 건너뛸 수 없음"}</span>}
             </div>
           )}
         </div>
@@ -146,7 +146,7 @@ function SeqEditor({ bundle, base, baseRev, revision, lockTop, runBlocks, lock, 
             warnings={chk?.warnings ?? []} onTree={setTree} lockTop={lockTop} />
         </div>
       </div>
-      <div className="sticky bottom-0 flex flex-wrap items-center gap-2 rounded-[10px] border border-[#D9DDE3] bg-white px-3 py-2 text-xs">
+      <div className={`sticky bottom-0 flex flex-wrap items-center gap-2 rounded-[10px] border border-[#D9DDE3] bg-white px-3 py-2 ${FS.body}`}>
         <span className="text-[#5B6470]">판 {baseRev} 기준 · 바뀐 것 <b className="text-[#1B1F24]">{changes.length}</b>개 ·</span>
         {errors.length ? <Chip tone="alarm">검사 오류 {errors.length}</Chip> : <Chip>검사 통과</Chip>}
         <span className="ml-auto flex gap-2">
@@ -231,11 +231,11 @@ export default function Chk2Seq({ bundle, st, runBlocks, editBase, lock, onAsk, 
         </ol>
       )}
       <div className="mt-3 border-t border-[#E3E6EA] pt-2">
-        <button onClick={() => setStopOpen((o) => !o)} className="flex items-center gap-1 text-[11px] font-semibold text-[#5B6470] hover:text-[#1B1F24]">
+        <button onClick={() => setStopOpen((o) => !o)} className={`flex items-center gap-1 ${FS.small} font-semibold text-[#5B6470] hover:text-[#1B1F24]`}>
           {stopOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 정지 순서(고정) 보기
         </button>
         {stopOpen && (
-          <ol className="mt-1 space-y-0.5 text-[11px] text-[#5B6470]">
+          <ol className={`mt-1 space-y-0.5 ${FS.small} text-[#5B6470]`}>
             {(bundle?.stopSequence?.steps ?? []).map((s) => <li key={s.no}>{s.no}. {s.label || s.desc || s.act}</li>)}
             {!bundle?.stopSequence?.steps?.length && <li>장비 정의에 정지 순서가 없습니다</li>}
           </ol>

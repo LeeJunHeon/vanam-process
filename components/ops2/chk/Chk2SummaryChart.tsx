@@ -7,6 +7,7 @@
 // 구간 사이가 90 s 넘게 비면 선을 끊는다(프로그램 재시작 등). 마우스를 올리면 세로선과 그 분의 값(모든 선).
 import { useEffect, useMemo, useRef, useState } from "react";
 import { fmtValue, type FieldDef } from "./types";
+import { FS, FSPX } from "./kit";
 
 export type SummaryRow = { fromTs: string; toTs: string; rowCount: number; stats: unknown; quality: unknown };
 export type PickField = FieldDef & { block: string };
@@ -109,7 +110,7 @@ function Panel({ rows, fields, colors, width, t0, t1, hover, setHover }: {
     const prev = acc[acc.length - 1];
     return [...acc, { x: prev ? prev.x + 26 + textWidth(prev.text) : LEFT, text }];
   }, []);
-  const labY = spread(lastPts.map((p) => (p ? y(p.v as number) : TOP + ph / 2)), 13, TOP + 4, TOP + ph);
+  const labY = spread(lastPts.map((p) => (p ? y(p.v as number) : TOP + ph / 2)), 14, TOP + 4, TOP + ph);
 
   return (
     <svg width={width} height={H} role="img" aria-label={`${fields.map((f) => f.label).join(", ")} (${unit || "단위 없음"}) 1분 요약`}
@@ -129,10 +130,10 @@ function Panel({ rows, fields, colors, width, t0, t1, hover, setHover }: {
       {legend.map((l, k) => (
         <g key={fields[k].column} transform={`translate(${l.x},6)`}>
           <rect width={10} height={3} y={5} rx={1.5} fill={colors[k]} />
-          <text x={14} y={10} fontSize={10.5} fill="#52514e">{l.text}</text>
+          <text x={14} y={10} fontSize={FSPX.small} fill="#52514e">{l.text}</text>
         </g>
       ))}
-      <text x={LEFT - 6} y={14} fontSize={10} fill="#8a8984" textAnchor="end">{unit || "단위 없음"}{log ? " 로그" : ""}</text>
+      <text x={LEFT - 6} y={14} fontSize={FSPX.small} fill="#8a8984" textAnchor="end">{unit || "단위 없음"}{log ? " 로그" : ""}</text>
       {/* 품질 구간 */}
       {badBands.map((b, i) => <rect key={i} x={b.x0} y={TOP} width={Math.max(1, b.x1 - b.x0)} height={ph} fill="#e9e8e4" />)}
       {/* 격자·축 */}
@@ -140,14 +141,14 @@ function Panel({ rows, fields, colors, width, t0, t1, hover, setHover }: {
         <g key={v}>
           <line x1={LEFT} x2={LEFT + pw} y1={TOP + ph - ((v - lo) / (hi - lo)) * ph} y2={TOP + ph - ((v - lo) / (hi - lo)) * ph}
             stroke="#ecebe7" strokeWidth={1} />
-          <text x={LEFT - 6} y={TOP + ph - ((v - lo) / (hi - lo)) * ph + 3.5} fontSize={10} fill="#8a8984" textAnchor="end">{fmtTick(v)}</text>
+          <text x={LEFT - 6} y={TOP + ph - ((v - lo) / (hi - lo)) * ph + 3.5} fontSize={FSPX.small} fill="#8a8984" textAnchor="end">{fmtTick(v)}</text>
         </g>
       ))}
       <line x1={LEFT} x2={LEFT + pw} y1={TOP + ph} y2={TOP + ph} stroke="#c9c8c2" />
       {xTicks.map((t) => (
         <g key={t}>
           <line x1={x(t)} x2={x(t)} y1={TOP + ph} y2={TOP + ph + 4} stroke="#c9c8c2" />
-          <text x={x(t)} y={TOP + ph + 15} fontSize={10} fill="#8a8984" textAnchor="middle">{hm(t)}</text>
+          <text x={x(t)} y={TOP + ph + 15} fontSize={FSPX.small} fill="#8a8984" textAnchor="middle">{hm(t)}</text>
         </g>
       ))}
       {/* 선 */}
@@ -164,7 +165,7 @@ function Panel({ rows, fields, colors, width, t0, t1, hover, setHover }: {
           <polyline fill="none" stroke="#c9c8c2" strokeWidth={1}
             points={`${x(p.t) + 3},${y(p.v as number)} ${LEFT + pw + 8},${y(p.v as number)} ${LEFT + pw + 16},${labY[k]}`} />
           <circle cx={LEFT + pw + 20} cy={labY[k]} r={2.5} fill={colors[k]} />
-          <text x={LEFT + pw + 26} y={labY[k] + 3.5} fontSize={10.5} fill="#2b2a28">
+          <text x={LEFT + pw + 26} y={labY[k] + 3.5} fontSize={FSPX.small} fill="#2b2a28">
             {fmtValue(p.v, fields[k].fmt) || String(p.v)}
           </text>
         </g>
@@ -204,14 +205,14 @@ export default function Chk2SummaryChart({ rows, fields, t0, t1 }: { rows: Summa
 
   return (
     <div ref={box} className="relative w-full">
-      {!rows.length ? <p className="py-6 text-center text-xs text-gray-400">이 공정의 1분 요약이 없습니다</p>
-        : !fields.length ? <p className="py-6 text-center text-xs text-gray-400">필드를 고르세요</p>
+      {!rows.length ? <p className={`py-6 text-center ${FS.body} text-gray-400`}>이 공정의 1분 요약이 없습니다</p>
+        : !fields.length ? <p className={`py-6 text-center ${FS.body} text-gray-400`}>필드를 고르세요</p>
         : groups.map((g) => (
           <Panel key={g[0].unit} rows={rows} fields={g} colors={g.map((_, k) => SERIES[k % SERIES.length])} width={width}
             t0={span0} t1={span1} hover={hover} setHover={setHover} />
         ))}
       {hr && (
-        <div className="pointer-events-none absolute right-2 top-0 z-10 rounded-lg border border-gray-200 bg-white/95 px-2 py-1 text-[11px] shadow-sm">
+        <div className={`pointer-events-none absolute right-2 top-0 z-10 rounded-lg border border-gray-200 bg-white/95 px-2 py-1 ${FS.small} shadow-sm`}>
           <p className="text-gray-500">{hm(Date.parse(hr.fromTs))}~{hm(Date.parse(hr.toTs))} KST · {hr.rowCount}행</p>
           {groups.flatMap((g) => g.map((f, k) => {
             const p = series([hr], f)[0];
