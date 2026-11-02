@@ -13,11 +13,15 @@
 // desc 는 보이고 note·v1 출처·원래 적용 시점 이름은 '상세'에서만.
 // 웹 검사는 키 하나씩(lib/ops2/configCheck) — 키 사이 규칙(crossRules)은 설명만, 판단은 장비(CONFIG_INVALID errors 그대로).
 // 이력: 버전 목록 → 하나(changes·ack) → 두 버전 비교.
+// W-10a: 배지·오류·주의는 아이콘 + 글자(kit Tag·ErrText·Issue) — 색만으로 뜻을 전하지 않는다. 바꾼 줄은 '바꿈' 배지, 고른 버전은 표시.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { DownloadCloud, Eraser, GitCompare, History, RotateCcw, Save, Settings2 } from "lucide-react";
+import {
+  AlertOctagon, ChevronRight, DownloadCloud, Eraser, GitCompare, HardDrive, History, PencilLine, RotateCcw, Save, Settings2,
+  Shield, ShieldAlert, ShieldCheck,
+} from "lucide-react";
 import { CONFIG_REASON, checkParamValue } from "@/lib/ops2/configCheck";
 import { fmtKst } from "@/lib/ops2/time";
-import { Card, SimpleConfirm, type Notice } from "./kit";
+import { Card, ErrText, Issue, SimpleConfirm, Tag, type Notice } from "./kit";
 import { reasonLabel, type Bundle, type ParamDef, type Perms, type StateData } from "./types";
 import { useChk2Mode } from "./mode";
 
@@ -64,14 +68,17 @@ function parse(p: ParamDef, text: string): unknown {
   return text;
 }
 
-function Badge({ tone, children, title }: { tone: string; children: React.ReactNode; title?: string }) {
-  return <span title={title} className={`rounded px-1 text-[10px] font-semibold ${tone}`}>{children}</span>;
+function StatusBadge({ s }: { s: string | null }) {
+  const kind = !s ? "unknown" : s === "applied" ? "ok" : s === "rejected" ? "alarm" : "wait";
+  return <Tag kind={kind}>{s ? STATUS_TEXT[s] ?? s : "응답 없음"}</Tag>;
 }
 
-function StatusBadge({ s }: { s: string | null }) {
-  const tone = !s ? "bg-[#EEF0F3] text-[#5B6470]" : s === "applied" ? "bg-[#F5F6F8] text-[#5B6470]"
-    : s === "rejected" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#FFFAEB] text-[#B54708]";
-  return <Badge tone={tone}>{s ? STATUS_TEXT[s] ?? s : "응답 없음"}</Badge>;
+/** 등급 배지 — 높음·중간·낮음(방패 아이콘 모양이 다르다) */
+function SafetyBadge({ s, title }: { s?: string; title?: string }) {
+  const text = SAFETY_TEXT[s ?? ""] ?? s ?? "-";
+  return s === "H" ? <Tag kind="alarmSolid" icon={ShieldAlert} title={title}>{text}</Tag>
+    : s === "M" ? <Tag kind="warn" icon={Shield} title={title}>{text}</Tag>
+    : <Tag kind="muted" icon={ShieldCheck} title={title}>{text}</Tag>;
 }
 
 function ParamInput({ p, value, onChange, readOnly, error }: {
@@ -107,10 +114,10 @@ function VersionDetail({ v }: { v: Version }) {
     <div className="space-y-1.5 rounded-[10px] bg-[#F5F6F8] p-2 text-[11px]">
       <p className="text-[#5B6470]">
         버전 <b>{v.version}</b> · {v.kind} · {v.createdBy} · {fmtKst(v.createdAt)} · <StatusBadge s={v.ackStatus} />
-        {v.reasonCode && <span className="ml-1 text-[#B42318]">{CONFIG_REASON[v.reasonCode] ?? v.reasonCode}</span>}
+        {v.reasonCode && <ErrText className="ml-1">{CONFIG_REASON[v.reasonCode] ?? v.reasonCode}</ErrText>}
         {v.note && <span className="ml-1 text-[#5B6470]">· 메모 {v.note}</span>}
       </p>
-      {errs.length > 0 && <ul className="list-disc pl-4 text-[#B42318]">{errs.map((e, i) => <li key={i}>{e}</li>)}</ul>}
+      {errs.length > 0 && <ul className="space-y-0.5">{errs.map((e, i) => <li key={i}><ErrText>{e}</ErrText></li>)}</ul>}
       {[["바로 적용", arr(v.appliedKeys)], ["대기", arr(v.pendingKeys)], ["노트북 덮어쓰기가 이김", arr(v.overriddenKeys)]]
         .filter(([, l]) => (l as string[]).length).map(([t, l]) => (
           <p key={t as string} className="text-[#5B6470]">{t as string}: <span className="font-mono">{(l as string[]).join(", ")}</span></p>
@@ -282,26 +289,26 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
         <p className="text-[11px] text-[#5B6470]">장비 설정 버전 v{st?.configVersion ?? "-"}
           {st?.configPending && ` · 대기 중 ${Object.keys(st.configPending.idle ?? {}).length + Object.keys(st.configPending.restart ?? {}).length}개 키`}
           {" "}· 장비별 버전(CHK2·CHK2-SIM 따로) · 적용·되돌리기는 관리자</p>
-      ) : err ? <p className="text-xs text-[#B42318]">{err}</p> : !ov ? <p className="text-xs text-[#5B6470]">읽는 중…</p> : (
+      ) : err ? <p className="text-xs"><ErrText>{err}</ErrText></p> : !ov ? <p className="text-xs text-[#5B6470]">읽는 중…</p> : (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-[#5B6470]">
             <span>장비 버전 <b className="text-[#1B1F24]">v{ov.deviceVersion ?? "-"}</b>{detail && ov.currentRow && ` (${ov.currentRow.kind})`}</span>
             {ov.base && ov.base.version !== ov.deviceVersion && (
-              <Badge tone="bg-[#E8EEFC] text-[#1D4ED8]" title="장비에 보내지 않은 기준 — 다음 적용이 이 값 위에 만들어진다">
+              <Tag kind="info" title="장비에 보내지 않은 기준 — 다음 적용이 이 값 위에 만들어진다">
                 기준 v{ov.base.version}(장비 저장 값{detail ? ` · ${ov.base.kind}` : ""})
-              </Badge>
+              </Tag>
             )}
             <span>웹 최대 v{ov.webMaxVersion ?? "-"}</span>
-            {ov.pending.length > 0 && <Badge tone="bg-[#FFFAEB] text-[#B54708]">대기 중 웹 버전 {ov.pending.map((p) => `v${p.version}(${p.ackStatus ? STATUS_TEXT[p.ackStatus] ?? p.ackStatus : "응답 없음"})`).join(", ")}</Badge>}
+            {ov.pending.length > 0 && <Tag kind="wait">대기 중 웹 버전 {ov.pending.map((p) => `v${p.version}(${p.ackStatus ? STATUS_TEXT[p.ackStatus] ?? p.ackStatus : "응답 없음"})`).join(", ")}</Tag>}
             {(Object.keys(idleP).length > 0 || Object.keys(restartP).length > 0) && (
-              <Badge tone="bg-[#FFFAEB] text-[#B54708]">장비 대기 키 — 공정 끝나면 {Object.keys(idleP).length} · 재시작 때 {Object.keys(restartP).length}</Badge>
+              <Tag kind="wait">장비 대기 키 — 공정 끝나면 {Object.keys(idleP).length} · 재시작 때 {Object.keys(restartP).length}</Tag>
             )}
-            {!ov.canApply && <Badge tone="bg-[#EEF0F3] text-[#5B6470]">보기만 — 적용은 관리자</Badge>}
+            {!ov.canApply && <Tag kind="lock">보기만 — 적용은 관리자</Tag>}
             {Object.keys(ov.overridden ?? {}).length > 0 && (
-              <Badge tone="bg-[#EEF3FF] text-[#1D4ED8]" title={Object.keys(ov.overridden).join(", ")}>
+              <Tag kind="info" title={Object.keys(ov.overridden).join(", ")}>
                 노트북 설정 파일이 정한 값 {Object.keys(ov.overridden).length}개
                 {detail && <span className="ml-1 font-mono font-normal">{Object.keys(ov.overridden).join(", ")}</span>}
-              </Badge>
+              </Tag>
             )}
             <span className="ml-auto flex gap-1.5">
               {ov.canApply && (
@@ -320,9 +327,9 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
             </span>
           </div>
           {!ov.current && (
-            <p className="rounded-lg bg-[#FFFAEB] px-2 py-1 text-[11px] text-[#B54708]">
+            <Issue level="warn">
               장비 버전 v{ov.deviceVersion ?? "-"} 의 값이 웹에 없습니다(노트북에서 생긴 버전 등) — 장비가 지금 쓰는 값을 보여 줍니다. 적용하려면 먼저 되돌리기나 장비 확인.
-            </p>
+            </Issue>
           )}
 
           {tab === "edit" ? (
@@ -338,7 +345,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                 </select>
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="키·라벨 찾기" className="w-40 rounded-md border border-[#D9DDE3] px-1.5 py-0.5" />
                 <label className="flex items-center gap-1"><input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} /> 바꾼 것만({changed.length})</label>
-                {busyNow && <Badge tone="bg-[#FFFAEB] text-[#B54708]">공정·히터 운전 중 — 등급 높음 값은 장비가 거부, 멈춰 있을 때 적용하는 값은 끝난 뒤 적용</Badge>}
+                {busyNow && <Tag kind="warn">공정·히터 운전 중 — 등급 높음 값은 장비가 거부, 멈춰 있을 때 적용하는 값은 끝난 뒤 적용</Tag>}
                 <span className="ml-auto flex items-center gap-1.5">
                   {changed.length > 0 && <button onClick={() => setEdits({})} className="px-1 text-[#5B6470] underline">되돌림</button>}
                   {ov.canApply && (
@@ -367,23 +374,24 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                             <p className="text-xs font-bold text-[#1B1F24]">{p.label || p.key}</p>
                             <p className="font-mono text-[10px] text-[#5B6470]">{p.key}</p>
                             <span className="flex flex-wrap gap-0.5">
-                              {p.webLocked && <Badge tone="bg-gray-200 text-[#5B6470]">노트북 설정 파일로만</Badge>}
+                              {p.webLocked && <Tag kind="lock">노트북 설정 파일로만</Tag>}
                               {overridden.has(p.key) && (
-                                <Badge tone="bg-[#EEF3FF] text-[#1D4ED8]" title="노트북 local_override.json 이 정한 키 — 웹 적용 값은 저장 값 기준, 실행은 덮어쓰기 값">
+                                <Tag kind="info" title="노트북 local_override.json 이 정한 키 — 웹 적용 값은 저장 값 기준, 실행은 덮어쓰기 값">
                                   노트북 덮어쓰기 — 지금 실행 값 {ov.overridden && p.key in ov.overridden && ov.overridden[p.key] !== null ? show(ov.overridden[p.key]) : "?"}
-                                </Badge>
+                                </Tag>
                               )}
-                              {rejected.has(p.key) && <Badge tone="bg-[#B42318] text-white">거부됨</Badge>}
-                              {p.key in idleP && <Badge tone="bg-[#FFFAEB] text-[#B54708]" title={`대기 값 ${show(idleP[p.key])}`}>대기(공정 끝나면) → {show(idleP[p.key])}</Badge>}
-                              {p.key in restartP && <Badge tone="bg-[#FFFAEB] text-[#B54708]" title={`대기 값 ${show(restartP[p.key])}`}>대기(재시작) → {show(restartP[p.key])}</Badge>}
-                              {pendingWeb.has(p.key) && <Badge tone="bg-[#FFFAEB] text-[#B54708]">웹 v{pendingWeb.get(p.key)!.join("·v")} 에서 바뀜</Badge>}
+                              {rejected.has(p.key) && <Tag kind="alarmSolid">거부됨</Tag>}
+                              {!rejected.has(p.key) && changed.includes(p.key) && <Tag kind="info" icon={PencilLine}>바꿈</Tag>}
+                              {p.key in idleP && <Tag kind="wait" title={`대기 값 ${show(idleP[p.key])}`}>대기(공정 끝나면) → {show(idleP[p.key])}</Tag>}
+                              {p.key in restartP && <Tag kind="wait" title={`대기 값 ${show(restartP[p.key])}`}>대기(재시작) → {show(restartP[p.key])}</Tag>}
+                              {pendingWeb.has(p.key) && <Tag kind="wait">웹 v{pendingWeb.get(p.key)!.join("·v")} 에서 바뀜</Tag>}
                             </span>
                           </td>
                           <td className="px-2 py-1.5 tabular-nums text-[#1B1F24]">{show(nowVal(p))}{p.unit && <span className="text-[#5B6470]"> {p.unit}</span>}</td>
                           <td className="px-2 py-1.5">
                             <ParamInput p={p} value={v} readOnly={readOnly || !!p.webLocked} error={e}
                               onChange={(x) => setEdits((m) => ({ ...m, [p.key]: x }))} />
-                            {e && <p className="mt-0.5 text-[#B42318]">{e}</p>}
+                            {e && <p className="mt-0.5"><ErrText>{e}</ErrText></p>}
                           </td>
                           <td className="px-2 py-1.5 text-[#5B6470]">
                             {detail ? p.type : TYPE_TEXT[p.type ?? ""] ?? p.type}{range && ` · ${range}`}{p.unit && ` ${p.unit}`}
@@ -392,8 +400,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                           </td>
                           <td className="px-2 py-1.5 tabular-nums text-[#5B6470]">{show(p.default)}</td>
                           <td className="px-2 py-1.5">
-                            <Badge tone={p.safety === "H" ? "bg-[#B42318] text-white" : p.safety === "M" ? "bg-[#FFFAEB] text-[#B54708]" : "bg-[#EEF0F3] text-[#5B6470]"}
-                              title={p.safety === "H" ? "공정 중 변경 금지·관리자 전용" : undefined}>{SAFETY_TEXT[p.safety ?? ""] ?? p.safety}</Badge>
+                            <SafetyBadge s={p.safety} title={p.safety === "H" ? "공정 중 변경 금지·관리자 전용" : undefined} />
                             <p className="mt-0.5 text-[10px] text-[#5B6470]">{APPLY_TEXT[p.apply ?? ""] ?? p.apply}</p>
                             {detail && <p className="font-mono text-[10px] text-[#8A929D]">{p.safety} · {p.apply}</p>}
                           </td>
@@ -417,8 +424,8 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
               {lastResult?.action === "apply" && (lastResult.ack?.ackStatus === "rejected" || lastResult.command?.status === "rejected") && (
                 <div className="rounded-lg bg-[#FEE4E2] p-2 text-[11px] text-[#B42318]">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-semibold">
-                      버전 {lastResult.version ?? "-"} 거부 — {(() => { const rc = lastResult.ack?.reasonCode ?? lastResult.command?.reasonCode; return rc ? `${CONFIG_REASON[rc] ?? reasonLabel(bundle, rc)} (${rc})` : ""; })()}
+                    <p className="flex items-center gap-1 font-semibold">
+                      <AlertOctagon size={13} className="shrink-0" aria-hidden /> 버전 {lastResult.version ?? "-"} 거부 — {(() => { const rc = lastResult.ack?.reasonCode ?? lastResult.command?.reasonCode; return rc ? `${CONFIG_REASON[rc] ?? reasonLabel(bundle, rc)} (${rc})` : ""; })()}
                     </p>
                     <span>거부된 키: {rejected.size ? <span className="font-mono">{[...rejected].join(", ")}</span> : "오류 글에 키 이름 없음"}</span>
                     <button onClick={() => { setEdits({}); setLastResult(null); }}
@@ -453,13 +460,17 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                     <tbody>
                       {ov.versions.map((v) => (
                         <tr key={v.version} onClick={() => setPick(v.version)}
+                          aria-selected={pick === v.version}
                           className={`cursor-pointer border-t border-[#E3E6EA] hover:bg-[#E8EEFC]/40 ${pick === v.version ? "bg-[#E8EEFC]/60" : ""}`}>
-                          <td className="px-2 py-1 font-semibold">v{v.version}{v.version === ov.deviceVersion && <Badge tone="ml-1 bg-[#F5F6F8] text-[#5B6470]">장비</Badge>}</td>
+                          <td className="whitespace-nowrap px-2 py-1 font-semibold">
+                            {pick === v.version && <ChevronRight size={11} className="-ml-1 inline" aria-label="보는 버전" />}
+                            v{v.version}{v.version === ov.deviceVersion && <Tag kind="muted" icon={HardDrive} className="ml-1">장비</Tag>}
+                          </td>
                           <td className="px-2 py-1 text-[#5B6470]">{v.kind}</td>
                           <td className="px-2 py-1 text-[#5B6470]">{v.createdBy}</td>
                           <td className="px-2 py-1 tabular-nums text-[#5B6470]">{fmtKst(v.createdAt)}</td>
                           <td className="whitespace-nowrap px-2 py-1"><StatusBadge s={v.ackStatus} /></td>
-                          <td className="px-2 py-1 text-[#B42318]">{v.reasonCode ?? ""}</td>
+                          <td className="px-2 py-1">{v.reasonCode ? <ErrText>{v.reasonCode}</ErrText> : ""}</td>
                           <td className="px-2 py-1 tabular-nums">{Array.isArray(v.changes) ? v.changes.length : "-"}</td>
                           <td className="px-2 py-1 text-[#5B6470]">{v.note ?? ""}</td>
                         </tr>
@@ -502,13 +513,13 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                   <tr key={k} className="border-t border-[#E3E6EA] align-top">
                     <td className="pr-2 font-mono">{k}</td>
                     <td className="pr-2">{show(nowVal(p))} → <b>{show(edits[k])}</b>{p.unit && ` ${p.unit}`}</td>
-                    <td><Badge tone={p.safety === "H" ? "bg-[#B42318] text-white" : "bg-[#EEF0F3] text-[#5B6470]"}>{SAFETY_TEXT[p.safety ?? ""] ?? p.safety}</Badge> {APPLY_TEXT[p.apply ?? ""]}</td>
+                    <td><SafetyBadge s={p.safety} /> {APPLY_TEXT[p.apply ?? ""]}</td>
                   </tr>
                 );
               })}</tbody>
             </table>
             {busyNow && changed.some((k) => params.find((x) => x.key === k)?.safety === "H") && (
-              <p className="mt-2 rounded-lg bg-[#FEE4E2] p-2 text-[11px] text-[#B42318]">공정·히터 운전 중 — H 등급 키가 있어 장비가 거부합니다(CONFIG_H_IN_PROCESS).</p>
+              <div className="mt-2"><Issue level="alarm">공정·히터 운전 중 — H 등급 키가 있어 장비가 거부합니다(CONFIG_H_IN_PROCESS).</Issue></div>
             )}
             <label className="mt-2 block text-[11px] text-[#5B6470]">메모(선택)
               <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className="mt-0.5 w-full rounded-md border border-[#D9DDE3] px-2 py-1 text-xs" />

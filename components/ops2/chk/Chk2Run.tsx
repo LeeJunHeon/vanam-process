@@ -24,7 +24,7 @@ import { bandOf, kindOf, scaleMax, usesNow } from "./runview";
 import { heaterLines, processLines, rowLine } from "./recipeText";
 import { useChk2Mode } from "./mode";
 import { reasonLabel, type Bundle, type FieldDef, type StateData } from "./types";
-import type { FeedItem, RunBlocks, TrendPt } from "./useChk2";
+import type { EditBase, FeedItem, RunBlocks, TrendPt } from "./useChk2";
 import type { RecipeFull, useRecipes } from "./useRecipes";
 import type { LockFn } from "./Chk2Status";
 
@@ -294,8 +294,9 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   );
 }
 
-export default function Chk2Run({ equipment, bundle, st, runBlocks, feed, trend, recipes, lock, canKey, onAsk, onHmi, onLog, onEditRecipe, nowMs, skewMs }: {
-  equipment: string; bundle: Bundle | null; st: StateData | null; runBlocks: RunBlocks | null; feed: FeedItem[]; trend: TrendPt[];
+export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, feed, trend, recipes, lock, canKey, onAsk, onHmi, onLog, onEditRecipe, nowMs, skewMs }: {
+  equipment: string; bundle: Bundle | null; st: StateData | null; runBlocks: RunBlocks | null; editBase: EditBase | null;
+  feed: FeedItem[]; trend: TrendPt[];
   recipes: ReturnType<typeof useRecipes> | null; lock: LockFn; canKey: (kind: string, key: string) => boolean; onAsk: (a: Ask) => void;
   onHmi: () => void; onLog?: () => void; onEditRecipe?: (id: string | null) => void; nowMs: number; skewMs: number;
 }) {
@@ -307,7 +308,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, feed, trend,
     return (
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(300px,1fr)_minmax(0,2fr)] 2xl:grid-cols-[minmax(320px,1fr)_minmax(0,2fr)_minmax(260px,0.9fr)]">
         <div className={`min-w-0 ${wide ? "lg:col-span-2 2xl:col-span-3" : ""}`}>
-          <Chk2Seq bundle={bundle} st={st} runBlocks={runBlocks} feed={feed} recipes={recipes} lock={lock} onAsk={onAsk} local={local} onWide={setWide} />
+          <Chk2Seq bundle={bundle} st={st} runBlocks={runBlocks} editBase={editBase} lock={lock} onAsk={onAsk} local={local} onWide={setWide} />
         </div>
         <div className="min-w-0 space-y-3">
           <KeyValues bundle={bundle} st={st} blocks={runBlocks} />

@@ -8,15 +8,16 @@
 // W-10: 원래 순서(run_start 블록 — 판 1)와 실제 실행된 순서(run_end summary.executed — 건너뜀·멈춘 시간·판)를 나란히,
 //   판 목록(시작 + 순서 고침 사건 — 누가·언제·무엇을).
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowLeft, ChevronDown, ChevronRight, History, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckSquare, ChevronDown, ChevronRight, History, Info, RefreshCw, Square } from "lucide-react";
 import { useChk2Mode } from "./mode";
 import { colLabel, logLine, runTitle } from "./text";
 import { fmtKst } from "@/lib/ops2/time";
 import type { ExpBlock } from "@/lib/ops2/chk/blocks";
-import { Card } from "./kit";
+import { Card, ErrText, Tag, type TagKind } from "./kit";
+import { CmdStatusTag, RunResultTag } from "./Chk2Logs";
 import { ExpandedView, fmtSec } from "./Chk2BlockEditor";
 import Chk2SummaryChart, { type PickField, type SummaryRow } from "./Chk2SummaryChart";
-import { CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, type Bundle, type RunSummary } from "./types";
+import { commandLabel, reasonLabel, type Bundle, type RunSummary } from "./types";
 import { blockName, fmtDur } from "./text";
 import { Chip } from "./kit";
 
@@ -41,21 +42,14 @@ type Detail = {
   truncated: { events: boolean; summaries: boolean; commands: boolean }; limits: { events: number; summaries: number; commands: number };
 };
 
-const LEVEL_TONE: Record<string, string> = {
-  error: "bg-[#FEE4E2] text-[#B42318]", critical: "bg-[#FEE4E2] text-[#B42318]", warn: "bg-[#FFFAEB] text-[#B54708]", info: "bg-[#EEF0F3] text-[#5B6470]",
-};
+/** 로그 수준 → 배지 종류(오류·주의·정보 — 아이콘 + 글자) */
+const LEVEL_TAG: Record<string, TagKind> = { error: "alarm", critical: "alarm", warn: "warn", info: "muted" };
 const RESULT_TEXT: Record<string, string> = { done: "끝", skipped: "건너뜀", aborted: "중단", error: "오류", failed: "실패" };
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const kstToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date());
 
 function ResultBadge({ r }: { r: Pick<RunItem, "endedAt" | "result"> }) {
-  return (
-    <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-      !r.endedAt ? "bg-[#3A424D] text-white" : r.result === "done" ? "bg-[#F5F6F8] text-[#5B6470]"
-      : r.result === "error" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#FFFAEB] text-[#B54708]"}`}>
-      {!r.endedAt ? "진행 중" : RUN_RESULT[r.result ?? ""] ?? r.result ?? "-"}
-    </span>
-  );
+  return <RunResultTag endedAt={r.endedAt} result={r.result} />;
 }
 
 /** 묶음 snapshot 정의 → 그래프에 쓸 수 있는 숫자 필드(이름은 "MFC · 챔버 압력") */
@@ -118,7 +112,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
     params: isObj(b.params) ? b.params : {}, steps: [],
   })) : []), [d]);
 
-  if (err) return <div className="space-y-2"><Back onBack={onBack} /><p className="text-xs text-[#B42318]">{err}</p></div>;
+  if (err) return <div className="space-y-2"><Back onBack={onBack} /><p className="text-xs"><ErrText>{err}</ErrText></p></div>;
   if (!d) return <div className="space-y-2"><Back onBack={onBack} /><p className="text-xs text-[#5B6470]">읽는 중…</p></div>;
   const r = d.run;
   const summary = isObj(r.summary) ? r.summary as RunSummary : null;
@@ -165,7 +159,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
       <section>
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <h4 className="text-xs font-bold text-[#1B1F24]">1분 요약 그래프</h4>
-          <span className="text-[11px] text-[#5B6470]">1분 요약 그래프(평균·최대) — 옅은 구간은 값 품질이 낮을 때</span>
+          <span className="text-[11px] text-[#5B6470]">1분 요약 그래프(평균·최대) — 회색 배경·점선 구간은 값 품질이 낮을 때</span>
           {cols && <button onClick={() => setCols(null)} className="ml-auto px-1.5 text-[10px] text-[#5B6470] underline">기본으로</button>}
         </div>
         <div className="mb-1.5 flex flex-wrap items-start gap-1.5">
@@ -184,8 +178,9 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
                       const sel = picked.includes(f.column);
                       return (
                         <button key={f.column} onClick={() => setCols(sel ? picked.filter((c) => c !== f.column) : [...picked, f.column])}
-                          title={detail ? `${f.column} · ${f.summary ?? "mean"}` : f.desc || undefined}
-                          className={`rounded-md border px-1.5 py-0.5 text-[10px] ${sel ? "border-[#C7D5FB] bg-[#E8EEFC] font-semibold text-[#1D4ED8]" : "border-[#D9DDE3] text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
+                          title={detail ? `${f.column} · ${f.summary ?? "mean"}` : f.desc || undefined} aria-pressed={sel}
+                          className={`flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 text-[10px] ${sel ? "border-[#C7D5FB] bg-[#E8EEFC] font-semibold text-[#1D4ED8]" : "border-[#D9DDE3] text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
+                          {sel ? <CheckSquare size={10} aria-hidden /> : <Square size={10} aria-hidden />}
                           {f.label.split(" · ").pop()}{f.unit && ` ${f.unit}`}
                         </button>
                       );
@@ -197,7 +192,9 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
           })}
         </div>
         <Chk2SummaryChart rows={d.summaries} fields={fields} t0={t0} t1={t1} />
-        {d.truncated.summaries && <p className="text-[10px] text-[#B54708]">요약은 앞에서부터 {d.limits.summaries}개(24시간분)까지만</p>}
+        {d.truncated.summaries && (
+          <p className="flex items-center gap-1 text-[10px] text-[#B54708]"><AlertTriangle size={10} aria-label="주의" /> 요약은 앞에서부터 {d.limits.summaries}개(24시간분)까지만</p>
+        )}
       </section>
 
       <div className="grid gap-3 xl:grid-cols-2">
@@ -251,9 +248,9 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
         <section>
           <div className="mb-1 flex items-center gap-2">
             <h4 className="text-xs font-bold text-[#1B1F24]">로그 {seenEv.length}{d.truncated.events && `(앞 ${d.limits.events}개까지)`}</h4>
-            <button onClick={() => setOnlyIssue((v) => !v)}
-              className={`rounded-lg px-2 py-0.5 text-[11px] font-semibold ${onlyIssue ? "bg-[#FEE4E2] text-[#B42318]" : "text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
-              경고·오류만 {issues}
+            <button onClick={() => setOnlyIssue((v) => !v)} aria-pressed={onlyIssue}
+              className={`flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-semibold ${onlyIssue ? "bg-[#FEE4E2] text-[#B42318]" : "text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
+              {onlyIssue ? <CheckSquare size={12} aria-hidden /> : <Square size={12} aria-hidden />} 경고·오류만 {issues}
             </button>
           </div>
           <div className="max-h-96 overflow-y-auto rounded-[10px] border border-[#E3E6EA]">
@@ -262,7 +259,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
                 {events.map(({ e, kind, text, raw, level }) => (
                   <tr key={e.msgId} className="border-t border-[#E3E6EA] align-top" title={raw}>
                     <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-[#5B6470]">{fmtKst(e.ts).slice(6)}</td>
-                    <td className="px-1 py-1"><span className={`whitespace-nowrap rounded px-1 text-[10px] font-semibold ${LEVEL_TONE[level] ?? LEVEL_TONE.info}`}>{kind}</span></td>
+                    <td className="px-1 py-1"><Tag kind={LEVEL_TAG[level] ?? "muted"} icon={(LEVEL_TAG[level] ?? "muted") === "muted" ? Info : undefined}>{kind}</Tag></td>
                     <td className="px-1.5 py-1 text-[#1B1F24]">
                       {text}
                       {detail && <span className="ml-1 font-mono text-[10px] text-[#8A929D]">{raw}</span>}
@@ -282,9 +279,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
                     <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-[#5B6470]">{fmtKst(c.requestedAt).slice(6)}</td>
                     <td className="px-1.5 py-1 text-[#1B1F24]">{c.label ?? commandLabel(bundle, c.kind)} <span className="text-[#5B6470]">({c.requestedBy}{detail ? `, ${c.origin}` : ""})</span></td>
                     <td className="whitespace-nowrap px-1.5 py-1">
-                      <span className={c.status === "accepted" ? "text-[#5B6470]" : c.status === "rejected" ? "text-[#B42318]" : "text-[#5B6470]"}>
-                        {CMD_STATUS[c.status] ?? c.status}
-                      </span>
+                      <CmdStatusTag status={c.status} />
                       {c.reasonCode && <span className="block text-[10px] text-[#5B6470]">{reasonLabel(bundle, c.reasonCode)}{c.detail ? ` — ${c.detail}` : ""}</span>}
                     </td>
                   </tr>
@@ -368,7 +363,7 @@ export default memo(function Chk2History({ equipment, bundle, refreshKey }: { eq
               <RefreshCw size={12} /> 다시 읽기
             </button>
           </div>
-          {err && <p className="text-xs text-[#B42318]">{err}</p>}
+          {err && <p className="text-xs"><ErrText>{err}</ErrText></p>}
           <div className="overflow-x-auto rounded-[10px] border border-[#E3E6EA]">
             <table className="min-w-full text-xs">
               <thead className="bg-[#F5F6F8] text-[11px] text-[#5B6470]">

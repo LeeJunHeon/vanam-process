@@ -8,7 +8,9 @@
 // 잠긴 버튼은 자물쇠 + 마우스를 올리면 이유(권한·bench·끊김·PLC 오래됨 — 이유 문구만 다름).
 // 이 파일만 토큰을 안다 — CHK v2 화면 전체가 같은 조각을 쓴다(전역 CSS 는 건드리지 않는다).
 import { useEffect, useRef, type ReactNode } from "react";
-import { AlertOctagon, AlertTriangle, Info, Lock, X } from "lucide-react";
+import {
+  AlertOctagon, AlertTriangle, CheckCircle2, Clock, HelpCircle, Info, Lock, MinusCircle, PlayCircle, X, type LucideIcon,
+} from "lucide-react";
 import { Q_LABEL, fmtValue, type FieldDef, type Link } from "./types";
 import { useChk2Mode } from "./mode";
 import { fieldText } from "./text";
@@ -59,6 +61,42 @@ export function Chip({ tone = "neutral", icon, title, children, className = "" }
     <span title={title}
       className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-md border px-1.5 py-0.5 text-[11px] font-semibold leading-tight ${CHIP[tone]} ${className}`}>
       {ic}{children}
+    </span>
+  );
+}
+
+/** 상태 배지(설정·기록, W-10a) — 늘 아이콘 + 글자. 색만으로 뜻을 전하지 않는다(kind 가 색과 기본 아이콘을 같이 정함) */
+export type TagKind = "ok" | "alarm" | "alarmSolid" | "warn" | "wait" | "info" | "lock" | "run" | "muted" | "unknown";
+const TAG: Record<TagKind, [string, LucideIcon]> = {
+  ok: ["bg-[#EEF0F3] text-[#3A424D]", CheckCircle2],
+  alarm: ["bg-[#FEE4E2] text-[#B42318]", AlertOctagon],
+  alarmSolid: ["bg-[#B42318] text-white", AlertOctagon],
+  warn: ["bg-[#FFFAEB] text-[#B54708]", AlertTriangle],
+  wait: ["bg-[#FFFAEB] text-[#B54708]", Clock],
+  info: ["bg-[#EEF3FF] text-[#1D4ED8]", Info],
+  lock: ["bg-[#EEF0F3] text-[#5B6470]", Lock],
+  run: ["bg-[#3A424D] text-white", PlayCircle],
+  muted: ["bg-[#F5F6F8] text-[#5B6470]", MinusCircle],
+  unknown: ["bg-[#EEF0F3] text-[#5B6470]", HelpCircle],
+};
+export function Tag({ kind, icon: Icon, title, children, className = "" }: {
+  kind: TagKind; icon?: LucideIcon; title?: string; children: ReactNode; className?: string;
+}) {
+  const [cls, Def] = TAG[kind];
+  const I = Icon ?? Def;
+  return (
+    <span title={title} className={`inline-flex items-center gap-0.5 whitespace-nowrap rounded px-1 py-px text-[10px] font-semibold leading-tight ${cls} ${className}`}>
+      <I size={10} className="shrink-0" aria-hidden />{children}
+    </span>
+  );
+}
+
+/** 오류 글 — 아이콘 + 빨간 글(색만으로 오류를 알리지 않는다) */
+export function ErrText({ children, className = "" }: { children: ReactNode; className?: string }) {
+  return (
+    <span className={`inline-flex items-start gap-1 text-[#B42318] ${className}`}>
+      <AlertOctagon size={12} className="mt-px shrink-0" aria-label="오류" />
+      <span className="min-w-0">{children}</span>
     </span>
   );
 }

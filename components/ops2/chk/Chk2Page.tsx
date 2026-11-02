@@ -409,7 +409,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       <Tabs tabs={shownTabs} value={curTab} onChange={(t) => goTab(t)} right={detailBtn} />
 
       {curTab === "run" && (
-        <Chk2Run equipment={equipment} bundle={d.bundle} st={st} runBlocks={d.runBlocks} feed={d.feed} trend={d.trend}
+        <Chk2Run equipment={equipment} bundle={d.bundle} st={st} runBlocks={d.runBlocks} editBase={d.editBase} feed={d.feed} trend={d.trend}
           recipes={local ? null : recipes} lock={lock} canKey={canKey} onAsk={setAsk} nowMs={now + d.offsetMs} skewMs={skew}
           onHmi={() => goTab("hmi")} onLog={() => goTab("log")}
           onEditRecipe={local ? undefined : (id) => { setRecipeReq({ id, n: Date.now() }); goTab("recipe"); }} />

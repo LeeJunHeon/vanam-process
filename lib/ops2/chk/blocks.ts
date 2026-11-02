@@ -196,6 +196,10 @@ function checkOne(env: BlockEnv, b: unknown, path: string, depth: number, errs: 
   const bad = new Set<string>();                         // 빠졌거나(필수) 틀린 값 — 이 값을 쓰는 값 사이 규칙은 건너뛴다
   for (const p of d.params) {
     const v = Object.hasOwn(params, p.name) ? params[p.name] : undefined;
+    if (typeof p.default === "string" && p.default.startsWith("cfg:") && v === p.default) {
+      out[p.name] = p.default;                           // 정리된 목록을 그대로 다시 보낸 것("cfg:키" = 비운 값, 장비 5-16)
+      continue;
+    }
     if (empty(v)) {
       if (p.required) {
         errs.push(`${pre}: ${p.name}: 값 필요`);

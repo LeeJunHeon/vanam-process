@@ -99,6 +99,7 @@ export type RunBlock = {
 export type RunState = {
   revision: number; current: string | null; paused: PauseInfo | null; blocksVersion?: number;
   blocks?: RunBlock[]; delay?: { sec?: number; remainS?: number | null };
+  editBase?: { revision: number; blocks: unknown[] };   // 묶음 14 — 순서 고치기 기준(장비가 실행하는 정리 목록), 판이 바뀔 때·10 초마다만
 };
 /** run_end summary(묶음 13) — 실행된 순서·마지막 판·건너뛴/멈춘 횟수 */
 export type RunSummary = {
