@@ -46,3 +46,7 @@ next-env.d.ts
 
 # 서비스 계정 키 (커밋 금지)
 /secrets
+
+# NAS 배포 기록(deploy 스크립트가 쓴다)
+.deploy-state
+.deploy-state.tmp
