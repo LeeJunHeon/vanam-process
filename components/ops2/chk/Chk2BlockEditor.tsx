@@ -1,0 +1,683 @@
+"use client";
+
+// 챔버K v2 블록 편집 조각 — 공정 레시피 안의 "블록 행"({process_name, blocks})과 공정 중 순서 고치기(W-10)가 같이 쓴다.
+// W-10: 편집기 한 덩어리 대신 조각으로 — BlockTree(블록 목록·끌기·블록 추가)·BlockPane(고른 블록 설정)·ExpandedView(실행 순서).
+//   레시피 탭은 가운데 BlockTree·오른쪽 BlockPane, 운전 탭 순서 고치기는 lockTop(시작한 맨 위 블록 수)으로 앞쪽을 잠근다.
+// 왼쪽(약 40 %): 블록 목록 — 한 줄에 번호·이름·요약(묶음 summary 값)·상태 점, 끌어서 순서 바꾸기(같은 목록 안)·↑↓·복사·삭제,
+//   반복은 안쪽 블록을 들여쓰기로. 아래 블록 추가 — 묶음 blocks.groups 순서대로 묶음 이름 아래 버튼(고른 블록 뒤, 없으면 끝).
+//   반복 블록을 고르면 "안에 넣기"를 고를 수 있다(중첩 한도 limits.maxDepth).
+// 오른쪽: 고른 블록 설정 — 이름·도움말(help), 값마다 label(필수 *)·칸·단위·범위·도움말·오류(칸 바로 아래).
+//   advanced 값과 블록 이름표(label)·공정 상태(stage)는 "고급 설정" 안에. 비운 값의 기본값은 칸 안 회색 글.
+// 아래: 실행 순서 미리보기(blocks.ts expandBlocks — 평소 블록별 한 줄, 장비 스텝 문구는 '상세'에서).
+// 블록 JSON 은 장비가 받는 그대로(모르는 키도 지우지 않는다 — 장비와 같은 검사). 편집 모델(EBlock·toJson·fromJson) 그대로.
+import { Fragment, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, GripVertical, Lock } from "lucide-react";
+import { Trash2 } from "lucide-react";
+import type { Row, RowCheck } from "@/lib/ops2/chk/recipe";
+import { expectedTime, type BParamDef, type BlockDef, type BlockEnv, type ExpBlock, type Uses } from "@/lib/ops2/chk/blocks";
+import { useChk2Mode } from "./mode";
+import { DurationInput } from "./inputs";
+import { blockNames, blockSummary, humanize, paramLabel } from "./text";
+import { stateLabel, type Bundle } from "./types";
+import { FS } from "./kit";
+
+// ───────────── 편집 모델 ─────────────
+export type EBlock = { uid: string; data: unknown; kids: EBlock[] | null };
+let seq = 0;
+const uid = () => `b${(seq += 1)}`;
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+export function fromJson(b: unknown): EBlock {
+  if (isObj(b) && Array.isArray(b.blocks)) {
+    const { blocks, ...rest } = b;
+    return { uid: uid(), data: rest, kids: (blocks as unknown[]).map(fromJson) };
+  }
+  return { uid: uid(), data: isObj(b) ? { ...b } : b, kids: null };
+}
+export function toJson(e: EBlock): unknown {
+  return e.kids && isObj(e.data) ? { ...e.data, blocks: e.kids.map(toJson) } : e.data;
+}
+export const cloneE = (e: EBlock): EBlock => fromJson(JSON.parse(JSON.stringify(toJson(e))));
+
+/** 목록 안 uid 의 블록을 바꾼다(반복 안쪽까지) */
+function mapTree(list: EBlock[], id: string, f: (l: EBlock[], i: number) => EBlock[]): EBlock[] {
+  const i = list.findIndex((x) => x.uid === id);
+  if (i >= 0) return f(list, i);
+  return list.map((x) => (x.kids ? { ...x, kids: mapTree(x.kids, id, f) } : x));
+}
+/** uid → {블록, 경로("3.2"), 부모 uid, 깊이} */
+export type Place = { e: EBlock; path: string; parent: string | null; depth: number; top: number };
+export function index(list: EBlock[], prefix = "", parent: string | null = null, depth = 0, out = new Map<string, Place>()) {
+  list.forEach((e, i) => {
+    const path = `${prefix}${i + 1}`;
+    out.set(e.uid, { e, path, parent, depth, top: Number(path.split(".")[0]) - 1 });
+    if (e.kids) index(e.kids, `${path}.`, e.uid, depth + 1, out);
+  });
+  return out;
+}
+
+// ───────────── 표시 도움 ─────────────
+const USE_LABEL: [keyof Uses, string][] = [
+  ["dc", "DC"], ["rf", "RF"], ["rfp", "RF Pulse"], ["heater", "히터"], ["ig", "이온 게이지"], ["ar", "Ar"], ["o2", "O₂"],
+];
+export const usesText = (u: Uses | null) => (u ? USE_LABEL.filter(([k]) => u[k]).map(([, l]) => l).join("·") || "없음" : "-");
+
+/** 3725 → "1시간 2분 5초" */
+export function fmtSec(s: number): string {
+  const t = Math.round(s);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), x = t % 60;
+  return [h && `${h}시간`, m && `${m}분`, (x || (!h && !m)) && `${x}초`].filter(Boolean).join(" ");
+}
+
+export const countBlocks = (bs: unknown): number =>
+  Array.isArray(bs) ? bs.reduce((n: number, b) => n + 1 + (isObj(b) ? countBlocks(b.blocks) : 0), 0) : 0;
+const stepCount = (exp: ExpBlock[] | null) => (exp ? exp.reduce((n, b) => n + b.steps.filter((s) => !s.internal).length, 0) : 0);
+export const timeText = (t: { sec: number; open: number } | null) =>
+  t ? `예상 ${fmtSec(t.sec)}${t.open ? ` + 끝을 모르는 대기 ${t.open}개` : ""}` : "예상 시간 -";
+
+/** 확인창·표에 쓰는 블록 행 요약 */
+export function blockRowLines(row: Row, rc: RowCheck | null): string[] {
+  const n = countBlocks(row.blocks);
+  const t = rc?.expanded ? expectedTime(rc.expanded) : null;
+  return [
+    `블록 행 '${String(row.process_name || "") || "이름 없음"}' · 블록 ${n}개`,
+    `쓰는 장비: ${usesText(rc?.uses ?? null)}`,
+    t ? `예상 시간: 대기·메인 합 ${fmtSec(t.sec)}${t.open ? ` + 끝을 모르는 대기 ${t.open}개(압력·파워·히터·조건)` : ""}` : "예상 시간: -",
+  ];
+}
+
+const NUM_RE = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
+const toText = (v: unknown) => (v === undefined || v === null ? "" : typeof v === "number"
+  ? (v !== 0 && Math.abs(v) < 1e-3 ? v.toExponential() : String(v)) : typeof v === "string" ? v : JSON.stringify(v));
+const parseNum = (t: string): unknown => (t.trim() === "" ? undefined : NUM_RE.test(t.trim()) ? Number(t.trim()) : t);
+
+/** 범위(paramScale 반영) — 장비 BParam.bounds 와 같게 */
+function bounds(p: BParamDef, cfg: Record<string, unknown>): [number | null, number | null] {
+  const side = (k: string | null, v: number | null) => (k ? (typeof cfg[k] === "number" ? (cfg[k] as number) * p.paramScale : null) : v);
+  return [side(p.paramMin, p.min), side(p.paramMax, p.max)];
+}
+const g = (x: number) => String(Number(x.toPrecision(6)));
+
+/** 비운 값의 기본값 — 칸 안 회색 글("기본 1 s") */
+function defaultText(p: BParamDef, cfg: Record<string, unknown>, unit: string, detail: boolean): string {
+  const d = p.default;
+  const u = unit ? ` ${unit}` : "";
+  if (typeof d === "string" && d.startsWith("cfg:")) return `기본 ${toText(cfg[d.slice(4)])}${u}${detail ? `(설정 ${d.slice(4)})` : "(설정값)"}`;
+  if (d === null || d === undefined) return p.required ? "필수" : "비움";
+  if (typeof d === "boolean") return d ? "기본(켬)" : "기본(끔)";
+  const el = p.enumLabels?.[String(d)];
+  return `기본 ${el ?? toText(d)}${el ? "" : u}`;
+}
+
+// ───────────── 값 칸 ─────────────
+function NumField({ p, value, cfg, unit, error, readOnly, onChange }: {
+  p: BParamDef; value: unknown; cfg: Record<string, unknown>; unit: string; error?: string; readOnly: boolean;
+  onChange: (v: unknown) => void;
+}) {
+  const { detail } = useChk2Mode();
+  const [text, setText] = useState(() => toText(value));
+  const [lo, hi] = bounds(p, cfg);
+  const range = lo !== null || hi !== null
+    ? `${lo !== null ? `${g(lo)}${p.minExclusive ? " 초과" : ""}` : ""}~${hi !== null ? g(hi) : ""}` : "";
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      <input value={text} disabled={readOnly} inputMode="decimal" placeholder={defaultText(p, cfg, unit, detail)}
+        aria-label={paramLabel(p)}
+        onChange={(e) => { setText(e.target.value); onChange(parseNum(e.target.value)); }}
+        className={`w-40 rounded-lg border bg-white px-2 py-1 ${FS.body} tabular-nums placeholder:text-gray-300 disabled:bg-gray-50
+          ${error ? "border-rose-400 bg-rose-50" : "border-gray-200"}`} />
+      <span className={`whitespace-nowrap ${FS.small} text-gray-500`}>{unit}</span>
+      {(range || p.type === "int") && (
+        <span className={`whitespace-nowrap ${FS.small} text-gray-400`}>{range}{p.type === "int" && `${range ? " · " : ""}정수`}</span>
+      )}
+    </span>
+  );
+}
+
+function Choice({ value, options, placeholder, error, readOnly, onChange, label }: {
+  value: unknown; options: { v: string; label: string }[]; placeholder: string; error?: string; readOnly: boolean;
+  onChange: (v: unknown) => void; label?: string;
+}) {
+  const known = value === undefined || value === null || value === "" || (typeof value === "string" && options.some((o) => o.v === value));
+  return (
+    <select value={known ? (value as string | undefined) ?? "" : "__raw"} disabled={readOnly} aria-label={label}
+      onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value === "__raw" ? value : e.target.value)}
+      className={`rounded-lg border bg-white px-1.5 py-1 ${FS.body} disabled:bg-gray-50 ${value === undefined || value === null ? "text-gray-400" : "text-gray-800"}
+        ${error ? "border-rose-400 bg-rose-50" : "border-gray-200"}`}>
+      <option value="">{placeholder}</option>
+      {!known && <option value="__raw">{`그대로: ${JSON.stringify(value)}`}</option>}
+      {options.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+    </select>
+  );
+}
+
+const BOOL_OPTS = [{ v: "true", label: "켬" }, { v: "false", label: "끔" }];
+const ENUM_LABEL: Record<string, string> = {   // 묶음 enumLabels 가 없을 때(옛 장비)
+  open: "열기", close: "닫기", hold: "지금 위치에서 멈춤", continue: "경고 남기고 다음으로", abort: "공정 중단",
+};
+
+function ParamField({ p, d, params, env, bundle, error, readOnly, set }: {
+  p: BParamDef; d: BlockDef; params: Record<string, unknown>; env: BlockEnv; bundle: Bundle | null; error?: string;
+  readOnly: boolean; set: (name: string, v: unknown) => void;
+}) {
+  const { detail } = useChk2Mode();
+  const value = params[p.name];
+  const cfg = env.cfg as Record<string, unknown>;
+  const defs = env.defs;
+  const raw = (v: string, label: string) => (detail && label !== v ? `${label} · ${v}` : label);
+  switch (p.type) {
+    case "bool":
+      return (
+        <Choice value={typeof value === "boolean" ? String(value) : value} options={BOOL_OPTS} label={paramLabel(p)}
+          placeholder={defaultText(p, cfg, "", detail)} error={error} readOnly={readOnly}
+          onChange={(v) => set(p.name, v === "true" ? true : v === "false" ? false : v)} />
+      );
+    case "enum": {
+      const opts = d.type === "cond_wait" && p.name === "field"
+        ? defs.condFields.map((f) => ({ v: f.field, label: raw(f.field, `${p.enumLabels?.[f.field] ?? f.label}${f.unit ? `(${f.unit})` : ""}`) }))
+        : d.type === "cond_wait" && p.name === "op" ? defs.condOps.map((o) => ({ v: o.op, label: raw(o.op, p.enumLabels?.[o.op] ?? o.label) }))
+        : (p.enum ?? []).map((e) => ({ v: String(e), label: raw(String(e), p.enumLabels?.[String(e)] ?? ENUM_LABEL[String(e)] ?? String(e)) }));
+      return <Choice value={value} options={opts} placeholder={defaultText(p, cfg, "", detail)} error={error} readOnly={readOnly}
+        label={paramLabel(p)} onChange={(v) => set(p.name, v)} />;
+    }
+    case "list": {
+      const cur = Array.isArray(value) ? value : [];
+      const label = (t: string) => p.enumLabels?.[t] ?? defs.shutters.find((s) => s.target === t)?.label ?? t;
+      return (
+        <span className={`flex flex-wrap gap-3 rounded px-1 ${error ? "bg-rose-50 outline outline-1 outline-rose-300" : ""}`}>
+          {(p.enum ?? []).map((e) => (
+            <label key={String(e)} className={`flex items-center gap-1 ${FS.body} text-gray-700`}>
+              <input type="checkbox" disabled={readOnly} checked={cur.includes(e)}
+                onChange={(ev) => {
+                  const next = (p.enum ?? []).filter((x) => (x === e ? ev.target.checked : cur.includes(x)));
+                  set(p.name, next.length ? next : undefined);
+                }} />
+              {raw(String(e), label(String(e)))}
+            </label>
+          ))}
+        </span>
+      );
+    }
+    case "steps": {
+      const cur = Array.isArray(value) ? value : [];
+      const steps = bundle?.stopSequence?.steps ?? env.stopNos.map((no) => ({ no, desc: "", label: "" }));
+      return (
+        <span className={`grid gap-x-3 gap-y-0.5 rounded px-1 sm:grid-cols-2 ${error ? "bg-rose-50 outline outline-1 outline-rose-300" : ""}`}>
+          {steps.map((s) => {
+            const keep = env.mustKeep.includes(s.no);
+            return (
+              <label key={s.no} title={`${s.desc ?? ""}${keep ? " — 파워 끄기 단계는 뺄 수 없음" : ""}`}
+                className={`flex items-center gap-1 ${FS.body} ${keep ? "text-gray-300" : "text-gray-700"}`}>
+                <input type="checkbox" disabled={readOnly || (keep && !cur.includes(s.no))} checked={cur.includes(s.no)}
+                  onChange={(ev) => {
+                    const next = env.stopNos.filter((n) => (n === s.no ? ev.target.checked : cur.includes(n)));
+                    set(p.name, next.length ? next : undefined);
+                  }} />
+                {s.no}. {s.label || s.desc || ""}{keep && " (못 뺌)"}
+              </label>
+            );
+          })}
+        </span>
+      );
+    }
+    case "watch": {
+      const cur = isObj(value) ? value : {};
+      const base = d.watch ?? defs.watchDefault;
+      return (
+        <span className={`grid gap-x-3 gap-y-1 rounded px-1 sm:grid-cols-2 ${error ? "bg-rose-50 outline outline-1 outline-rose-300" : ""}`}>
+          {defs.watchItems.map((w) => (
+            <label key={w.item} className={`flex items-center justify-between gap-1 ${FS.body} text-gray-600`} title={detail ? w.rule : undefined}>
+              {w.label}
+              <Choice value={typeof cur[w.item] === "boolean" ? String(cur[w.item]) : cur[w.item]} options={BOOL_OPTS}
+                placeholder={base[w.item] ? "기본(켬)" : "기본(끔)"} readOnly={readOnly} label={w.label}
+                onChange={(v) => {
+                  const next = { ...cur };
+                  if (v === undefined) delete next[w.item];
+                  else next[w.item] = v === "true" ? true : v === "false" ? false : v;
+                  set(p.name, Object.keys(next).length ? next : undefined);
+                }} />
+            </label>
+          ))}
+        </span>
+      );
+    }
+  }
+  const unit = d.type === "cond_wait" && (p.name === "value" || p.name === "tol")
+    ? defs.condFields.find((f) => f.field === params.field)?.unit ?? "" : p.unit;
+  // 초 단위 시간은 분·초 칸(저장은 초 그대로) — 값이 숫자가 아니면(검사 오류) 글 칸 그대로
+  if (unit === "s" && (p.type === "float" || p.type === "int") && (value === undefined || typeof value === "number")) {
+    const [lo, hi] = bounds(p, cfg);
+    return (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <DurationInput sec={typeof value === "number" ? value : null} onChange={(x) => set(p.name, x === null ? undefined : x)}
+          error={!!error} disabled={readOnly} label={paramLabel(p)} intOnly={p.type === "int"} />
+        {value === undefined && <span className={`${FS.small} text-[#8A929D]`}>{defaultText(p, cfg, "s", detail)}</span>}
+        {(lo !== null || hi !== null) && <span className={`${FS.small} text-[#8A929D]`}>{lo !== null ? fmtSec(lo) : ""}~{hi !== null ? fmtSec(hi) : ""}</span>}
+      </span>
+    );
+  }
+  return <NumField p={p} value={value} cfg={cfg} unit={unit} error={error} readOnly={readOnly} onChange={(v) => set(p.name, v)} />;
+}
+
+const msgsAt = (list: string[], path: string) => list.filter((m) => m.startsWith(`블록 ${path}(`) || m.startsWith(`블록 ${path}:`));
+
+/** 검사 문구 — 평소 사람 말(열·값 이름을 label 로), 원문은 title·'상세' */
+function Msg({ m, tone, names, strip }: { m: string; tone: "error" | "warn"; names: Record<string, string>; strip?: string }) {
+  const { detail } = useChk2Mode();
+  const body = strip && m.startsWith(strip) ? m.slice(strip.length) : m;
+  return (
+    <p title={m} className={`${FS.small} ${tone === "error" ? "font-semibold text-rose-600" : "text-amber-700"}`}>
+      {humanize(body, names)}{detail && <span className="ml-1 font-mono font-normal opacity-70">{m}</span>}
+    </p>
+  );
+}
+
+// ───────────── 고른 블록 설정 ─────────────
+export function BlockForm({ place, env, bundle, readOnly, errors, warnings, names, update }: {
+  place: Place; env: BlockEnv; bundle: Bundle | null; readOnly: boolean; errors: string[]; warnings: string[];
+  names: Record<string, string>; update: (id: string, data: unknown) => void;
+}) {
+  const { detail } = useChk2Mode();
+  const [adv, setAdv] = useState(false);
+  const { e, path } = place;
+  const data = isObj(e.data) ? e.data : null;
+  const d = data && typeof data.type === "string" ? env.byType.get(data.type) : undefined;
+  const params = data && isObj(data.params) ? data.params : {};
+  const errs = msgsAt(errors, path), warns = msgsAt(warnings, path);
+  const pre = d ? `블록 ${path}(${d.type}): ` : "";
+  const fieldErr = (name: string) => errs.find((m) => m.startsWith(`${pre}${name}: `));
+  const blockErrs = errs.filter((m) => !(d?.params ?? []).some((p) => m.startsWith(`${pre}${p.name}: `)) && !m.startsWith(`${pre}stage `));
+  const set = (name: string, v: unknown) => {
+    const np = { ...params };
+    if (v === undefined) delete np[name];
+    else np[name] = v;
+    update(e.uid, { ...data, params: np });
+  };
+  const setKey = (k: string, v: unknown) => {
+    const nd = { ...data };
+    if (v === undefined) delete nd[k];
+    else nd[k] = v;
+    update(e.uid, nd);
+  };
+  if (!d) {
+    return (
+      <div className="space-y-1">
+        <p className={`${FS.card} font-bold text-gray-700`}>알 수 없는 블록 <span className={`font-mono ${FS.body} text-gray-400`}>{JSON.stringify(data?.type ?? e.data)}</span></p>
+        {errs.map((m, i) => <Msg key={i} m={m} tone="error" names={names} />)}
+      </div>
+    );
+  }
+  const stageDefault = d.type === "pressure" ? `PRESSURE_SP${typeof params.sp === "number" ? params.sp : "n"}` : d.stage ?? "";
+  const field = (p: BParamDef) => {
+    const err = fieldErr(p.name);
+    return (
+      <div key={p.name} className="grid gap-x-3 gap-y-0.5 py-1.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
+        <span className={`pt-1 ${FS.body} font-medium text-gray-700`} title={detail ? p.desc : undefined}>
+          {paramLabel(p)}{p.required && <span className="text-rose-500">*</span>}
+          {detail && <span className={`block font-mono ${FS.small} font-normal text-gray-400`}>{p.name}</span>}
+        </span>
+        <span className="min-w-0">
+          <ParamField p={p} d={d} params={params} env={env} bundle={bundle} error={err} readOnly={readOnly} set={set} />
+          {p.help && <span className={`mt-0.5 block ${FS.small} leading-snug text-gray-400`}>{p.help}</span>}
+          {detail && p.desc && <span className={`block ${FS.small} text-gray-300`}>{p.desc}</span>}
+          {err && <Msg m={err} tone="error" names={names} strip={`${pre}${p.name}: `} />}
+        </span>
+      </div>
+    );
+  };
+  const basic = d.params.filter((p) => !p.advanced);
+  const advanced = d.params.filter((p) => p.advanced);
+  const advErr = advanced.some((p) => fieldErr(p.name)) || errs.some((m) => m.startsWith(`${pre}stage `));
+  const advOpen = adv || advErr;
+  return (
+    <div className="space-y-2">
+      <div>
+        <p className={`${FS.card} font-bold text-gray-900`}>
+          <span className={`mr-1.5 rounded bg-gray-100 px-1.5 font-mono ${FS.small} text-gray-500`}>{path}</span>{d.label}
+          {typeof data?.label === "string" && data.label && <span className={`ml-1.5 ${FS.body} font-normal text-gray-500`}>· {data.label}</span>}
+          {detail && <span className={`ml-1.5 font-mono ${FS.small} font-normal text-gray-400`}>{d.type}</span>}
+        </p>
+        {d.help && <p className={`mt-0.5 ${FS.small} text-gray-500`}>{d.help}</p>}
+        {detail && d.desc && <p className={`${FS.small} text-gray-400`}>{d.desc}</p>}
+      </div>
+      {blockErrs.map((m, i) => <Msg key={`e${i}`} m={m} tone="error" names={names} strip={pre} />)}
+      {warns.map((m, i) => <Msg key={`w${i}`} m={m} tone="warn" names={names} strip={pre} />)}
+      {basic.length > 0 ? <div className="divide-y divide-gray-50">{basic.map(field)}</div>
+        : <p className={`${FS.small} text-gray-400`}>설정할 값이 없는 블록입니다.</p>}
+      {d.container && <p className={`rounded-lg bg-[#EEF3FF] px-2 py-1 ${FS.small} text-[#1D4ED8]`}>안쪽 블록은 블록 목록에서 고칩니다. 블록 추가에서 &apos;반복 안에 넣기&apos;를 고르세요.</p>}
+      <div className="rounded-xl border border-gray-100">
+        <button onClick={() => setAdv((o) => !o)} className={`flex w-full items-center gap-1 px-2 py-1.5 ${FS.small} font-semibold text-gray-500 hover:text-gray-700`}>
+          {advOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 고급 설정
+          <span className="font-normal text-gray-400">— {advanced.length ? `${advanced.map(paramLabel).join("·")} · ` : ""}이름표·공정 상태</span>
+        </button>
+        {advOpen && (
+          <div className="border-t border-gray-50 px-2 pb-2">
+            {advanced.map(field)}
+            <div className="grid gap-x-3 py-1.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
+              <span className={`pt-1 ${FS.body} font-medium text-gray-700`}>이름표</span>
+              <span>
+                <input defaultValue={typeof data?.label === "string" ? data.label : ""} disabled={readOnly}
+                  maxLength={env.defs.limits.labelMax} placeholder={d.label} aria-label="이름표"
+                  onChange={(ev) => setKey("label", ev.target.value === "" ? undefined : ev.target.value)}
+                  className={`w-48 rounded-lg border border-gray-200 px-2 py-1 ${FS.body} placeholder:text-gray-300`} />
+                <span className={`mt-0.5 block ${FS.small} text-gray-400`}>목록·로그에 보일 이름(비우면 블록 이름)</span>
+              </span>
+            </div>
+            {(d.stages.length > 0 || d.type === "pressure") && (
+              <div className="grid gap-x-3 py-1.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
+                <span className={`pt-1 ${FS.body} font-medium text-gray-700`}>공정 상태</span>
+                <span>
+                  <Choice value={data?.stage} readOnly={readOnly} placeholder={`기본 ${stateLabel(bundle, stageDefault)}`} label="공정 상태"
+                    options={[d.stage, ...d.stages].filter(Boolean).map((s) => ({ v: s, label: detail ? `${stateLabel(bundle, s)} · ${s}` : stateLabel(bundle, s) }))}
+                    error={errs.find((m) => m.startsWith(`${pre}stage `))} onChange={(v) => setKey("stage", v)} />
+                  <span className={`mt-0.5 block ${FS.small} text-gray-400`}>상태 카드·기록에 보일 공정 상태</span>
+                  {errs.filter((m) => m.startsWith(`${pre}stage `)).map((m, i) => <Msg key={i} m={m} tone="error" names={names} strip={pre} />)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ───────────── 실행 순서 ─────────────
+function stepTime(s: ExpBlock["steps"][number]): string {
+  if (typeof s.sec === "number") return fmtSec(s.sec);
+  const a = Array.isArray(s.params) ? s.params[1] : s.params;
+  if (Array.isArray(s.params) && s.params[0] === "WAIT_PRESSURE" && isObj(a)) return `최대 ${fmtSec(Number(a.timeout_sec))}`;
+  if (s.action === "COND_WAIT" && isObj(a)) return `최대 ${fmtSec(Number(a.timeout_sec))}`;
+  if (s.action === "POWER_WAIT" && isObj(s.spec)) return s.spec.timeout ? `최대 ${fmtSec(Number(s.spec.timeout))}` : "도달까지";
+  if (s.action === "HEATER_WAIT" || s.action === "IG_BASE_WAIT") return "도달까지";
+  return "";
+}
+/** 블록 하나의 예상 시간 — 정한 시간(DELAY) 합, 끝을 모르는 대기가 있으면 "+ 도달까지" */
+function blockTime(b: ExpBlock): string {
+  const t = expectedTime([b]);
+  if (!t.sec && !t.open) return "";
+  return `${t.sec ? fmtSec(t.sec) : ""}${t.open ? `${t.sec ? " + " : ""}도달까지` : ""}`;
+}
+
+/** 실행 순서 — 반복 안은 (반복 번호, 회차)로 묶어 접는다(첫 회차만 펼침). 평소 블록별 한 줄, 장비 스텝 문구는 '상세' */
+export function ExpandedView({ exp, bundle, showParams }: { exp: ExpBlock[]; bundle: Bundle | null; showParams?: boolean }) {
+  const { detail } = useChk2Mode();
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const groups: { key: string; head: string | null; items: ExpBlock[] }[] = [];
+  for (const b of exp) {
+    const key = b.iter ? `${b.no.split(".")[0]}#${b.iter.split(".")[0]}` : `-${b.no}`;
+    const last = groups[groups.length - 1];
+    if (last && last.key === key) last.items.push(b);
+    else groups.push({ key, head: b.iter ? `반복 블록 ${b.no.split(".")[0]} · ${b.iter.split(".")[0]}회째` : null, items: [b] });
+  }
+  const label = (t: string) => bundle?.blocks?.defs?.find((d) => d.type === t)?.label ?? t;
+  const item = (b: ExpBlock) => {
+    const sum = blockSummary(bundle, b.type, b.params);
+    const t = b.steps.length ? blockTime(b) : "";
+    return (
+      <li key={b.no} className="rounded-lg bg-white px-2 py-1">
+        <div className="flex flex-wrap items-baseline gap-1.5">
+          <span className={`font-mono ${FS.small} text-gray-400`}>{b.no}</span>
+          <b className={`${FS.small} text-gray-800`}>{b.label || label(b.type)}</b>
+          {sum && <span className={`${FS.small} text-gray-500`}>{sum}</span>}
+          {b.auto && <span className={`rounded bg-indigo-50 px-1 ${FS.small} font-semibold text-indigo-700`}>자동으로 붙음</span>}
+          <span className={`ml-auto ${FS.small} tabular-nums text-gray-400`}>{t}{detail && ` · ${stateLabel(bundle, b.stage)}`}</span>
+        </div>
+        {detail && showParams && (
+          <p className={`${FS.small} text-gray-400`}>
+            {Object.entries(b.params).filter(([, v]) => v !== null && v !== undefined && v !== false)
+              .map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join(" · ")}
+          </p>
+        )}
+        {detail && b.steps.length > 0 && (
+          <ol className="mt-0.5 space-y-px">
+            {b.steps.map((s, i) => (
+              <li key={i} className={`flex gap-2 ${FS.small} ${s.internal ? "italic text-gray-400" : "text-gray-600"}`}>
+                <span className="min-w-0 flex-1">
+                  {s.message}
+                  {s.action === "END_STOP" && isObj(s.spec) && Array.isArray(s.spec.skip) && s.spec.skip.length > 0
+                    && <span className="text-gray-400"> — 뺀 단계 {s.spec.skip.join("·")}</span>}
+                </span>
+                <span className="shrink-0 tabular-nums text-gray-400">{stepTime(s)}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </li>
+    );
+  };
+  return (
+    <ol className="space-y-1">
+      {groups.map((gr) => {
+        if (!gr.head) return gr.items.map(item);
+        const isOpen = open[gr.key] ?? gr.key.endsWith("#1");
+        return (
+          <li key={gr.key} className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-1">
+            <button onClick={() => setOpen((o) => ({ ...o, [gr.key]: !isOpen }))}
+              className={`flex w-full items-center gap-1 ${FS.small} font-semibold text-indigo-700`}>
+              {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {gr.head}
+              <span className="font-normal text-indigo-500">· 블록 {gr.items.length}개{detail && ` · 단계 ${stepCount(gr.items)}개`}</span>
+            </button>
+            {isOpen && <ol className="mt-1 space-y-1">{gr.items.map(item)}</ol>}
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function Icon({ label, onClick, disabled, children }: { label: string; onClick: () => void; disabled?: boolean; children: ReactNode }) {
+  return (
+    <button onClick={(e) => { e.stopPropagation(); onClick(); }} disabled={disabled} aria-label={label} title={label}
+      className="rounded p-0.5 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-30">{children}</button>
+  );
+}
+
+// ───────────── 블록 목록(끌기·↑↓·복사·삭제·블록 추가) ─────────────
+/** 새 블록 기본값 — 묶음 default 가 있으면 그것(비워 두면 장비가 채움), 시간은 흔한 기본(대기 60초·메인 60초·조건 대기 최대 300초·반복 2회).
+ *  온도·압력·파워처럼 공정마다 다른 필수 값은 비워 두고 칸 아래 '값 필요'(검사 문구) */
+export function newBlockParams(d: BlockDef | undefined): Record<string, unknown> {
+  if (!d) return {};
+  if (d.container) return { count: 2 };
+  if (d.type === "wait" || d.type === "main") return { sec: 60 };
+  if (d.type === "cond_wait") return { timeout_sec: 300 };
+  return {};
+}
+
+export type TreeAct = "up" | "down" | "copy" | "delete";
+/** 목록 조작 — 위로·아래로·복사(아래에)·삭제. 맨 위 lockTop 개 앞으로는 못 간다. 고른 블록(sel)도 같이 돌려준다 */
+export function treeAct(tree: EBlock[], id: string, a: TreeAct, sel: string | null, lockTop = 0): { tree: EBlock[]; sel: string | null } {
+  let nextSel: string | null = sel;
+  const top = tree.some((x) => x.uid === id);
+  const next = mapTree(tree, id, (l, i) => {
+    const n = [...l];
+    if (a === "up" && i > 0 && !(top && i - 1 < lockTop)) [n[i - 1], n[i]] = [n[i], n[i - 1]];
+    if (a === "down" && i < n.length - 1) [n[i + 1], n[i]] = [n[i], n[i + 1]];
+    if (a === "copy") { const c = cloneE(n[i]); n.splice(i + 1, 0, c); nextSel = c.uid; }
+    if (a === "delete") { n.splice(i, 1); if (sel === id) nextSel = n[Math.min(i, n.length - 1)]?.uid ?? null; }
+    return n;
+  });
+  return { tree: next, sel: nextSel };
+}
+
+export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, errors, warnings, lockTop = 0, doneText }: {
+  tree: EBlock[]; onTree: (t: EBlock[]) => void; sel: string | null; onSel: (id: string | null) => void;
+  env: BlockEnv; bundle: Bundle | null; readOnly: boolean; errors: string[]; warnings: string[];
+  lockTop?: number;                                 // 맨 위 0..lockTop-1 은 잠금(시작했거나 끝난 블록 — 순서 고치기)
+  doneText?: (top: number) => string | null;        // 잠긴 블록 옆 글("끝 · 2분 3초" 등)
+}) {
+  const [into, setInto] = useState(false);
+  const [drag, setDrag] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
+  const places = useMemo(() => index(tree), [tree]);
+  const lockedOf = (p: Place | null | undefined) => !!p && p.top < lockTop;
+  const selPlace = sel ? places.get(sel) ?? null : null;
+  const selDef = selPlace && isObj(selPlace.e.data) && typeof selPlace.e.data.type === "string" ? env.byType.get(selPlace.e.data.type) : undefined;
+  const canInto = !!selDef?.container && !lockedOf(selPlace);
+
+  const act = (id: string, a: TreeAct) => {
+    const r = treeAct(tree, id, a, sel, lockTop);
+    onTree(r.tree);
+    onSel(r.sel);
+  };
+  const add = (type: string) => {
+    const d = env.byType.get(type);
+    const nb: EBlock = { uid: uid(), data: { type, params: newBlockParams(d) }, kids: d?.container ? [] : null };
+    if (sel && into && canInto) {
+      const put = (l: EBlock[]): EBlock[] => l.map((x) => (x.uid === sel ? { ...x, kids: [...(x.kids ?? []), nb] }
+        : x.kids ? { ...x, kids: put(x.kids) } : x));
+      onTree(put(tree));
+    } else if (selPlace && lockedOf(selPlace)) {
+      onTree([...tree.slice(0, lockTop), nb, ...tree.slice(lockTop)]);   // 잠긴 블록을 골랐으면 잠금 바로 뒤
+    } else if (selPlace) {
+      onTree(mapTree(tree, selPlace.e.uid, (l, i) => [...l.slice(0, i + 1), nb, ...l.slice(i + 1)]));
+    } else onTree([...tree, nb]);
+    onSel(nb.uid);
+    setInto(false);
+  };
+  // 끌어서 순서 바꾸기 — 같은 목록(같은 부모) 안에서만, 잠긴 블록은 움직이지도 그 앞으로 가지도 못한다
+  const onDrop = (target: string) => {
+    const a = drag ? places.get(drag) : null, b = places.get(target);
+    setDrag(null);
+    setOver(null);
+    if (!a || !b || a.e.uid === b.e.uid || a.parent !== b.parent || lockedOf(a) || lockedOf(b)) return;
+    const move = (l: EBlock[]): EBlock[] => {
+      const from = l.findIndex((x) => x.uid === a.e.uid), to = l.findIndex((x) => x.uid === b.e.uid);
+      if (from < 0 || to < 0) return l.map((x) => (x.kids ? { ...x, kids: move(x.kids) } : x));
+      const n = [...l];
+      const [m] = n.splice(from, 1);
+      n.splice(to, 0, m);
+      return n;
+    };
+    onTree(move(tree));
+  };
+  const maxDepth = env.defs.limits.maxDepth;
+  const depthOk = (d: BlockDef) => !(d.container && (into && canInto ? (selPlace?.depth ?? 0) + 2 : (selPlace?.depth ?? 0) + 1) > maxDepth);
+  const groups = env.defs.groups?.length ? env.defs.groups : [{ key: "", label: "블록" }];
+
+  const rowsOf = (list: EBlock[]): ReactNode => list.map((e) => {
+    const p = places.get(e.uid)!;
+    const locked = lockedOf(p);
+    const ro = readOnly || locked;
+    const data = isObj(e.data) ? e.data : null;
+    const type = data && typeof data.type === "string" ? data.type : "";
+    const d = env.byType.get(type);
+    const params = data && isObj(data.params) ? data.params : {};
+    const errs = msgsAt(errors, p.path).length, warns = msgsAt(warnings, p.path).length;
+    const sum = d ? blockSummary(bundle, type, params) : "";
+    const siblings = p.parent ? places.get(p.parent)?.e.kids ?? [] : tree;
+    const idx = siblings.findIndex((x) => x.uid === e.uid);
+    const done = locked && p.parent === null ? doneText?.(p.top) ?? null : null;
+    return (
+      <Fragment key={e.uid}>
+        <li draggable={!ro}
+          onDragStart={(ev: DragEvent) => { setDrag(e.uid); ev.dataTransfer.effectAllowed = "move"; }}
+          onDragOver={(ev: DragEvent) => { if (!locked && drag && places.get(drag)?.parent === p.parent) { ev.preventDefault(); setOver(e.uid); } }}
+          onDragLeave={() => setOver((o) => (o === e.uid ? null : o))}
+          onDrop={(ev: DragEvent) => { ev.preventDefault(); onDrop(e.uid); }}
+          onDragEnd={() => { setDrag(null); setOver(null); }}
+          onClick={() => onSel(e.uid)}
+          style={{ marginLeft: p.depth * 18 }}
+          className={`group flex cursor-pointer items-center gap-1.5 rounded-[10px] border px-2 py-1.5 ${
+            sel === e.uid ? "border-[#1D4ED8] bg-[#E8EEFC] ring-1 ring-[#1D4ED8]" : over === e.uid ? "border-dashed border-[#1D4ED8]"
+            : locked ? "border-[#E3E6EA] bg-[#F5F6F8]" : "border-[#E3E6EA] bg-white hover:border-[#C9CED6]"}
+            ${drag === e.uid ? "opacity-40" : ""}`}>
+          {locked ? <Lock size={12} className="shrink-0 text-[#8A929D]" aria-label="시작한 블록 — 잠김" />
+            : !readOnly && <GripVertical size={13} className="shrink-0 cursor-grab text-[#8A929D]" />}
+          <span className={`shrink-0 font-mono ${FS.small} text-[#5B6470]`}>{p.path}</span>
+          <span className={`h-2 w-2 shrink-0 rounded-full ${errs ? "bg-[#B42318]" : warns ? "bg-[#B54708]" : "bg-transparent"}`}
+            title={errs ? `오류 ${errs}` : warns ? `경고 ${warns}` : undefined} />
+          <span className="min-w-0 flex-1">
+            <span className={`block truncate ${FS.body} font-semibold ${locked ? "text-[#5B6470]" : "text-[#1B1F24]"}`}>
+              {d ? d.label : "알 수 없는 블록"}
+              {typeof data?.label === "string" && data.label && <span className="ml-1 font-normal text-[#5B6470]">· {data.label}</span>}
+              {d?.container && <span className="ml-1 font-normal text-[#1D4ED8]">· {e.kids?.length ?? 0}개를 {String(params.count ?? "?")}번</span>}
+            </span>
+            {(sum || done) && <span className={`block truncate ${FS.small} text-[#5B6470]`}>{done ?? sum}</span>}
+          </span>
+          {!ro && (
+            <span className="flex shrink-0 gap-0.5 text-[#5B6470] opacity-70 group-hover:opacity-100">
+              <Icon label="위로" disabled={idx <= 0 || (p.parent === null && idx - 1 < lockTop)} onClick={() => act(e.uid, "up")}><ArrowUp size={13} /></Icon>
+              <Icon label="아래로" disabled={idx >= siblings.length - 1} onClick={() => act(e.uid, "down")}><ArrowDown size={13} /></Icon>
+              <Icon label="복사(아래에)" onClick={() => act(e.uid, "copy")}><Copy size={13} /></Icon>
+              <Icon label="삭제" onClick={() => act(e.uid, "delete")}><Trash2 size={13} /></Icon>
+            </span>
+          )}
+        </li>
+        {e.kids && (e.kids.length ? rowsOf(e.kids) : (
+          <li style={{ marginLeft: (p.depth + 1) * 18 }} className={`rounded-[10px] border border-dashed border-[#C7D5FB] px-2 py-1 ${FS.small} text-[#1D4ED8]`}>
+            빈 반복 — 이 반복을 고르고 &apos;반복 안에 넣기&apos;로 블록을 넣으세요
+          </li>
+        ))}
+      </Fragment>
+    );
+  });
+
+  return (
+    <div className="space-y-2">
+      <ol className="space-y-1">
+        {rowsOf(tree)}
+        {!tree.length && <li className={`rounded-[10px] border border-dashed border-[#D9DDE3] p-3 text-center ${FS.small} text-[#5B6470]`}>블록이 없습니다 — 아래에서 블록을 넣으세요</li>}
+      </ol>
+      {!readOnly && (
+        <div className="rounded-[10px] border border-[#E3E6EA] bg-[#F5F6F8] p-2">
+          <div className={`mb-1 flex flex-wrap items-center gap-2 ${FS.small} font-semibold text-[#1B1F24]`}>
+            블록 추가
+            <span className="font-normal text-[#5B6470]">{selPlace && !lockedOf(selPlace) ? `— ${selPlace.path} 뒤에` : lockTop ? "— 시작한 블록 뒤에" : "— 끝에"}</span>
+            {canInto && (
+              <label className="flex items-center gap-1 font-normal text-[#1D4ED8]">
+                <input type="checkbox" checked={into} onChange={(e) => setInto(e.target.checked)} /> 반복 안에 넣기
+              </label>
+            )}
+          </div>
+          <div className="space-y-1">
+            {groups.map((gr) => {
+              const defs = env.defs.defs.filter((d) => (gr.key ? d.group === gr.key : true));
+              if (!defs.length) return null;
+              return (
+                <div key={gr.key} className="flex flex-wrap items-center gap-1">
+                  <span className={`w-16 shrink-0 ${FS.small} text-[#5B6470]`}>{gr.label}</span>
+                  {defs.map((d) => (
+                    <button key={d.type} onClick={() => add(d.type)} disabled={!depthOk(d)} title={d.help || d.label}
+                      className={`h-8 rounded-[8px] border border-[#D9DDE3] bg-white px-2 ${FS.small} font-semibold text-[#1B1F24] hover:border-[#1D4ED8] hover:bg-[#E8EEFC] disabled:opacity-40`}>
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 블록 목록 위 검사 문구(특정 블록에 붙지 않는 것) */
+export function TopMessages({ errors, bundle }: { errors: string[]; bundle: Bundle | null }) {
+  const names = useMemo(() => blockNames(bundle), [bundle]);
+  const top = errors.filter((m) => !/^블록 [\d.]+[(:]/.test(m));
+  return <>{top.map((m, i) => <Msg key={i} m={m} tone="error" names={names} />)}</>;
+}
+
+/** 고른 블록 설정 칸(목록 옆) — 잠긴 블록이면 보기만 */
+export function BlockPane({ tree, sel, env, bundle, readOnly, errors, warnings, onTree, lockTop = 0 }: {
+  tree: EBlock[]; sel: string | null; env: BlockEnv; bundle: Bundle | null; readOnly: boolean; errors: string[]; warnings: string[];
+  onTree: (t: EBlock[]) => void; lockTop?: number;
+}) {
+  const places = useMemo(() => index(tree), [tree]);
+  const names = useMemo(() => blockNames(bundle), [bundle]);
+  const p = sel ? places.get(sel) ?? null : null;
+  if (!p) return <p className={`${FS.small} text-[#5B6470]`}>블록을 고르면 설정이 여기에 보입니다.</p>;
+  const locked = p.top < lockTop;
+  const update = (id: string, data: unknown) => onTree(mapTree(tree, id, (l, i) => l.map((x, j) => (j === i ? { ...x, data } : x))));
+  return (
+    <div className="space-y-2">
+      {locked && <p className={`flex items-center gap-1 ${FS.small} text-[#5B6470]`}><Lock size={12} /> 시작했거나 끝난 블록 — 고칠 수 없습니다</p>}
+      <BlockForm key={p.e.uid} place={p} env={env} bundle={bundle} readOnly={readOnly || locked}
+        errors={errors} warnings={warnings} names={names} update={update} />
+    </div>
+  );
+}
+
+export { stepCount, mapTree };

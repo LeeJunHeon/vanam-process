@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // 노트북 로컬 화면 빌드 결과(npm run hmi:build — 묶은 JS)
+    "dist-hmi/**",
   ]),
 ]);
 

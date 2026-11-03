@@ -1,0 +1,10 @@
+/* 노트북 로컬 화면 CSS — Tailwind(@tailwindcss/postcss)로 장비 화면 컴포넌트에서 쓰는 클래스만. 외부 글꼴 없이 시스템 글꼴 */
+@import "tailwindcss" source(none);
+@source "../components/ops2/chk";
+@source "./";
+
+body {
+  background: #f9fafb;
+  color: #171717;
+  font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", system-ui, sans-serif;
+}
