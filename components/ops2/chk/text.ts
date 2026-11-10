@@ -24,16 +24,20 @@ export function fmtClock(sec: number): string {
 }
 
 // ───────────── 값 ─────────────
+/** 상태 열 값 중 이상(주의색) — 연결 안 됨·영점 안 됨·음수·형식 오류. 하한 아래(below)·꺼짐(off)·측정 준비 중은 대기 때 정상(기본색) */
+const ALT_WARN = new Set(["disconnected", "unzeroed", "negative", "invalid"]);
+
 /** 스냅샷 값 하나를 글로(묶음 정의 fmt·enumLabels). 값이 비고 그 값의 상태 열(stateColumn — 묶음 12)이 ok 가 아니면
- *  상태 이름(상태 열 enumLabels)을 alt 로 — 카드·HMI·그래프 툴팁이 모두 이 규칙(장비 종류를 따로 보지 않는다) */
+ *  상태 이름(상태 열 enumLabels)을 alt 로 — 카드·HMI·그래프 툴팁이 모두 이 규칙(장비 종류를 따로 보지 않는다).
+ *  warn = 그 상태가 이상(ALT_WARN)일 때만 */
 export function fieldText(f: FieldDef, v: unknown, snap?: Record<string, unknown>, blocks?: { fields: FieldDef[] }[]):
-  { text: string; alt: string | null } {
+  { text: string; alt: string | null; warn: boolean } {
   const text = typeof v === "string" && f.enumLabels?.[v] ? f.enumLabels[v] : fmtValue(v, f.fmt);
-  if (text || !f.stateColumn || !snap) return { text, alt: null };
+  if (text || !f.stateColumn || !snap) return { text, alt: null, warn: false };
   const st = snap[f.stateColumn];
-  if (typeof st !== "string" || st === "" || st === "ok") return { text, alt: null };
+  if (typeof st !== "string" || st === "" || st === "ok") return { text, alt: null, warn: false };
   const sf = blocks?.flatMap((b) => b.fields).find((x) => x.column === f.stateColumn);
-  return { text: "", alt: sf?.enumLabels?.[st] ?? st };
+  return { text: "", alt: sf?.enumLabels?.[st] ?? st, warn: ALT_WARN.has(st) };
 }
 
 /** event context.source → 출처 이름(묶음 13 eventSources, 없으면 source 그대로) */

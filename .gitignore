@@ -49,3 +49,10 @@ next-env.d.ts
 
 # 노트북 로컬 화면 빌드 결과(npm run hmi:build — 챔버K v2\hmi 로 넣는다)
 /dist-hmi
+
+# NAS 배포 기록(deploy 스크립트가 쓴다)
+.deploy-state
+.deploy-state.tmp
+
+# NAS 첨부 파일 폴더(docker-compose 가 /app/uploads 로 마운트, git 에 넣지 않음)
+/uploads/

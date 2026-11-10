@@ -12,7 +12,7 @@ import { BellRing, ChevronDown, ChevronRight, FileEdit, Flame, Play, Upload, X }
 import { checkEnvOf, checkHeaterRecipe, checkProcessRecipe, type RecipeCheck, type Row } from "@/lib/ops2/chk/recipe";
 import { expectedTime } from "@/lib/ops2/chk/blocks";
 import { fmtKst } from "@/lib/ops2/time";
-import { Btn, Card, Chip, Empty, KV, RangeBar, StateBox, Tile, Val, Dot, type Ask } from "./kit";
+import { FS, Btn, Card, Chip, Empty, KV, RangeBar, StateBox, Tile, Val, Dot, type Ask } from "./kit";
 import { DeviceGrid } from "./Chk2Devices";
 import Chk2Seq from "./Chk2Seq";
 import Chk2Trend from "./Chk2Trend";
@@ -24,7 +24,7 @@ import { bandOf, kindOf, scaleMax, usesNow } from "./runview";
 import { heaterLines, processLines, rowLine } from "./recipeText";
 import { useChk2Mode } from "./mode";
 import { reasonLabel, type Bundle, type FieldDef, type StateData } from "./types";
-import type { FeedItem, RunBlocks, TrendPt } from "./useChk2";
+import type { EditBase, FeedItem, RunBlocks, TrendPt } from "./useChk2";
 import type { RecipeFull, useRecipes } from "./useRecipes";
 import type { LockFn } from "./Chk2Status";
 
@@ -52,7 +52,7 @@ function KeyTile({ d, bundle, snap }: { d: KeyDef; bundle: Bundle | null; snap: 
   const f = fieldOf(bundle, d.value), tf = d.target ? fieldOf(bundle, d.target) : undefined;
   const v = num(snap?.[d.value]), t = d.target ? num(snap?.[d.target]) : null;
   const unit = f?.unit ?? "";
-  const txt = f ? fieldText(f, snap?.[d.value], snap, bundle?.snapshot?.blocks) : { text: "", alt: null };
+  const txt = f ? fieldText(f, snap?.[d.value], snap, bundle?.snapshot?.blocks) : { text: "", alt: null, warn: false };
   const lim = LIMIT_PARAM[d.key] ? num(paramValue(bundle, LIMIT_PARAM[d.key]))
     : d.key === "ar" ? argRange(bundle, "HEATER_ON", "ar_flow")?.max ?? null : d.key === "o2" ? argRange(bundle, "HEATER_ON", "o2_flow")?.max ?? null : null;
   const band = bandOf(bundle, d.key, t);
@@ -67,15 +67,15 @@ function KeyTile({ d, bundle, snap }: { d: KeyDef; bundle: Bundle | null; snap: 
   return (
     <Tile className="p-3">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-xs font-semibold text-[#1B1F24]">{d.label}</span>
-        {t !== null && <span className="shrink-0 text-[11px] text-[#5B6470]">목표 {tf ? fieldText(tf, t).text || fmtN(t) : fmtN(t)} {unit}</span>}
+        <span className={`truncate ${FS.body} font-semibold text-[#1B1F24]`}>{d.label}</span>
+        {t !== null && <span className={`shrink-0 ${FS.small} text-[#5B6470]`}>목표 {tf ? fieldText(tf, t).text || fmtN(t) : fmtN(t)} {unit}</span>}
       </div>
-      <div className="mt-1"><Val text={txt.text} unit={unit} size="lg" alt={txt.alt} /></div>
+      <div className="mt-1"><Val text={txt.text} unit={unit} size="big" alt={txt.alt} altWarn={txt.warn} /></div>
       {d.key !== "ig" && <div className="mt-1"><RangeBar value={v} target={t} band={band} max={max} label={`${d.label} 막대`} /></div>}
-      <p className="mt-0.5 flex justify-between text-[10px] tabular-nums text-[#8A929D]">
+      <p className={`mt-0.5 flex justify-between ${FS.small} tabular-nums text-[#8A929D]`}>
         {d.key !== "ig" ? <><span>0</span><span>{fmtN(max)} {unit}</span></> : <span>로그 값 — 막대 없음</span>}
       </p>
-      {extra && <p className="mt-1 truncate text-[11px] text-[#5B6470]">{extra}</p>}
+      {extra && <p className={`mt-1 truncate ${FS.small} text-[#5B6470]`}>{extra}</p>}
     </Tile>
   );
 }
@@ -87,18 +87,18 @@ function KeyValues({ bundle, st, blocks }: { bundle: Bundle | null; st: StateDat
   const on = KEYS.filter((d) => used(d.key));
   const off = KEYS.filter((d) => !used(d.key));
   return (
-    <Card title="주요 값" right={<span className="text-[11px] text-[#5B6470]">이번 공정이 쓰는 장비</span>}>
+    <Card title="주요 값" right={<span className={`${FS.small} text-[#5B6470]`}>이번 공정이 쓰는 장비</span>}>
       {on.length ? (
         <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
           {on.map((d) => <KeyTile key={d.key} d={d} bundle={bundle} snap={snap} />)}
         </div>
       ) : <Empty>이번 공정이 쓰는 장비 값을 아직 모릅니다</Empty>}
-      <p className="mt-2 text-[11px] text-[#5B6470]">막대: 회색 띠 = 허용 범위(장비 판정과 같은 식, 모르면 없음) · ▲ = 목표 · 세로선 = 지금</p>
+      <p className={`mt-2 ${FS.small} text-[#5B6470]`}>막대: 회색 띠 = 허용 범위(장비 판정과 같은 식, 모르면 없음) · ▲ = 목표 · 세로선 = 지금</p>
       {off.length > 0 && (
-        <p className="mt-1 text-[11px] text-[#5B6470]">
+        <p className={`mt-1 ${FS.small} text-[#5B6470]`}>
           이번 공정에서 안 쓰는 장비 — {off.map((d) => {
             const f = fieldOf(bundle, d.value);
-            const t = f ? fieldText(f, snap?.[d.value], snap, bundle?.snapshot?.blocks) : { text: "", alt: null };
+            const t = f ? fieldText(f, snap?.[d.value], snap, bundle?.snapshot?.blocks) : { text: "", alt: null, warn: false };
             return `${d.label} ${t.text || t.alt || "—"}${t.text && f?.unit ? ` ${f.unit}` : ""}`;
           }).join(" · ")} · 사용 안 함
         </p>
@@ -112,13 +112,13 @@ function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
   const lab = (n: string) => fieldOf(bundle, `plc.${n}`)?.label ?? n;
   const box = (n: string, label?: string) => <StateBox key={n} on={snap?.[`plc.${n}`] as boolean | undefined} label={label ?? lab(n)} />;
   const lamp = (n: string, label: string) => (
-    <span key={n} className="flex items-center gap-1.5 text-xs text-[#5B6470]" title={snap?.[`plc.${n}`] === true ? "감지" : "없음"}>
+    <span key={n} className={`flex items-center gap-1.5 ${FS.body} text-[#5B6470]`} title={snap?.[`plc.${n}`] === true ? "감지" : "없음"}>
       <Dot on={snap?.[`plc.${n}`] === true} dim={snap?.[`plc.${n}`] === undefined} />{fieldOf(bundle, `plc.${n}`)?.label ?? label}
     </span>
   );
   const group = (title: string, items: ReactNode[]) => (
     <div>
-      <p className="mb-1 text-[11px] font-semibold text-[#5B6470]">{title}</p>
+      <p className={`mb-1 ${FS.small} font-semibold text-[#5B6470]`}>{title}</p>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1">{items}</div>
     </div>
   );
@@ -136,12 +136,13 @@ function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
 }
 
 // ───────────── 알림 ─────────────
+/** 알림 — 높이는 같은 줄 카드에 맞추고(격자 늘이기) 사건 목록은 카드 안에서 스크롤 */
 function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateData | null; feed: FeedItem[]; onLog?: () => void }) {
   const alarms = st?.alarms ?? [];
-  const lines = useMemo(() => feed.map((e) => ({ e, ...logLine(bundle, e) })).filter((r) => r.main).slice(-8).reverse(), [bundle, feed]);
+  const lines = useMemo(() => feed.map((e) => ({ e, ...logLine(bundle, e) })).filter((r) => r.main).slice(-20).reverse(), [bundle, feed]);
   return (
-    <Card title={<><BellRing size={15} /> 알림</>} right={onLog && <Btn size="sm" kind="ghost" onClick={onLog}>기록 전체 보기</Btn>}>
-      <p className="mb-2 text-xs text-[#5B6470]">
+    <Card className="flex h-full flex-col" title={<><BellRing size={15} /> 알림</>} right={onLog && <Btn size="sm" kind="ghost" onClick={onLog}>기록 전체 보기</Btn>}>
+      <p className={`mb-2 ${FS.body} text-[#5B6470]`}>
         활성 알람 {alarms.length ? <Chip tone="alarm">{alarms.length}개</Chip> : <b className="text-[#1B1F24]">없음</b>}
       </p>
       {alarms.length > 0 && (
@@ -150,16 +151,18 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
         </div>
       )}
       {lines.length ? (
-        <ul className="space-y-1">
+        <div className="relative min-h-[200px] flex-1">
+        <ul className="absolute inset-0 space-y-1.5 overflow-y-auto pr-1">
           {lines.map((r) => (
-            <li key={r.e.id} className="text-[11px] leading-snug" title={r.raw}>
-              <span className="mr-1.5 tabular-nums text-[#8A929D]">{fmtKst(r.e.ts).slice(-8)}</span>
+            <li key={r.e.id} className={`${FS.body} leading-snug`} title={r.raw}>
+              <span className={`mr-1.5 tabular-nums text-[#5B6470] ${FS.small}`}>{fmtKst(r.e.ts).slice(-8)}</span>
               {r.level === "warn" ? <Chip tone="warn">{r.kind}</Chip> : r.level === "error" || r.level === "critical"
                 ? <Chip tone="alarm">{r.kind}</Chip> : <b className="text-[#1B1F24]">{r.kind}</b>}
               <span className={`ml-1 ${r.level === "warn" ? "text-[#B54708]" : r.level === "error" || r.level === "critical" ? "text-[#B42318]" : "text-[#5B6470]"}`}>{r.text}</span>
             </li>
           ))}
         </ul>
+        </div>
       ) : <Empty>최근 사건이 없습니다</Empty>}
     </Card>
   );
@@ -214,11 +217,11 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
     onAsk({ kind: "RECIPE_START", label: "적재 레시피 시작", detail: `'${loaded?.name ?? ""}'`, red: true, lines,
             note: "공정을 시작합니다 — 가스·파워·셔터가 움직입니다." });
   };
-  const sel = "h-10 min-w-0 flex-1 rounded-[10px] border border-[#D9DDE3] bg-white px-2 text-sm";
+  const sel = `h-10 min-w-0 flex-1 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body}`;
   return (
     <Card title="다음 공정" className="lg:col-span-2">
       <div className="space-y-3">
-        <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-[#E3E6EA] px-3 py-2 text-xs">
+        <div className={`flex flex-wrap items-center gap-2 rounded-[10px] border border-[#E3E6EA] px-3 py-2 ${FS.body}`}>
           {loaded ? (
             <>
               <span className="text-[#5B6470]">장비에 적재됨</span><b className="text-[#1B1F24]">{loaded.name || "이름 없음"}</b>
@@ -259,11 +262,11 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
               {steps > 0 && <Chip>단계 {steps}개</Chip>}
               {t && <Chip>예상 {fmtSec(t.sec)}{t.open ? ` + 도달 대기 ${t.open}개` : ""}</Chip>}
             </div>
-            {first && <p className="text-xs text-[#1B1F24]">{rowLine(first)}</p>}
-            {chk?.first && chk.errors > 0 && <p className="text-[11px] text-[#B42318]">{chk.first}</p>}
+            {first && <p className={`${FS.body} text-[#1B1F24]`}>{rowLine(first)}</p>}
+            {chk?.first && chk.errors > 0 && <p className={`${FS.small} text-[#B42318]`}>{chk.first}</p>}
             {exp.length > 0 && (
               <div>
-                <button onClick={() => setShowSeq((o) => !o)} className="flex items-center gap-1 text-[11px] font-semibold text-[#1D4ED8]">
+                <button onClick={() => setShowSeq((o) => !o)} className={`flex items-center gap-1 ${FS.small} font-semibold text-[#1D4ED8]`}>
                   {showSeq ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 공정 순서 보기
                 </button>
                 {showSeq && <div className="mt-1 max-h-80 overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2"><ExpandedView exp={exp} bundle={bundle} /></div>}
@@ -273,8 +276,8 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
         )}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-3">
-          <span className="text-xs font-semibold text-[#1B1F24]">히터 레시피</span>
-          {hr ? <span className="text-xs text-[#5B6470]">실행 중 <b className="text-[#1B1F24]">{hr.name}</b> · 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"} — 히터 카드에서 조작</span> : (
+          <span className={`${FS.body} font-semibold text-[#1B1F24]`}>히터 레시피</span>
+          {hr ? <span className={`${FS.body} text-[#5B6470]`}>실행 중 <b className="text-[#1B1F24]">{hr.name}</b> · 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"} — 히터 카드에서 조작</span> : (
             <>
               <select value={hid} onChange={(e) => { setHid(e.target.value); if (!e.target.value) setHfull(null); }} aria-label="히터 레시피 고르기" className={sel}>
                 <option value="">히터 레시피 고르기…</option>
@@ -294,8 +297,9 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   );
 }
 
-export default function Chk2Run({ equipment, bundle, st, runBlocks, feed, trend, recipes, lock, canKey, onAsk, onHmi, onLog, onEditRecipe, nowMs, skewMs }: {
-  equipment: string; bundle: Bundle | null; st: StateData | null; runBlocks: RunBlocks | null; feed: FeedItem[]; trend: TrendPt[];
+export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, feed, trend, recipes, lock, canKey, onAsk, onHmi, onLog, onEditRecipe, nowMs, skewMs }: {
+  equipment: string; bundle: Bundle | null; st: StateData | null; runBlocks: RunBlocks | null; editBase: EditBase | null;
+  feed: FeedItem[]; trend: TrendPt[];
   recipes: ReturnType<typeof useRecipes> | null; lock: LockFn; canKey: (kind: string, key: string) => boolean; onAsk: (a: Ask) => void;
   onHmi: () => void; onLog?: () => void; onEditRecipe?: (id: string | null) => void; nowMs: number; skewMs: number;
 }) {
@@ -307,7 +311,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, feed, trend,
     return (
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(300px,1fr)_minmax(0,2fr)] 2xl:grid-cols-[minmax(320px,1fr)_minmax(0,2fr)_minmax(260px,0.9fr)]">
         <div className={`min-w-0 ${wide ? "lg:col-span-2 2xl:col-span-3" : ""}`}>
-          <Chk2Seq bundle={bundle} st={st} runBlocks={runBlocks} feed={feed} recipes={recipes} lock={lock} onAsk={onAsk} local={local} onWide={setWide} />
+          <Chk2Seq bundle={bundle} st={st} runBlocks={runBlocks} editBase={editBase} lock={lock} onAsk={onAsk} local={local} onWide={setWide} />
         </div>
         <div className="min-w-0 space-y-3">
           <KeyValues bundle={bundle} st={st} blocks={runBlocks} />
@@ -323,11 +327,11 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, feed, trend,
   }
   return (
     <div className="space-y-3">
-      <div className="grid items-start gap-3 lg:grid-cols-3">
+      <div className="grid gap-3 lg:grid-cols-3">
         {recipes && onEditRecipe ? <NextProcess bundle={bundle} st={st} recipes={recipes} lock={lock} onAsk={onAsk} onEdit={onEditRecipe} />
           : <Card title="다음 공정" className="lg:col-span-2">
-              <KV k="장비에 적재됨"><b className="text-xs">{st?.recipe?.name || "없음"}</b></KV>
-              <p className="mt-2 text-[11px] text-[#5B6470]">레시피 고르기·적재는 웹 화면에서</p>
+              <KV k="장비에 적재됨"><b className={`${FS.body}`}>{st?.recipe?.name || "없음"}</b></KV>
+              <p className={`mt-2 ${FS.small} text-[#5B6470]`}>레시피 고르기·적재는 웹 화면에서</p>
             </Card>}
         <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} />
       </div>

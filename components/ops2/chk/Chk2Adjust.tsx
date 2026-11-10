@@ -12,7 +12,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { useChk2Mode } from "./mode";
 import { fmtDur } from "./text";
-import { Card, type Ask } from "./kit";
+import { FS, Card, type Ask } from "./kit";
 import { paramValue, rangeText, type Range } from "./logic";
 import type { AdjustItemDef, AdjustState, Bundle, StateData } from "./types";
 import { fmtKst } from "@/lib/ops2/time";
@@ -91,16 +91,16 @@ function Row({ it, bundle, a, skewMs, canSend, onSend }: {
   return (
     <tr className="border-t border-[#E3E6EA] align-top">
       <td className="px-2 py-1.5">
-        <p className="text-xs font-semibold text-[#1B1F24]">{nameOf(it)}</p>
-        {it.help && <p className="max-w-xs text-[10px] text-[#5B6470]">{it.help}</p>}
-        {detail && <p className="font-mono text-[10px] text-[#5B6470]">{it.device}.{it.item}</p>}
+        <p className={`${FS.body} font-semibold text-[#1B1F24]`}>{nameOf(it)}</p>
+        {it.help && <p className={`max-w-xs ${FS.small} text-[#5B6470]`}>{it.help}</p>}
+        {detail && <p className={`font-mono ${FS.small} text-[#5B6470]`}>{it.device}.{it.item}</p>}
       </td>
-      <td className="px-2 py-1.5"><span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${where.tone}`}>{where.text}</span></td>
-      <td className="px-2 py-1.5 text-xs tabular-nums text-[#1B1F24]">
-        {isBool ? "—" : <>{fmt(now)} <span className="text-[10px] text-[#5B6470]">{it.param.unit}</span></>}
-        {a && !isBool && <p className="text-[10px] text-[#5B6470]">레시피 {fmt(num(a.recipe))}</p>}
+      <td className="px-2 py-1.5"><span className={`rounded px-1.5 py-0.5 ${FS.small} font-semibold ${where.tone}`}>{where.text}</span></td>
+      <td className={`px-2 py-1.5 ${FS.body} tabular-nums text-[#1B1F24]`}>
+        {isBool ? "—" : <>{fmt(now)} <span className={`${FS.small} text-[#5B6470]`}>{it.param.unit}</span></>}
+        {a && !isBool && <p className={`${FS.small} text-[#5B6470]`}>레시피 {fmt(num(a.recipe))}</p>}
         {changed && (
-          <p className="text-[10px] font-semibold text-[#1D4ED8]">
+          <p className={`${FS.small} font-semibold text-[#1D4ED8]`}>
             수정됨 · {a!.adjusted!.by ?? "?"} · {deviceTime(a!.adjusted!.t, skewMs)}
           </p>
         )}
@@ -108,25 +108,25 @@ function Row({ it, bundle, a, skewMs, canSend, onSend }: {
       <td className="px-2 py-1.5">
         {isBool ? (
           <button disabled={!send} onClick={() => onSend(true, null)}
-            className="rounded-lg border border-[#D9DDE3] px-2 py-1 text-[11px] font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40">
+            className={`rounded-lg border border-[#D9DDE3] px-2 py-1 ${FS.small} font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40`}>
             지금 대기 끝내기
           </button>
         ) : (
           <span className="flex items-center gap-1.5">
             <input value={text} onChange={(e) => setText(e.target.value)} inputMode="decimal" placeholder={r ? rangeText(r) : "새 값"}
               disabled={!where.send}
-              className={`w-28 rounded-md border px-1.5 py-0.5 text-[11px] tabular-nums placeholder:text-[#8A929D] disabled:bg-[#F5F6F8] ${chk.err ? "border-[#B42318] bg-[#FEE4E2]" : "border-[#D9DDE3]"}`} />
+              className={`w-28 rounded-md border px-1.5 py-0.5 ${FS.small} tabular-nums placeholder:text-[#8A929D] disabled:bg-[#F5F6F8] ${chk.err ? "border-[#B42318] bg-[#FEE4E2]" : "border-[#D9DDE3]"}`} />
             <button disabled={!send || chk.v === null || !!chk.err} onClick={() => chk.v !== null && onSend(chk.v, now)}
-              className="rounded-lg bg-[#1D4ED8] px-2 py-1 text-[11px] font-semibold text-white hover:bg-[#1E40AF] disabled:opacity-40">
+              className={`rounded-lg bg-[#1D4ED8] px-2 py-1 ${FS.small} font-semibold text-white hover:bg-[#1E40AF] disabled:opacity-40`}>
               보내기
             </button>
           </span>
         )}
         {it.key === "process.main_remaining" && chk.v !== null && !chk.err && (
-          <p className="mt-0.5 text-[10px] text-[#5B6470]">{chk.v} s = {fmtDur(chk.v)}</p>
+          <p className={`mt-0.5 ${FS.small} text-[#5B6470]`}>{chk.v} s = {fmtDur(chk.v)}</p>
         )}
-        {chk.err && <p className="mt-0.5 text-[10px] text-[#B42318]">{chk.err}</p>}
-        {detail && it.whenLive && <p className="mt-0.5 text-[10px] text-[#5B6470]">바로 적용: {it.whenLive}</p>}
+        {chk.err && <p className={`mt-0.5 ${FS.small} text-[#B42318]`}>{chk.err}</p>}
+        {detail && it.whenLive && <p className={`mt-0.5 ${FS.small} text-[#5B6470]`}>바로 적용: {it.whenLive}</p>}
       </td>
     </tr>
   );
@@ -152,8 +152,8 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk }: {
   const head = ["항목", "쓰는 곳", "지금 값", "새 값"];
   const table = (rows: AdjustItemDef[]) => (
     <div className="overflow-x-auto rounded-[10px] border border-[#E3E6EA]">
-      <table className="min-w-full text-xs">
-        <thead className="bg-[#F5F6F8] text-[11px] text-[#5B6470]">
+      <table className={`min-w-full ${FS.body}`}>
+        <thead className={`bg-[#F5F6F8] ${FS.small} text-[#5B6470]`}>
           <tr>{head.map((h) => <th key={h} className="px-2 py-1.5 text-left font-semibold">{h}</th>)}</tr>
         </thead>
         <tbody>
@@ -182,27 +182,27 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk }: {
     <Card title={
       <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 items-center gap-1.5" aria-expanded={open}>
         {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<SlidersHorizontal size={15} /> <span className="shrink-0 whitespace-nowrap">공정 중 값 바꾸기</span>
-        <span className="min-w-0 truncate text-left text-xs font-normal text-[#5B6470]">— {using.length ? using.map(nameOf).join(" · ") : "지금 바꿀 수 있는 항목 없음"}</span>
+        <span className={`min-w-0 truncate text-left ${FS.body} font-normal text-[#5B6470]`}>— {using.length ? using.map(nameOf).join(" · ") : "지금 바꿀 수 있는 항목 없음"}</span>
       </button>}
-      right={<span className="text-[11px] text-[#5B6470]">이번 공정에만 · 레시피·설정은 그대로</span>}>
+      right={<span className={`${FS.small} text-[#5B6470]`}>이번 공정에만 · 레시피·설정은 그대로</span>}>
       {open && (
         <div className="space-y-2">
           {st.procState === "CSV_DELAY" && (
-            <p className="rounded-lg bg-[#FFFAEB] px-2 py-1 text-[11px] text-[#B54708]">딜레이 행 중에는 수정할 수 없습니다.</p>
+            <p className={`rounded-lg bg-[#FFFAEB] px-2 py-1 ${FS.small} text-[#B54708]`}>딜레이 행 중에는 수정할 수 없습니다.</p>
           )}
           {!list && (
-            <p className="rounded-lg bg-[#F5F6F8] px-2 py-1 text-[11px] text-[#5B6470]">장비가 지금 값을 보내지 않습니다 — 받을지는 장비가 판단합니다.</p>
+            <p className={`rounded-lg bg-[#F5F6F8] px-2 py-1 ${FS.small} text-[#5B6470]`}>장비가 지금 값을 보내지 않습니다 — 받을지는 장비가 판단합니다.</p>
           )}
-          {using.length ? table(using) : <p className="text-[11px] text-[#5B6470]">지금 바꿀 수 있는 항목이 없습니다</p>}
+          {using.length ? table(using) : <p className={`${FS.small} text-[#5B6470]`}>지금 바꿀 수 있는 항목이 없습니다</p>}
           {unused.length > 0 && (
             <div>
-              <button onClick={() => setOpenUnused((o) => !o)} className="flex items-center gap-1 text-[11px] font-semibold text-[#5B6470] hover:text-[#1B1F24]">
+              <button onClick={() => setOpenUnused((o) => !o)} className={`flex items-center gap-1 ${FS.small} font-semibold text-[#5B6470] hover:text-[#1B1F24]`}>
                 {openUnused ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 안 쓰는 항목 {unused.length}개
               </button>
               {openUnused && <div className="mt-1">{table(unused)}</div>}
             </div>
           )}
-          {detail && <p className="text-[10px] text-[#5B6470]">지금 값·쓰는 곳은 장비 state.adjust. 수정 시각은 장비 시계를 웹 시계로 맞춘 KST.</p>}
+          {detail && <p className={`${FS.small} text-[#5B6470]`}>지금 값·쓰는 곳은 장비 state.adjust. 수정 시각은 장비 시계를 웹 시계로 맞춘 KST.</p>}
         </div>
       )}
     </Card>

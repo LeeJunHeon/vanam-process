@@ -19,6 +19,7 @@ import { useChk2Mode } from "./mode";
 import { DurationInput } from "./inputs";
 import { blockNames, blockSummary, humanize, paramLabel } from "./text";
 import { stateLabel, type Bundle } from "./types";
+import { FS } from "./kit";
 
 // ───────────── 편집 모델 ─────────────
 export type EBlock = { uid: string; data: unknown; kids: EBlock[] | null };
@@ -123,11 +124,11 @@ function NumField({ p, value, cfg, unit, error, readOnly, onChange }: {
       <input value={text} disabled={readOnly} inputMode="decimal" placeholder={defaultText(p, cfg, unit, detail)}
         aria-label={paramLabel(p)}
         onChange={(e) => { setText(e.target.value); onChange(parseNum(e.target.value)); }}
-        className={`w-40 rounded-lg border bg-white px-2 py-1 text-xs tabular-nums placeholder:text-gray-300 disabled:bg-gray-50
+        className={`w-40 rounded-lg border bg-white px-2 py-1 ${FS.body} tabular-nums placeholder:text-gray-300 disabled:bg-gray-50
           ${error ? "border-rose-400 bg-rose-50" : "border-gray-200"}`} />
-      <span className="whitespace-nowrap text-[11px] text-gray-500">{unit}</span>
+      <span className={`whitespace-nowrap ${FS.small} text-gray-500`}>{unit}</span>
       {(range || p.type === "int") && (
-        <span className="whitespace-nowrap text-[10px] text-gray-400">{range}{p.type === "int" && `${range ? " · " : ""}정수`}</span>
+        <span className={`whitespace-nowrap ${FS.small} text-gray-400`}>{range}{p.type === "int" && `${range ? " · " : ""}정수`}</span>
       )}
     </span>
   );
@@ -141,7 +142,7 @@ function Choice({ value, options, placeholder, error, readOnly, onChange, label 
   return (
     <select value={known ? (value as string | undefined) ?? "" : "__raw"} disabled={readOnly} aria-label={label}
       onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value === "__raw" ? value : e.target.value)}
-      className={`rounded-lg border bg-white px-1.5 py-1 text-xs disabled:bg-gray-50 ${value === undefined || value === null ? "text-gray-400" : "text-gray-800"}
+      className={`rounded-lg border bg-white px-1.5 py-1 ${FS.body} disabled:bg-gray-50 ${value === undefined || value === null ? "text-gray-400" : "text-gray-800"}
         ${error ? "border-rose-400 bg-rose-50" : "border-gray-200"}`}>
       <option value="">{placeholder}</option>
       {!known && <option value="__raw">{`그대로: ${JSON.stringify(value)}`}</option>}
@@ -185,7 +186,7 @@ function ParamField({ p, d, params, env, bundle, error, readOnly, set }: {
       return (
         <span className={`flex flex-wrap gap-3 rounded px-1 ${error ? "bg-rose-50 outline outline-1 outline-rose-300" : ""}`}>
           {(p.enum ?? []).map((e) => (
-            <label key={String(e)} className="flex items-center gap-1 text-xs text-gray-700">
+            <label key={String(e)} className={`flex items-center gap-1 ${FS.body} text-gray-700`}>
               <input type="checkbox" disabled={readOnly} checked={cur.includes(e)}
                 onChange={(ev) => {
                   const next = (p.enum ?? []).filter((x) => (x === e ? ev.target.checked : cur.includes(x)));
@@ -206,7 +207,7 @@ function ParamField({ p, d, params, env, bundle, error, readOnly, set }: {
             const keep = env.mustKeep.includes(s.no);
             return (
               <label key={s.no} title={`${s.desc ?? ""}${keep ? " — 파워 끄기 단계는 뺄 수 없음" : ""}`}
-                className={`flex items-center gap-1 text-xs ${keep ? "text-gray-300" : "text-gray-700"}`}>
+                className={`flex items-center gap-1 ${FS.body} ${keep ? "text-gray-300" : "text-gray-700"}`}>
                 <input type="checkbox" disabled={readOnly || (keep && !cur.includes(s.no))} checked={cur.includes(s.no)}
                   onChange={(ev) => {
                     const next = env.stopNos.filter((n) => (n === s.no ? ev.target.checked : cur.includes(n)));
@@ -225,7 +226,7 @@ function ParamField({ p, d, params, env, bundle, error, readOnly, set }: {
       return (
         <span className={`grid gap-x-3 gap-y-1 rounded px-1 sm:grid-cols-2 ${error ? "bg-rose-50 outline outline-1 outline-rose-300" : ""}`}>
           {defs.watchItems.map((w) => (
-            <label key={w.item} className="flex items-center justify-between gap-1 text-xs text-gray-600" title={detail ? w.rule : undefined}>
+            <label key={w.item} className={`flex items-center justify-between gap-1 ${FS.body} text-gray-600`} title={detail ? w.rule : undefined}>
               {w.label}
               <Choice value={typeof cur[w.item] === "boolean" ? String(cur[w.item]) : cur[w.item]} options={BOOL_OPTS}
                 placeholder={base[w.item] ? "기본(켬)" : "기본(끔)"} readOnly={readOnly} label={w.label}
@@ -250,8 +251,8 @@ function ParamField({ p, d, params, env, bundle, error, readOnly, set }: {
       <span className="flex flex-wrap items-center gap-1.5">
         <DurationInput sec={typeof value === "number" ? value : null} onChange={(x) => set(p.name, x === null ? undefined : x)}
           error={!!error} disabled={readOnly} label={paramLabel(p)} intOnly={p.type === "int"} />
-        {value === undefined && <span className="text-[10px] text-[#8A929D]">{defaultText(p, cfg, "s", detail)}</span>}
-        {(lo !== null || hi !== null) && <span className="text-[10px] text-[#8A929D]">{lo !== null ? fmtSec(lo) : ""}~{hi !== null ? fmtSec(hi) : ""}</span>}
+        {value === undefined && <span className={`${FS.small} text-[#8A929D]`}>{defaultText(p, cfg, "s", detail)}</span>}
+        {(lo !== null || hi !== null) && <span className={`${FS.small} text-[#8A929D]`}>{lo !== null ? fmtSec(lo) : ""}~{hi !== null ? fmtSec(hi) : ""}</span>}
       </span>
     );
   }
@@ -265,7 +266,7 @@ function Msg({ m, tone, names, strip }: { m: string; tone: "error" | "warn"; nam
   const { detail } = useChk2Mode();
   const body = strip && m.startsWith(strip) ? m.slice(strip.length) : m;
   return (
-    <p title={m} className={`text-[11px] ${tone === "error" ? "font-semibold text-rose-600" : "text-amber-700"}`}>
+    <p title={m} className={`${FS.small} ${tone === "error" ? "font-semibold text-rose-600" : "text-amber-700"}`}>
       {humanize(body, names)}{detail && <span className="ml-1 font-mono font-normal opacity-70">{m}</span>}
     </p>
   );
@@ -301,7 +302,7 @@ export function BlockForm({ place, env, bundle, readOnly, errors, warnings, name
   if (!d) {
     return (
       <div className="space-y-1">
-        <p className="text-sm font-bold text-gray-700">알 수 없는 블록 <span className="font-mono text-xs text-gray-400">{JSON.stringify(data?.type ?? e.data)}</span></p>
+        <p className={`${FS.card} font-bold text-gray-700`}>알 수 없는 블록 <span className={`font-mono ${FS.body} text-gray-400`}>{JSON.stringify(data?.type ?? e.data)}</span></p>
         {errs.map((m, i) => <Msg key={i} m={m} tone="error" names={names} />)}
       </div>
     );
@@ -311,14 +312,14 @@ export function BlockForm({ place, env, bundle, readOnly, errors, warnings, name
     const err = fieldErr(p.name);
     return (
       <div key={p.name} className="grid gap-x-3 gap-y-0.5 py-1.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
-        <span className="pt-1 text-xs font-medium text-gray-700" title={detail ? p.desc : undefined}>
+        <span className={`pt-1 ${FS.body} font-medium text-gray-700`} title={detail ? p.desc : undefined}>
           {paramLabel(p)}{p.required && <span className="text-rose-500">*</span>}
-          {detail && <span className="block font-mono text-[10px] font-normal text-gray-400">{p.name}</span>}
+          {detail && <span className={`block font-mono ${FS.small} font-normal text-gray-400`}>{p.name}</span>}
         </span>
         <span className="min-w-0">
           <ParamField p={p} d={d} params={params} env={env} bundle={bundle} error={err} readOnly={readOnly} set={set} />
-          {p.help && <span className="mt-0.5 block text-[10px] leading-snug text-gray-400">{p.help}</span>}
-          {detail && p.desc && <span className="block text-[10px] text-gray-300">{p.desc}</span>}
+          {p.help && <span className={`mt-0.5 block ${FS.small} leading-snug text-gray-400`}>{p.help}</span>}
+          {detail && p.desc && <span className={`block ${FS.small} text-gray-300`}>{p.desc}</span>}
           {err && <Msg m={err} tone="error" names={names} strip={`${pre}${p.name}: `} />}
         </span>
       </div>
@@ -331,21 +332,21 @@ export function BlockForm({ place, env, bundle, readOnly, errors, warnings, name
   return (
     <div className="space-y-2">
       <div>
-        <p className="text-sm font-bold text-gray-900">
-          <span className="mr-1.5 rounded bg-gray-100 px-1.5 font-mono text-[11px] text-gray-500">{path}</span>{d.label}
-          {typeof data?.label === "string" && data.label && <span className="ml-1.5 text-xs font-normal text-gray-500">· {data.label}</span>}
-          {detail && <span className="ml-1.5 font-mono text-[10px] font-normal text-gray-400">{d.type}</span>}
+        <p className={`${FS.card} font-bold text-gray-900`}>
+          <span className={`mr-1.5 rounded bg-gray-100 px-1.5 font-mono ${FS.small} text-gray-500`}>{path}</span>{d.label}
+          {typeof data?.label === "string" && data.label && <span className={`ml-1.5 ${FS.body} font-normal text-gray-500`}>· {data.label}</span>}
+          {detail && <span className={`ml-1.5 font-mono ${FS.small} font-normal text-gray-400`}>{d.type}</span>}
         </p>
-        {d.help && <p className="mt-0.5 text-[11px] text-gray-500">{d.help}</p>}
-        {detail && d.desc && <p className="text-[10px] text-gray-400">{d.desc}</p>}
+        {d.help && <p className={`mt-0.5 ${FS.small} text-gray-500`}>{d.help}</p>}
+        {detail && d.desc && <p className={`${FS.small} text-gray-400`}>{d.desc}</p>}
       </div>
       {blockErrs.map((m, i) => <Msg key={`e${i}`} m={m} tone="error" names={names} strip={pre} />)}
       {warns.map((m, i) => <Msg key={`w${i}`} m={m} tone="warn" names={names} strip={pre} />)}
       {basic.length > 0 ? <div className="divide-y divide-gray-50">{basic.map(field)}</div>
-        : <p className="text-[11px] text-gray-400">설정할 값이 없는 블록입니다.</p>}
-      {d.container && <p className="rounded-lg bg-[#EEF3FF] px-2 py-1 text-[11px] text-[#1D4ED8]">안쪽 블록은 블록 목록에서 고칩니다. 블록 추가에서 &apos;반복 안에 넣기&apos;를 고르세요.</p>}
+        : <p className={`${FS.small} text-gray-400`}>설정할 값이 없는 블록입니다.</p>}
+      {d.container && <p className={`rounded-lg bg-[#EEF3FF] px-2 py-1 ${FS.small} text-[#1D4ED8]`}>안쪽 블록은 블록 목록에서 고칩니다. 블록 추가에서 &apos;반복 안에 넣기&apos;를 고르세요.</p>}
       <div className="rounded-xl border border-gray-100">
-        <button onClick={() => setAdv((o) => !o)} className="flex w-full items-center gap-1 px-2 py-1.5 text-[11px] font-semibold text-gray-500 hover:text-gray-700">
+        <button onClick={() => setAdv((o) => !o)} className={`flex w-full items-center gap-1 px-2 py-1.5 ${FS.small} font-semibold text-gray-500 hover:text-gray-700`}>
           {advOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 고급 설정
           <span className="font-normal text-gray-400">— {advanced.length ? `${advanced.map(paramLabel).join("·")} · ` : ""}이름표·공정 상태</span>
         </button>
@@ -353,23 +354,23 @@ export function BlockForm({ place, env, bundle, readOnly, errors, warnings, name
           <div className="border-t border-gray-50 px-2 pb-2">
             {advanced.map(field)}
             <div className="grid gap-x-3 py-1.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
-              <span className="pt-1 text-xs font-medium text-gray-700">이름표</span>
+              <span className={`pt-1 ${FS.body} font-medium text-gray-700`}>이름표</span>
               <span>
                 <input defaultValue={typeof data?.label === "string" ? data.label : ""} disabled={readOnly}
                   maxLength={env.defs.limits.labelMax} placeholder={d.label} aria-label="이름표"
                   onChange={(ev) => setKey("label", ev.target.value === "" ? undefined : ev.target.value)}
-                  className="w-48 rounded-lg border border-gray-200 px-2 py-1 text-xs placeholder:text-gray-300" />
-                <span className="mt-0.5 block text-[10px] text-gray-400">목록·로그에 보일 이름(비우면 블록 이름)</span>
+                  className={`w-48 rounded-lg border border-gray-200 px-2 py-1 ${FS.body} placeholder:text-gray-300`} />
+                <span className={`mt-0.5 block ${FS.small} text-gray-400`}>목록·로그에 보일 이름(비우면 블록 이름)</span>
               </span>
             </div>
             {(d.stages.length > 0 || d.type === "pressure") && (
               <div className="grid gap-x-3 py-1.5 sm:grid-cols-[9rem_minmax(0,1fr)]">
-                <span className="pt-1 text-xs font-medium text-gray-700">공정 상태</span>
+                <span className={`pt-1 ${FS.body} font-medium text-gray-700`}>공정 상태</span>
                 <span>
                   <Choice value={data?.stage} readOnly={readOnly} placeholder={`기본 ${stateLabel(bundle, stageDefault)}`} label="공정 상태"
                     options={[d.stage, ...d.stages].filter(Boolean).map((s) => ({ v: s, label: detail ? `${stateLabel(bundle, s)} · ${s}` : stateLabel(bundle, s) }))}
                     error={errs.find((m) => m.startsWith(`${pre}stage `))} onChange={(v) => setKey("stage", v)} />
-                  <span className="mt-0.5 block text-[10px] text-gray-400">상태 카드·기록에 보일 공정 상태</span>
+                  <span className={`mt-0.5 block ${FS.small} text-gray-400`}>상태 카드·기록에 보일 공정 상태</span>
                   {errs.filter((m) => m.startsWith(`${pre}stage `)).map((m, i) => <Msg key={i} m={m} tone="error" names={names} strip={pre} />)}
                 </span>
               </div>
@@ -416,14 +417,14 @@ export function ExpandedView({ exp, bundle, showParams }: { exp: ExpBlock[]; bun
     return (
       <li key={b.no} className="rounded-lg bg-white px-2 py-1">
         <div className="flex flex-wrap items-baseline gap-1.5">
-          <span className="font-mono text-[10px] text-gray-400">{b.no}</span>
-          <b className="text-[11px] text-gray-800">{b.label || label(b.type)}</b>
-          {sum && <span className="text-[11px] text-gray-500">{sum}</span>}
-          {b.auto && <span className="rounded bg-indigo-50 px-1 text-[10px] font-semibold text-indigo-700">자동으로 붙음</span>}
-          <span className="ml-auto text-[10px] tabular-nums text-gray-400">{t}{detail && ` · ${stateLabel(bundle, b.stage)}`}</span>
+          <span className={`font-mono ${FS.small} text-gray-400`}>{b.no}</span>
+          <b className={`${FS.small} text-gray-800`}>{b.label || label(b.type)}</b>
+          {sum && <span className={`${FS.small} text-gray-500`}>{sum}</span>}
+          {b.auto && <span className={`rounded bg-indigo-50 px-1 ${FS.small} font-semibold text-indigo-700`}>자동으로 붙음</span>}
+          <span className={`ml-auto ${FS.small} tabular-nums text-gray-400`}>{t}{detail && ` · ${stateLabel(bundle, b.stage)}`}</span>
         </div>
         {detail && showParams && (
-          <p className="text-[10px] text-gray-400">
+          <p className={`${FS.small} text-gray-400`}>
             {Object.entries(b.params).filter(([, v]) => v !== null && v !== undefined && v !== false)
               .map(([k, v]) => `${k} ${typeof v === "object" ? JSON.stringify(v) : String(v)}`).join(" · ")}
           </p>
@@ -431,7 +432,7 @@ export function ExpandedView({ exp, bundle, showParams }: { exp: ExpBlock[]; bun
         {detail && b.steps.length > 0 && (
           <ol className="mt-0.5 space-y-px">
             {b.steps.map((s, i) => (
-              <li key={i} className={`flex gap-2 text-[11px] ${s.internal ? "italic text-gray-400" : "text-gray-600"}`}>
+              <li key={i} className={`flex gap-2 ${FS.small} ${s.internal ? "italic text-gray-400" : "text-gray-600"}`}>
                 <span className="min-w-0 flex-1">
                   {s.message}
                   {s.action === "END_STOP" && isObj(s.spec) && Array.isArray(s.spec.skip) && s.spec.skip.length > 0
@@ -453,7 +454,7 @@ export function ExpandedView({ exp, bundle, showParams }: { exp: ExpBlock[]; bun
         return (
           <li key={gr.key} className="rounded-lg border border-indigo-100 bg-indigo-50/40 p-1">
             <button onClick={() => setOpen((o) => ({ ...o, [gr.key]: !isOpen }))}
-              className="flex w-full items-center gap-1 text-[11px] font-semibold text-indigo-700">
+              className={`flex w-full items-center gap-1 ${FS.small} font-semibold text-indigo-700`}>
               {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />} {gr.head}
               <span className="font-normal text-indigo-500">· 블록 {gr.items.length}개{detail && ` · 단계 ${stepCount(gr.items)}개`}</span>
             </button>
@@ -583,16 +584,16 @@ export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, err
             ${drag === e.uid ? "opacity-40" : ""}`}>
           {locked ? <Lock size={12} className="shrink-0 text-[#8A929D]" aria-label="시작한 블록 — 잠김" />
             : !readOnly && <GripVertical size={13} className="shrink-0 cursor-grab text-[#8A929D]" />}
-          <span className="shrink-0 font-mono text-[10px] text-[#5B6470]">{p.path}</span>
+          <span className={`shrink-0 font-mono ${FS.small} text-[#5B6470]`}>{p.path}</span>
           <span className={`h-2 w-2 shrink-0 rounded-full ${errs ? "bg-[#B42318]" : warns ? "bg-[#B54708]" : "bg-transparent"}`}
             title={errs ? `오류 ${errs}` : warns ? `경고 ${warns}` : undefined} />
           <span className="min-w-0 flex-1">
-            <span className={`block truncate text-xs font-semibold ${locked ? "text-[#5B6470]" : "text-[#1B1F24]"}`}>
+            <span className={`block truncate ${FS.body} font-semibold ${locked ? "text-[#5B6470]" : "text-[#1B1F24]"}`}>
               {d ? d.label : "알 수 없는 블록"}
               {typeof data?.label === "string" && data.label && <span className="ml-1 font-normal text-[#5B6470]">· {data.label}</span>}
               {d?.container && <span className="ml-1 font-normal text-[#1D4ED8]">· {e.kids?.length ?? 0}개를 {String(params.count ?? "?")}번</span>}
             </span>
-            {(sum || done) && <span className="block truncate text-[11px] text-[#5B6470]">{done ?? sum}</span>}
+            {(sum || done) && <span className={`block truncate ${FS.small} text-[#5B6470]`}>{done ?? sum}</span>}
           </span>
           {!ro && (
             <span className="flex shrink-0 gap-0.5 text-[#5B6470] opacity-70 group-hover:opacity-100">
@@ -604,7 +605,7 @@ export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, err
           )}
         </li>
         {e.kids && (e.kids.length ? rowsOf(e.kids) : (
-          <li style={{ marginLeft: (p.depth + 1) * 18 }} className="rounded-[10px] border border-dashed border-[#C7D5FB] px-2 py-1 text-[11px] text-[#1D4ED8]">
+          <li style={{ marginLeft: (p.depth + 1) * 18 }} className={`rounded-[10px] border border-dashed border-[#C7D5FB] px-2 py-1 ${FS.small} text-[#1D4ED8]`}>
             빈 반복 — 이 반복을 고르고 &apos;반복 안에 넣기&apos;로 블록을 넣으세요
           </li>
         ))}
@@ -616,11 +617,11 @@ export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, err
     <div className="space-y-2">
       <ol className="space-y-1">
         {rowsOf(tree)}
-        {!tree.length && <li className="rounded-[10px] border border-dashed border-[#D9DDE3] p-3 text-center text-[11px] text-[#5B6470]">블록이 없습니다 — 아래에서 블록을 넣으세요</li>}
+        {!tree.length && <li className={`rounded-[10px] border border-dashed border-[#D9DDE3] p-3 text-center ${FS.small} text-[#5B6470]`}>블록이 없습니다 — 아래에서 블록을 넣으세요</li>}
       </ol>
       {!readOnly && (
         <div className="rounded-[10px] border border-[#E3E6EA] bg-[#F5F6F8] p-2">
-          <div className="mb-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-[#1B1F24]">
+          <div className={`mb-1 flex flex-wrap items-center gap-2 ${FS.small} font-semibold text-[#1B1F24]`}>
             블록 추가
             <span className="font-normal text-[#5B6470]">{selPlace && !lockedOf(selPlace) ? `— ${selPlace.path} 뒤에` : lockTop ? "— 시작한 블록 뒤에" : "— 끝에"}</span>
             {canInto && (
@@ -635,10 +636,10 @@ export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, err
               if (!defs.length) return null;
               return (
                 <div key={gr.key} className="flex flex-wrap items-center gap-1">
-                  <span className="w-16 shrink-0 text-[10px] text-[#5B6470]">{gr.label}</span>
+                  <span className={`w-16 shrink-0 ${FS.small} text-[#5B6470]`}>{gr.label}</span>
                   {defs.map((d) => (
                     <button key={d.type} onClick={() => add(d.type)} disabled={!depthOk(d)} title={d.help || d.label}
-                      className="h-8 rounded-[8px] border border-[#D9DDE3] bg-white px-2 text-[11px] font-semibold text-[#1B1F24] hover:border-[#1D4ED8] hover:bg-[#E8EEFC] disabled:opacity-40">
+                      className={`h-8 rounded-[8px] border border-[#D9DDE3] bg-white px-2 ${FS.small} font-semibold text-[#1B1F24] hover:border-[#1D4ED8] hover:bg-[#E8EEFC] disabled:opacity-40`}>
                       {d.label}
                     </button>
                   ))}
@@ -667,12 +668,12 @@ export function BlockPane({ tree, sel, env, bundle, readOnly, errors, warnings, 
   const places = useMemo(() => index(tree), [tree]);
   const names = useMemo(() => blockNames(bundle), [bundle]);
   const p = sel ? places.get(sel) ?? null : null;
-  if (!p) return <p className="text-[11px] text-[#5B6470]">블록을 고르면 설정이 여기에 보입니다.</p>;
+  if (!p) return <p className={`${FS.small} text-[#5B6470]`}>블록을 고르면 설정이 여기에 보입니다.</p>;
   const locked = p.top < lockTop;
   const update = (id: string, data: unknown) => onTree(mapTree(tree, id, (l, i) => l.map((x, j) => (j === i ? { ...x, data } : x))));
   return (
     <div className="space-y-2">
-      {locked && <p className="flex items-center gap-1 text-[11px] text-[#5B6470]"><Lock size={12} /> 시작했거나 끝난 블록 — 고칠 수 없습니다</p>}
+      {locked && <p className={`flex items-center gap-1 ${FS.small} text-[#5B6470]`}><Lock size={12} /> 시작했거나 끝난 블록 — 고칠 수 없습니다</p>}
       <BlockForm key={p.e.uid} place={p} env={env} bundle={bundle} readOnly={readOnly || locked}
         errors={errors} warnings={warnings} names={names} update={update} />
     </div>

@@ -14,7 +14,7 @@ import {
   checkEnvOf, checkHeaterRecipe, checkOutdated, checkProcessRecipe, manualRow, GOLDEN_EXPORT_VERSION, type Row,
 } from "@/lib/ops2/chk/recipe";
 import { fmtKst } from "@/lib/ops2/time";
-import { Btn, Card, Chip, Empty, Issue, Modal, SimpleConfirm, Tabs, type Ask, type Notice } from "./kit";
+import { FS, Btn, Card, Chip, Empty, Issue, Modal, SimpleConfirm, Tabs, type Ask, type Notice } from "./kit";
 import { useChk2Mode } from "./mode";
 import { HeaterEditor, ProcessEditor, isBlockRow, toERows, type ERow } from "./Chk2RecipeEditor";
 import { blockRowLines } from "./Chk2BlockEditor";
@@ -41,7 +41,7 @@ function Menu({ anchor, onClose, items }: { anchor: HTMLElement; onClose: () => 
     <>
       <div className="fixed inset-0 z-[85]" onClick={onClose} />
       <div style={{ left: Math.max(8, Math.min(a.right - 176, window.innerWidth - 184)), top }}
-        className="fixed z-[86] w-44 rounded-[10px] border border-[#D9DDE3] bg-white p-1 text-xs shadow-lg">
+        className={`fixed z-[86] w-44 rounded-[10px] border border-[#D9DDE3] bg-white p-1 ${FS.body} shadow-lg`}>
         {items.map((it) => (
           <button key={it.label} onClick={() => { onClose(); it.onClick(); }}
             className={`flex w-full rounded-[8px] px-2 py-2 text-left hover:bg-[#F5F6F8] ${it.danger ? "text-[#B42318]" : "text-[#1B1F24]"}`}>{it.label}</button>
@@ -252,7 +252,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
             : `장비 정의가 웹 검사 기준보다 옛것 — 장비 판단만 믿을 것(장비 정의 v${bundle?.version}, 웹 검사 v${GOLDEN_EXPORT_VERSION})`}
         </Issue>
       )}
-      {!env && bundle && <p className="text-[11px] text-[#5B6470]">장비 정의에 레시피 열이 없어 웹 검사를 하지 않습니다 — 장비 판단만.</p>}
+      {!env && bundle && <p className={`${FS.small} text-[#5B6470]`}>장비 정의에 레시피 열이 없어 웹 검사를 하지 않습니다 — 장비 판단만.</p>}
       {recipes.error && <Issue level="alarm">{recipes.error}</Issue>}
     </>
   );
@@ -271,7 +271,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
             <Chip>{KIND[draft.kind]} 레시피</Chip>
             <input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} disabled={readOnly}
               placeholder="레시피 이름(1~80자)" maxLength={80} aria-label="레시피 이름"
-              className="h-10 min-w-0 flex-1 rounded-[10px] border border-[#D9DDE3] px-3 text-sm font-semibold disabled:bg-[#F5F6F8]" />
+              className={`h-10 min-w-0 flex-1 rounded-[10px] border border-[#D9DDE3] px-3 ${FS.body} font-semibold disabled:bg-[#F5F6F8]`} />
             {statusChip}
             {!readOnly && (
               <>
@@ -283,8 +283,8 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
             )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {draft.id && <span className="mr-auto text-[11px] text-[#5B6470]">마지막 수정 {fmtKst(draft.updatedAt)}{readOnly && " · 조회만(저장은 장비 담당자·관리자)"}</span>}
-            {why && <span className="text-[11px] text-[#5B6470]">{why}</span>}
+            {draft.id && <span className={`mr-auto ${FS.small} text-[#5B6470]`}>마지막 수정 {fmtKst(draft.updatedAt)}{readOnly && " · 조회만(저장은 장비 담당자·관리자)"}</span>}
+            {why && <span className={`${FS.small} text-[#5B6470]`}>{why}</span>}
             {draft.kind === "process"
               ? <Btn kind="primary" lock={loadWhy} onClick={() => { setReveal(true); askLoadFull({ name: draft.name, rows: draft.rows.map((r) => r.data) }); }}><Upload size={14} /> 적재</Btn>
               : <Btn kind="dangerSolid" lock={runWhy} onClick={() => { setReveal(true); askHeaterRun(); }}><Flame size={14} /> 히터 레시피 실행</Btn>}
@@ -313,7 +313,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
               <Btn kind="primary" lock={!nameModal.name.trim() ? "이름을 넣으세요" : null}
                 onClick={() => { const n = nameModal.name; setNameModal(null); void save(n); }}>새로 저장</Btn></>}>
             <input value={nameModal.name} onChange={(e) => setNameModal({ ...nameModal, name: e.target.value })} maxLength={80} aria-label="새 이름"
-              className="h-10 w-full rounded-[10px] border border-[#D9DDE3] px-3 text-sm" />
+              className={`h-10 w-full rounded-[10px] border border-[#D9DDE3] px-3 ${FS.body}`} />
           </Modal>
         )}
       </Card>
@@ -331,15 +331,15 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
       <div className="space-y-3">
         {banner}
         {loaded && (
-          <p className="text-xs text-[#5B6470]">
+          <p className={`${FS.body} text-[#5B6470]`}>
             장비에 적재됨 <b className="text-[#1B1F24]">{loaded.name || "이름 없음"}</b> · {loaded.rows ?? "-"}행 — 시작·해제는 운전 탭
           </p>
         )}
         <Tabs small value={filter} onChange={setFilter}
           tabs={[{ key: "all", label: "전체" }, { key: "process", label: "공정" }, { key: "heater", label: "히터" }]} />
         <div className="overflow-x-auto rounded-[10px] border border-[#E3E6EA]">
-          <table className="min-w-full text-xs">
-            <thead className="bg-[#F5F6F8] text-[11px] text-[#5B6470]">
+          <table className={`min-w-full ${FS.body}`}>
+            <thead className={`bg-[#F5F6F8] ${FS.small} text-[#5B6470]`}>
               <tr>
                 {["이름", "종류", "행 수", "요약", "검사", "수정 시각", ""].map((h, i) => (
                   <th key={i} className={`px-3 py-2 font-semibold ${h === "행 수" ? "text-right" : "text-left"}`}>{h}</th>
@@ -390,7 +390,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
             </tbody>
           </table>
         </div>
-        {detail && <p className="text-[11px] text-[#8A929D]">레시피는 CHK2·CHK2-SIM 이 같이 씁니다</p>}
+        {detail && <p className={`${FS.small} text-[#8A929D]`}>레시피는 CHK2·CHK2-SIM 이 같이 씁니다</p>}
       </div>
       {menu && (
         <Menu anchor={menu.el} onClose={() => setMenu(null)} items={[
@@ -405,7 +405,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
             <Btn kind="primary" lock={!nameModal.name.trim() ? "이름을 넣으세요" : null}
               onClick={() => { const it = nameModal.item!, n = nameModal.name.trim(); setNameModal(null); void rename(it, n); }}>바꾸기</Btn></>}>
           <input value={nameModal.name} onChange={(e) => setNameModal({ ...nameModal, name: e.target.value })} maxLength={80} aria-label="새 이름"
-            className="h-10 w-full rounded-[10px] border border-[#D9DDE3] px-3 text-sm" />
+            className={`h-10 w-full rounded-[10px] border border-[#D9DDE3] px-3 ${FS.body}`} />
         </Modal>
       )}
       {confirm?.what === "delete" && (

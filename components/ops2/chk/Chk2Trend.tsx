@@ -5,7 +5,7 @@
 // 글자는 그래프 안에 두지 않는다(Chk2SummaryChart 규칙): 마지막 값은 오른쪽 띠에 지시선으로, 눈금은 왼쪽·아래 띠, 범례는 위 띠.
 // 한 그래프 = 단위 하나(두 축 그래프는 쓰지 않는다). 색은 정해진 순서(값과 그 목표는 같은 색 — 목표는 점선).
 import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
-import { Card, Empty, Tabs } from "./kit";
+import { FS, FSPX, Card, Empty, Tabs } from "./kit";
 import type { TrendPt } from "./useChk2";
 import type { SummaryRow } from "./Chk2SummaryChart";
 
@@ -62,7 +62,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
     return d;
   };
   const lastPts = lines.map((l) => [...l.pts].reverse().find((p) => p.v !== null && p.t >= t0 && p.t <= t1) ?? null);
-  const labY = spread(lastPts.map((p) => (p ? y(p.v as number) : TOP + ph / 2)), 12, TOP + 2, TOP + ph);
+  const labY = spread(lastPts.map((p) => (p ? y(p.v as number) : TOP + ph / 2)), 14, TOP + 2, TOP + ph);
   const near = (l: Line, t: number) => {
     let best: { t: number; v: number | null } | null = null;
     for (const p of l.pts) if (p.t <= t && (!best || p.t > best.t)) best = p;
@@ -76,13 +76,13 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
         const px = e.clientX - r.left;
         setHover(px < LEFT || px > LEFT + pw ? null : t0 + ((px - LEFT) / pw) * (t1 - t0));
       }}>
-      <text x={LEFT} y={12} fontSize={11} fontWeight={700} fill="#1B1F24">{title}<tspan fontWeight={400} fill="#5B6470"> ({unit})</tspan></text>
+      <text x={LEFT} y={12} fontSize={FSPX.body} fontWeight={700} fill="#1B1F24">{title}<tspan fontWeight={400} fill="#5B6470"> ({unit})</tspan></text>
       {lines.reduce<{ x: number; el: ReactElement[] }>((acc, l) => {
         const w = 18 + [...l.label].reduce((n, c) => n + (c.charCodeAt(0) > 0x2000 ? 10 : 6), 0);
         acc.el.push(
           <g key={l.key} transform={`translate(${acc.x},4)`}>
             <line x1={0} x2={12} y1={5} y2={5} stroke={l.color} strokeWidth={2} strokeDasharray={l.dashed ? "3 2" : undefined} />
-            <text x={16} y={9} fontSize={10} fill="#5B6470">{l.label}</text>
+            <text x={16} y={9} fontSize={FSPX.small} fill="#5B6470">{l.label}</text>
           </g>);
         acc.x += w + 10;
         return acc;
@@ -90,14 +90,14 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
       {yTicks.map((v) => (
         <g key={v}>
           <line x1={LEFT} x2={LEFT + pw} y1={y(v)} y2={y(v)} stroke="#E3E6EA" />
-          <text x={LEFT - 6} y={y(v) + 3.5} fontSize={10} fill="#5B6470" textAnchor="end">{fmt(v)}</text>
+          <text x={LEFT - 6} y={y(v) + 3.5} fontSize={FSPX.small} fill="#5B6470" textAnchor="end">{fmt(v)}</text>
         </g>
       ))}
       <line x1={LEFT} x2={LEFT + pw} y1={TOP + ph} y2={TOP + ph} stroke="#C9CED6" />
       {xTicks.map((t) => (
         <g key={t}>
           <line x1={x(t)} x2={x(t)} y1={TOP + ph} y2={TOP + ph + 4} stroke="#C9CED6" />
-          <text x={x(t)} y={TOP + ph + 15} fontSize={10} fill="#5B6470" textAnchor="middle">{hm(t)}</text>
+          <text x={x(t)} y={TOP + ph + 15} fontSize={FSPX.small} fill="#5B6470" textAnchor="middle">{hm(t)}</text>
         </g>
       ))}
       {lines.map((l) => (
@@ -108,7 +108,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
         <g key={lines[k].key}>
           <polyline fill="none" stroke="#C9CED6" strokeWidth={1}
             points={`${x(p.t) + 3},${y(p.v as number)} ${LEFT + pw + 8},${y(p.v as number)} ${LEFT + pw + 16},${labY[k]}`} />
-          <text x={LEFT + pw + 20} y={labY[k] + 3.5} fontSize={10} fill={lines[k].dashed ? "#5B6470" : "#133A7C"} fontWeight={lines[k].dashed ? 400 : 700}>
+          <text x={LEFT + pw + 20} y={labY[k] + 3.5} fontSize={FSPX.small} fill={lines[k].dashed ? "#5B6470" : "#133A7C"} fontWeight={lines[k].dashed ? 400 : 700}>
             {fmt(p.v as number)}{lines[k].dashed ? " 목표" : ""}
           </text>
         </g>
@@ -193,7 +193,7 @@ export default function Chk2Trend({ trend, equipment, runId, local, nowMs }: {
   return (
     <Card title="추세" right={<div className="w-56"><Tabs small tabs={tabs} value={range} onChange={setRange} /></div>}>
       <div ref={box} className="min-w-0">
-        {range !== "run" && <p className="mb-1 text-[11px] text-[#5B6470]">이 화면을 연 뒤부터 쌓은 값입니다(2초 간격).</p>}
+        {range !== "run" && <p className={`mb-1 ${FS.small} text-[#5B6470]`}>이 화면을 연 뒤부터 쌓은 값입니다(2초 간격).</p>}
         {range === "run" && rows === null ? <Empty>1분 요약을 읽는 중…</Empty>
           : !panels.length ? <Empty>그릴 값이 없습니다 — 이번 공정이 쓰는 압력·파워·히터 값이 들어오면 그립니다</Empty>
           : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} />)}

@@ -3,6 +3,7 @@
 // 챔버K v2 입력 칸(W-10) — 시간은 분·초 두 칸(1시간 넘으면 시·분·초), 저장은 열·값의 단위 그대로(s 는 초, min 은 분).
 // 분 단위 저장은 장비가 ceil(분 × 60) 으로 초를 만든다 — 넣은 초가 그대로 나오도록 분 값을 고른다(minutesFor).
 import { useState } from "react";
+import { FS } from "./kit";
 
 /** 초 → 분(장비 ceil(분×60) 이 정확히 그 초가 되게 — 부동소수 오차로 1 초 늘지 않게 한 칸씩 내린다) */
 export function minutesFor(sec: number): number {
@@ -38,9 +39,9 @@ export function DurationInput({ sec, onChange, disabled, error, label, intOnly }
     <span className="flex items-center gap-1">
       <input value={txt[k]} disabled={disabled} inputMode="decimal" aria-label={`${label} ${unit}`}
         onChange={(e) => { if (NUM.test(e.target.value)) emit({ ...txt, [k]: e.target.value }); }}
-        className={`h-9 w-14 rounded-[8px] border bg-white px-2 text-right text-xs tabular-nums disabled:bg-[#F5F6F8] disabled:text-[#8A929D] ${
+        className={`h-9 w-14 rounded-[8px] border bg-white px-2 text-right ${FS.body} tabular-nums disabled:bg-[#F5F6F8] disabled:text-[#8A929D] ${
           error ? "border-[#B42318] bg-[#FEE4E2]" : "border-[#D9DDE3]"}`} />
-      <span className="text-[11px] text-[#5B6470]">{unit}</span>
+      <span className={`${FS.small} text-[#5B6470]`}>{unit}</span>
     </span>
   );
   return (
@@ -50,7 +51,7 @@ export function DurationInput({ sec, onChange, disabled, error, label, intOnly }
       {box("s", "초")}
       {!long && !disabled && (
         <button type="button" onClick={() => { setLong(true); setTxt(parts(sec, true)); }}
-          className="text-[10px] text-[#5B6470] underline">시간 칸</button>
+          className={`${FS.small} text-[#5B6470] underline`}>시간 칸</button>
       )}
     </span>
   );

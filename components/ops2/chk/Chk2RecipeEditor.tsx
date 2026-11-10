@@ -13,7 +13,7 @@ import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, Copy, GripVertical, Play, Plus, Repeat, Timer, Trash2, Wand2 } from "lucide-react";
 import { delaySeconds, type ColDef, type RecipeCheck, type Row, type RowCheck } from "@/lib/ops2/chk/recipe";
 import { expectedTime, type BlockEnv } from "@/lib/ops2/chk/blocks";
-import { Btn, Chip, Empty, SimpleConfirm, Tile } from "./kit";
+import { FS, Btn, Chip, Empty, SimpleConfirm, Tile } from "./kit";
 import { BlockPane, BlockTree, ExpandedView, TopMessages, countBlocks, fmtSec, fromJson, toJson, treeAct, type EBlock } from "./Chk2BlockEditor";
 import { DurationInput, minutesFor } from "./inputs";
 import { colRange, paramValue, rangeText } from "./logic";
@@ -53,7 +53,7 @@ const offCol = (b: Bundle | null, c: ColDef) => DEVICE_COL.some(([re, k]) => re.
 function Msg({ m, names, tone = "error" }: { m: string; names: Record<string, string>; tone?: "error" | "warn" }) {
   const { detail } = useChk2Mode();
   return (
-    <p title={m} className={`text-[11px] leading-snug ${tone === "error" ? "font-semibold text-[#B42318]" : "text-[#B54708]"}`}>
+    <p title={m} className={`${FS.small} leading-snug ${tone === "error" ? "font-semibold text-[#B42318]" : "text-[#B54708]"}`}>
       {humanize(m.replace(/^[a-z0-9_]+: /, ""), names)}{detail && <span className="ml-1 font-mono font-normal opacity-70">{m}</span>}
     </p>
   );
@@ -71,16 +71,16 @@ export function ColField({ col, cols, value, onChange, error, bundle, readOnly, 
   const range = colRange(bundle, col);
   const req = requiredText(col, cols);
   const head = (
-    <span className="text-xs font-medium text-[#1B1F24]">
+    <span className={`${FS.body} font-medium text-[#1B1F24]`}>
       {colLabel(col)}{col.required === "always" && <span className="text-[#B42318]">*</span>}
-      {req && col.required !== "always" && <span className="ml-1 text-[10px] font-normal text-[#5B6470]">{req}</span>}
-      {detail && <span className="ml-1 font-mono text-[10px] font-normal text-[#8A929D]">{col.v1Name || col.name}</span>}
+      {req && col.required !== "always" && <span className={`ml-1 ${FS.small} font-normal text-[#5B6470]`}>{req}</span>}
+      {detail && <span className={`ml-1 font-mono ${FS.small} font-normal text-[#8A929D]`}>{col.v1Name || col.name}</span>}
     </span>
   );
   let input: ReactNode;
   if (col.type === "bool") {
     input = (
-      <label className="inline-flex h-9 items-center gap-2 text-xs">
+      <label className={`inline-flex h-9 items-center gap-2 ${FS.body}`}>
         <input type="checkbox" checked={value === true} disabled={ro} aria-label={colLabel(col)}
           onChange={(e) => onChange(e.target.checked ? true : undefined)} className="h-4 w-4" />
         {value === true ? "사용" : "안 씀"}
@@ -95,9 +95,9 @@ export function ColField({ col, cols, value, onChange, error, bundle, readOnly, 
         <input value={text} disabled={ro} inputMode={col.type === "str" ? "text" : "decimal"} aria-label={colLabel(col)}
           placeholder={range ? rangeText(range) : ""}
           onChange={(e) => { setText(e.target.value); onChange(col.type === "str" ? (e.target.value === "" ? undefined : e.target.value) : parseCell(e.target.value)); }}
-          className={`h-9 ${col.type === "str" ? "w-56" : "w-32"} rounded-[8px] border bg-white px-2 text-xs tabular-nums placeholder:text-[#8A929D]
+          className={`h-9 ${col.type === "str" ? "w-56" : "w-32"} rounded-[8px] border bg-white px-2 ${FS.body} tabular-nums placeholder:text-[#8A929D]
             disabled:bg-[#F5F6F8] disabled:text-[#8A929D] ${error ? "border-[#B42318] bg-[#FEE4E2]" : "border-[#D9DDE3]"}`} />
-        {col.unit && <span className="text-[11px] text-[#5B6470]">{col.unit}</span>}
+        {col.unit && <span className={`${FS.small} text-[#5B6470]`}>{col.unit}</span>}
       </span>
     );
   }
@@ -106,10 +106,10 @@ export function ColField({ col, cols, value, onChange, error, bundle, readOnly, 
       <span className="pt-2">{head}</span>
       <span className="min-w-0">
         {input}
-        {off && <span className="ml-2 text-[11px] text-[#5B6470]">장비 설정에서 꺼짐</span>}
-        {range && col.type !== "bool" && col.unit !== "min" && <span className="ml-2 text-[10px] text-[#8A929D]">{rangeText(range)}</span>}
-        {col.zeroIsEmpty && <span className="ml-2 text-[10px] text-[#8A929D]">0 = 빈 값</span>}
-        {col.help && <span className="mt-0.5 block text-[10px] leading-snug text-[#5B6470]">{col.help}</span>}
+        {off && <span className={`ml-2 ${FS.small} text-[#5B6470]`}>장비 설정에서 꺼짐</span>}
+        {range && col.type !== "bool" && col.unit !== "min" && <span className={`ml-2 ${FS.small} text-[#8A929D]`}>{rangeText(range)}</span>}
+        {col.zeroIsEmpty && <span className={`ml-2 ${FS.small} text-[#8A929D]`}>0 = 빈 값</span>}
+        {col.help && <span className={`mt-0.5 block ${FS.small} leading-snug text-[#5B6470]`}>{col.help}</span>}
         {error && <Msg m={error} names={names} />}
       </span>
     </div>
@@ -140,7 +140,7 @@ function RowList<T extends { uid: string }>({ items, sel, onSel, onMove, readOnl
               sel === it.uid ? "border-[#1D4ED8] bg-[#E8EEFC] ring-1 ring-[#1D4ED8]" : over === i ? "border-dashed border-[#1D4ED8]" : "border-[#E3E6EA] bg-white hover:border-[#C9CED6]"}
               ${drag === i ? "opacity-40" : ""}`}>
             {!readOnly && <GripVertical size={13} className="mt-0.5 shrink-0 cursor-grab text-[#8A929D]" />}
-            <span className="mt-px w-5 shrink-0 text-right font-mono text-[11px] text-[#5B6470]">{i + 1}</span>
+            <span className={`mt-px w-5 shrink-0 text-right font-mono ${FS.small} text-[#5B6470]`}>{i + 1}</span>
             <span className="min-w-0 flex-1">{render(it, i)}</span>
             {!readOnly && (
               <span className="flex shrink-0 gap-0.5 text-[#5B6470] opacity-70 group-hover:opacity-100">
@@ -152,7 +152,7 @@ function RowList<T extends { uid: string }>({ items, sel, onSel, onMove, readOnl
             )}
           </li>
         ))}
-        {!items.length && <li className="rounded-[10px] border border-dashed border-[#D9DDE3] p-3 text-center text-[11px] text-[#5B6470]">비어 있습니다 — 아래에서 추가하세요</li>}
+        {!items.length && <li className={`rounded-[10px] border border-dashed border-[#D9DDE3] p-3 text-center ${FS.small} text-[#5B6470]`}>비어 있습니다 — 아래에서 추가하세요</li>}
       </ol>
       {!readOnly && addMenu}
     </div>
@@ -198,7 +198,7 @@ function ProcessForm({ row, cols, rc, bundle, readOnly, seen, onCell }: {
         if (!gc.length) return null;
         return (
           <Tile key={g || "-"} className="px-3 py-2">
-            {g && <p className="mb-1 text-[11px] font-semibold text-[#5B6470]">{g}</p>}
+            {g && <p className={`mb-1 ${FS.small} font-semibold text-[#5B6470]`}>{g}</p>}
             <div className="divide-y divide-[#F0F2F4]">
               {gc.map((c) => (
                 <ColField key={`${row.uid}:${c.name}`} col={c} cols={cols} value={row.data[c.name]} bundle={bundle} readOnly={readOnly} names={names}
@@ -222,7 +222,7 @@ function AutoPreview({ rc, bundle, onDirect, startWhy, onStart, readOnly }: {
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <p className="text-sm font-bold text-[#1B1F24]">공정 순서(자동)</p>
+        <p className={`${FS.card} font-bold text-[#1B1F24]`}>공정 순서(자동)</p>
         {t && <Chip>예상 {fmtSec(t.sec)}{t.open ? " 이상" : ""}</Chip>}
         <span className="ml-auto flex gap-2">
           {!readOnly && <Btn size="sm" lock={rc?.blocks ? null : "검사 오류를 고친 뒤"} onClick={onDirect}><Wand2 size={13} /> 직접 편집</Btn>}
@@ -231,12 +231,12 @@ function AutoPreview({ rc, bundle, onDirect, startWhy, onStart, readOnly }: {
       </div>
       {rc?.expanded ? <div className="max-h-[32rem] overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2"><ExpandedView exp={rc.expanded} bundle={bundle} /></div>
         : <Empty>값을 채우고 오류를 고치면 장비가 할 순서가 여기에 보입니다</Empty>}
-      {t && t.open > 0 && <p className="text-[11px] text-[#5B6470]">끝을 모르는 대기(압력·파워·히터 도달 등) {t.open}개 — 예상 시간은 그만큼 더 걸립니다</p>}
+      {t && t.open > 0 && <p className={`${FS.small} text-[#5B6470]`}>끝을 모르는 대기(압력·파워·히터 도달 등) {t.open}개 — 예상 시간은 그만큼 더 걸립니다</p>}
       <div>
-        <button onClick={() => setStop((o) => !o)} className="flex items-center gap-1 text-[11px] font-semibold text-[#5B6470]">
+        <button onClick={() => setStop((o) => !o)} className={`flex items-center gap-1 ${FS.small} font-semibold text-[#5B6470]`}>
           {stop ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 정지 순서 보기
         </button>
-        {stop && <ol className="mt-1 space-y-0.5 text-[11px] text-[#5B6470]">{(bundle?.stopSequence?.steps ?? []).map((s) => <li key={s.no}>{s.no}. {s.label || s.desc || s.act}</li>)}</ol>}
+        {stop && <ol className={`mt-1 space-y-0.5 ${FS.small} text-[#5B6470]`}>{(bundle?.stopSequence?.steps ?? []).map((s) => <li key={s.no}>{s.no}. {s.label || s.desc || s.act}</li>)}</ol>}
       </div>
     </div>
   );
@@ -259,18 +259,18 @@ function BlockRowPanes({ row, rc, env, bundle, readOnly, onRow, startWhy, onStar
     <>
       <div className="min-w-0 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
-          <p className="text-sm font-bold text-[#1B1F24]">블록 공정</p>
+          <p className={`${FS.card} font-bold text-[#1B1F24]`}>블록 공정</p>
           <Chip>블록 {countBlocks(row.data.blocks)}개</Chip>
           {t && <Chip>예상 {fmtSec(t.sec)}{t.open ? " 이상" : ""}</Chip>}
         </div>
-        <label className="block text-xs text-[#5B6470]">행 이름
+        <label className={`block ${FS.body} text-[#5B6470]`}>행 이름
           <input defaultValue={typeof row.data.process_name === "string" ? row.data.process_name : ""} disabled={readOnly} placeholder="비우면 장비가 정함"
             onChange={(e) => onRow(setKey({ ...row.data, blocks: tree.map(toJson) }, "process_name", e.target.value === "" ? undefined : e.target.value))}
-            className="mt-0.5 h-9 w-full rounded-[8px] border border-[#D9DDE3] px-2 text-xs text-[#1B1F24] disabled:bg-[#F5F6F8]" />
+            className={`mt-0.5 h-9 w-full rounded-[8px] border border-[#D9DDE3] px-2 ${FS.body} text-[#1B1F24] disabled:bg-[#F5F6F8]`} />
         </label>
         <TopMessages errors={errors} bundle={bundle} />
         <BlockTree tree={tree} onTree={commit} sel={sel} onSel={setSel} env={env} bundle={bundle} readOnly={readOnly} errors={errors} warnings={warnings} />
-        <p className="text-[11px] text-[#5B6470]">끝에 &apos;정상 끝 정지&apos;가 없으면 장비가 자동으로 붙입니다.</p>
+        <p className={`${FS.small} text-[#5B6470]`}>끝에 &apos;정상 끝 정지&apos;가 없으면 장비가 자동으로 붙입니다.</p>
       </div>
       <div className="min-w-0 space-y-3">
         <div className="rounded-[12px] border border-[#D9DDE3] bg-white p-3">
@@ -285,7 +285,7 @@ function BlockRowPanes({ row, rc, env, bundle, readOnly, onRow, startWhy, onStar
           <BlockPane tree={tree} sel={sel} env={env} bundle={bundle} readOnly={readOnly} errors={errors} warnings={warnings} onTree={commit} />
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => setPreview((o) => !o)} className="flex items-center gap-1 text-[11px] font-semibold text-[#5B6470]">
+          <button onClick={() => setPreview((o) => !o)} className={`flex items-center gap-1 ${FS.small} font-semibold text-[#5B6470]`}>
             {preview ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 실행 순서 미리보기
           </button>
           <span className="ml-auto"><Btn size="sm" kind="danger" lock={startWhy} onClick={onStart}><Play size={13} /> 이 행만 바로 시작</Btn></span>
@@ -354,12 +354,12 @@ export function ProcessEditor({ cols, rows, check, env, bundle, readOnly, reveal
           return (
             <>
               <span className="flex items-center gap-1.5">
-                <span className="truncate text-xs font-semibold text-[#1B1F24]">
+                <span className={`truncate ${FS.body} font-semibold text-[#1B1F24]`}>
                   {kind === "delay" ? `대기 ${fmtSec(delaySeconds(r.data.process_name) ?? 0)}` : typeof r.data.process_name === "string" && r.data.process_name ? r.data.process_name : "(이름 없음)"}
                 </span>
                 {show ? <Chip tone="alarm">오류 {errs}</Chip> : null}
               </span>
-              <span className="mt-0.5 flex flex-wrap gap-x-2 text-[11px] text-[#5B6470]">
+              <span className={`mt-0.5 flex flex-wrap gap-x-2 ${FS.small} text-[#5B6470]`}>
                 <span>{KIND_LABEL[kind]}</span>
                 {n > 0 && <span>단계 {n}</span>}
                 {t && (t.sec > 0 || t.open > 0) && <span>{fmtSec(t.sec)}{t.open ? " 이상" : ""}</span>}
@@ -371,7 +371,7 @@ export function ProcessEditor({ cols, rows, check, env, bundle, readOnly, reveal
           <div className="relative">
             <Btn onClick={() => setAdd((o) => !o)}><Plus size={14} /> 행 추가</Btn>
             {add && (
-              <div className="absolute left-0 z-20 mt-1 w-48 rounded-[10px] border border-[#D9DDE3] bg-white p-1 text-xs shadow-lg">
+              <div className={`absolute left-0 z-20 mt-1 w-48 rounded-[10px] border border-[#D9DDE3] bg-white p-1 ${FS.body} shadow-lg`}>
                 <button onClick={() => addRow({})} className="flex w-full items-center gap-2 rounded-[8px] px-2 py-2 hover:bg-[#F5F6F8]"><Plus size={13} /> 공정 행</button>
                 <button onClick={() => addRow({ process_name: "delay 60s" })} className="flex w-full items-center gap-2 rounded-[8px] px-2 py-2 hover:bg-[#F5F6F8]"><Timer size={13} /> 대기 행(60초)</button>
                 <button onClick={() => addRow({ blocks: [] })} className="flex w-full items-center gap-2 rounded-[8px] px-2 py-2 hover:bg-[#F5F6F8]"><Repeat size={13} /> 블록 공정</button>
@@ -388,14 +388,14 @@ export function ProcessEditor({ cols, rows, check, env, bundle, readOnly, reveal
           startWhy={rowStartWhy(i)} onStart={() => onStartRow(i)} />
       ) : rowKind(row.data) === "delay" ? (
         <div className="space-y-2 2xl:col-span-2">
-          <p className="text-sm font-bold text-[#1B1F24]">대기 행</p>
+          <p className={`${FS.card} font-bold text-[#1B1F24]`}>대기 행</p>
           <Tile className="p-3">
             <div className="grid gap-x-3 sm:grid-cols-[9rem_minmax(0,1fr)]">
-              <span className="pt-2 text-xs font-medium text-[#1B1F24]">대기 시간<span className="text-[#B42318]">*</span></span>
+              <span className={`pt-2 ${FS.body} font-medium text-[#1B1F24]`}>대기 시간<span className="text-[#B42318]">*</span></span>
               <span>
                 <DurationInput key={row.uid} sec={delaySeconds(row.data.process_name)} label="대기 시간" disabled={readOnly}
                   onChange={(s) => setCell(row.uid, "process_name", `delay ${s ?? 0}s`)} />
-                <span className="mt-0.5 block text-[10px] text-[#5B6470]">앞 행이 끝난 뒤 다음 행까지 기다립니다</span>
+                <span className={`mt-0.5 block ${FS.small} text-[#5B6470]`}>앞 행이 끝난 뒤 다음 행까지 기다립니다</span>
                 {(rc?.errors ?? []).map((m, k) => <Msg key={k} m={m} names={names} />)}
               </span>
             </div>
@@ -404,7 +404,7 @@ export function ProcessEditor({ cols, rows, check, env, bundle, readOnly, reveal
       ) : (
         <>
           <div className="min-w-0 space-y-2">
-            <p className="text-sm font-bold text-[#1B1F24]">공정 조건</p>
+            <p className={`${FS.card} font-bold text-[#1B1F24]`}>공정 조건</p>
             <ProcessForm key={row.uid} row={row} cols={cols} rc={rc} bundle={bundle} readOnly={readOnly} seen={seen(row.uid)}
               onCell={(k, v) => setCell(row.uid, k, v)} />
           </div>
@@ -451,10 +451,10 @@ export function HeaterEditor({ stepCols, gasCols, steps, gas, errors, warnings, 
           return (
             <>
               <span className="flex items-center gap-1.5">
-                <span className="truncate text-xs font-semibold text-[#1B1F24]">목표 {v(s.data.target_c)} °C</span>
+                <span className={`truncate ${FS.body} font-semibold text-[#1B1F24]`}>목표 {v(s.data.target_c)} °C</span>
                 {show ? <Chip tone="alarm">오류 {n}</Chip> : null}
               </span>
-              <span className="text-[11px] text-[#5B6470]">
+              <span className={`${FS.small} text-[#5B6470]`}>
                 {s.data.ramp_c_per_min !== undefined ? `승온 ${v(s.data.ramp_c_per_min)} °C/min` : s.data.ramp_min !== undefined ? `승온 ${v(s.data.ramp_min)}분` : "승온 기본"}
                 {s.data.soak_min !== undefined && ` · 유지 ${v(s.data.soak_min)}분`}{s.data.repeat !== undefined && ` · 반복 ${v(s.data.repeat)}회`}
               </span>
@@ -463,7 +463,7 @@ export function HeaterEditor({ stepCols, gasCols, steps, gas, errors, warnings, 
         }}
         addMenu={<Btn onClick={() => { const n = { uid: newUid(), data: {} }; onSteps((l) => [...l, n]); onSel(n.uid); }}><Plus size={14} /> 스텝 추가</Btn>} />
       <div className="min-w-0 space-y-2">
-        <p className="text-sm font-bold text-[#1B1F24]">{step ? `스텝 ${i + 1} 설정` : "스텝 설정"}</p>
+        <p className={`${FS.card} font-bold text-[#1B1F24]`}>{step ? `스텝 ${i + 1} 설정` : "스텝 설정"}</p>
         {step ? (
           <Tile key={step.uid} className="px-3 py-2">
             <div className="divide-y divide-[#F0F2F4]">
@@ -481,7 +481,7 @@ export function HeaterEditor({ stepCols, gasCols, steps, gas, errors, warnings, 
         ) : <Empty>왼쪽에서 스텝을 고르세요</Empty>}
       </div>
       <div className="min-w-0 space-y-2 lg:col-span-2 2xl:col-span-1">
-        <p className="text-sm font-bold text-[#1B1F24]">가스(선택 — 비우면 가스 없이 승온)</p>
+        <p className={`${FS.card} font-bold text-[#1B1F24]`}>가스(선택 — 비우면 가스 없이 승온)</p>
         <Tile className="px-3 py-2">
           <div className="divide-y divide-[#F0F2F4]">
             {gasCols.filter((c) => !c.required?.startsWith("if:") || gas[c.required.slice(3)] === true || gas[c.name] !== undefined).map((c) => (

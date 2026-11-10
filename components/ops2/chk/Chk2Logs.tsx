@@ -3,9 +3,10 @@
 // 챔버K v2 아래 줄 — 로그(stream: 수준별 색), 조작 기록(commands), 런 이력(runs). v1 CHK 화면과 같은 이름(W-9).
 // 로그 기본 보기 = 묶음 eventKinds 의 main + 경고·오류 전부 + 공정 시작·끝·명령 결과·설정 결과, '상세'를 켜면 전부와 원시 코드·문구.
 // 한 줄 = 시각 · 종류 이름(주의·오류는 아이콘 + 색) · 한글 내용(text.logLine — 상태 바뀜·블록·공정 중 수정·명령 결과는 묶음 이름으로).
+// W-10a: 명령 상태·런 결과 배지와 사유 줄도 아이콘 + 글자(kit Tag) — 색만으로 뜻을 전하지 않는다. '경고·오류만' 단추는 켜짐 표시(체크).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertOctagon, AlertTriangle } from "lucide-react";
-import { Card } from "./kit";
+import { AlertOctagon, AlertTriangle, CheckSquare, Hourglass, Send, Square } from "lucide-react";
+import { FS, Card, Tag, type TagKind } from "./kit";
 import { fmtKst } from "@/lib/ops2/time";
 import { useChk2Mode } from "./mode";
 import { logLine, runTitle } from "./text";
@@ -34,19 +35,19 @@ export function EventFeed({ bundle, feed }: { bundle: Bundle | null; feed: FeedI
 
   return (
     <Card title="로그" right={
-      <button onClick={() => setOnlyIssue((v) => !v)}
-        className={`rounded-lg px-2 py-1 text-[11px] font-semibold ${onlyIssue ? "bg-[#FEE4E2] text-[#B42318]" : "text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
-        경고·오류{issues > 0 && ` ${issues}`}
+      <button onClick={() => setOnlyIssue((v) => !v)} aria-pressed={onlyIssue}
+        className={`flex items-center gap-1 rounded-lg px-2 py-1 ${FS.small} font-semibold ${onlyIssue ? "bg-[#FEE4E2] text-[#B42318]" : "text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
+        {onlyIssue ? <CheckSquare size={12} aria-hidden /> : <Square size={12} aria-hidden />} 경고·오류만{issues > 0 && ` ${issues}`}
       </button>
     }>
       {!shown.length ? (
-        <p className="py-6 text-center text-xs text-[#8A929D]">{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다 — 장비가 연결되면 쌓입니다"}</p>
+        <p className={`py-6 text-center ${FS.body} text-[#8A929D]`}>{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다 — 장비가 연결되면 쌓입니다"}</p>
       ) : (
         <div ref={box}
           onScroll={() => { const el = box.current; if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
           className="h-64 space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 font-mono [overflow-anchor:none]">
           {shown.map((r) => (
-            <p key={r.e.id} className="flex gap-2 text-[11px] leading-snug" title={r.raw}>
+            <p key={r.e.id} className={`flex gap-2 ${FS.small} leading-snug`} title={r.raw}>
               <span className="shrink-0 text-[#8A929D]">{fmtKst(r.e.ts)}</span>
               <span className={`flex shrink-0 items-center gap-1 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.level === "warn" ? <AlertTriangle size={11} /> : r.level === "error" || r.level === "critical" ? <AlertOctagon size={11} /> : null}{r.kind}
@@ -63,10 +64,21 @@ export function EventFeed({ bundle, feed }: { bundle: Bundle | null; feed: FeedI
   );
 }
 
-const STATUS_TONE: Record<string, string> = {
-  accepted: "bg-[#EEF0F3] text-[#5B6470]", rejected: "bg-[#FEE4E2] text-[#B42318]", expired: "bg-[#FFFAEB] text-[#B54708]",
-  pending: "bg-[#3A424D] text-white", sent: "bg-[#E8EEFC] text-[#1D4ED8]",
-};
+/** 명령 상태 → 배지(아이콘 + 글자) */
+export function CmdStatusTag({ status, className }: { status: string; className?: string }) {
+  const k: Record<string, [TagKind, typeof Send | undefined]> = {
+    accepted: ["ok", undefined], rejected: ["alarm", undefined], expired: ["warn", Hourglass], pending: ["wait", undefined],
+    sent: ["info", Send],
+  };
+  const [kind, icon] = k[status] ?? ["unknown", undefined];
+  return <Tag kind={kind} icon={icon} className={className}>{CMD_STATUS[status] ?? status}</Tag>;
+}
+
+/** 런 결과 → 배지(진행 중·정상·중단·오류) */
+export function RunResultTag({ endedAt, result }: { endedAt: string | null; result: string | null }) {
+  const kind: TagKind = !endedAt ? "run" : result === "done" ? "ok" : result === "error" ? "alarm" : "warn";
+  return <Tag kind={kind}>{!endedAt ? "진행 중" : RUN_RESULT[result ?? ""] ?? result ?? "-"}</Tag>;
+}
 
 function argText(a: Record<string, unknown> | null): string {
   if (!a) return "";
@@ -81,26 +93,25 @@ export function CommandLog({ bundle, commands }: { bundle: Bundle | null; comman
   return (
     <Card title="조작 기록">
       {!commands.length ? (
-        <p className="py-5 text-center text-xs text-[#8A929D]">조작 기록이 없습니다</p>
+        <p className={`py-5 text-center ${FS.body} text-[#8A929D]`}>조작 기록이 없습니다</p>
       ) : (
         <div className="space-y-1">
           {commands.map((c) => (
             <div key={c.id}>
-              <p className="flex flex-wrap items-baseline gap-x-2 text-[11px] leading-snug">
+              <p className={`flex flex-wrap items-baseline gap-x-2 ${FS.small} leading-snug`}>
                 <span className="shrink-0 font-mono text-[#8A929D]">{fmtKst(c.requestedAt)}</span>
                 <span className="font-medium text-[#1B1F24]">{c.label ?? commandLabel(bundle, c.kind)}</span>
                 {argText(c.args) && <span className="font-bold text-[#1B1F24]">{argText(c.args)}</span>}
                 <span className="text-[#5B6470]">{c.requestedBy}</span>
                 {detail && <span className="text-[#8A929D]">{c.origin === "web" ? (c.sentVia ? `${c.sentVia} × ${c.sendCount}` : "") : c.origin}</span>}
                 {!detail && c.origin !== "web" && <span className="text-[#8A929D]">노트북</span>}
-                <span className={`ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_TONE[c.status] ?? "bg-[#EEF0F3] text-[#5B6470]"}`}>
-                  {CMD_STATUS[c.status] ?? c.status}
-                </span>
+                <CmdStatusTag status={c.status} className="ml-auto shrink-0" />
               </p>
               {c.reasonCode && (
-                <p className={`truncate pl-1 text-[10px] ${c.status === "rejected" ? "text-[#B42318]" : "text-[#B54708]"}`}
+                <p className={`flex items-center gap-1 truncate pl-1 ${FS.small} ${c.status === "rejected" ? "text-[#B42318]" : "text-[#B54708]"}`}
                   title={c.detail ?? undefined}>
-                  {reasonLabel(bundle, c.reasonCode)}{detail && ` (${c.reasonCode})`}
+                  {c.status === "rejected" ? <AlertOctagon size={10} className="shrink-0" aria-label="거부" /> : <AlertTriangle size={10} className="shrink-0" aria-label="주의" />}
+                  <span className="truncate">{reasonLabel(bundle, c.reasonCode)}{detail && ` (${c.reasonCode})`}</span>
                 </p>
               )}
             </div>
@@ -122,9 +133,9 @@ export function RunList({ bundle, runs }: { bundle: Bundle | null; runs: RunRow[
   return (
     <Card title="런 이력">
       {!runs.length ? (
-        <p className="py-5 text-center text-xs text-[#8A929D]">기록된 공정이 없습니다</p>
+        <p className={`py-5 text-center ${FS.body} text-[#8A929D]`}>기록된 공정이 없습니다</p>
       ) : (
-        <table className="w-full text-xs">
+        <table className={`w-full ${FS.body}`}>
           <thead>
             <tr className="text-left text-[#5B6470]">
               <th className="py-1.5 pr-3 font-medium whitespace-nowrap">시작</th>
@@ -139,16 +150,12 @@ export function RunList({ bundle, runs }: { bundle: Bundle | null; runs: RunRow[
                 <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{fmtKst(r.startedAt)}</td>
                 <td className="py-2 pr-3">
                   <span className="block max-w-[260px] truncate" title={`${r.name ?? ""} · ${r.runId}`}>{runTitle(r)}</span>
-                  {r.startedBy && <span className="text-[10px] text-[#5B6470]">{r.startedBy}</span>}
-                  {detail && <span className="block font-mono text-[10px] text-[#8A929D]">{r.name} · {r.runId}</span>}
+                  {r.startedBy && <span className={`${FS.small} text-[#5B6470]`}>{r.startedBy}</span>}
+                  {detail && <span className={`block font-mono ${FS.small} text-[#8A929D]`}>{r.name} · {r.runId}</span>}
                 </td>
                 <td className="py-2 pr-3">
-                  <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                    !r.endedAt ? "bg-[#3A424D] text-white" : r.result === "done" ? "bg-[#EEF0F3] text-[#5B6470]"
-                    : r.result === "error" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#FFFAEB] text-[#B54708]"}`}>
-                    {!r.endedAt ? "진행 중" : RUN_RESULT[r.result ?? ""] ?? r.result ?? "-"}
-                  </span>
-                  {r.reasonCode && <p className="mt-0.5 text-[10px] text-[#5B6470]">{reasonLabel(bundle, r.reasonCode)}</p>}
+                  <RunResultTag endedAt={r.endedAt} result={r.result} />
+                  {r.reasonCode && <p className={`mt-0.5 ${FS.small} text-[#5B6470]`}>{reasonLabel(bundle, r.reasonCode)}</p>}
                 </td>
                 <td className="py-2 whitespace-nowrap text-right tabular-nums">{dur(r.startedAt, r.endedAt)}</td>
               </tr>
