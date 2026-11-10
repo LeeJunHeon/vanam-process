@@ -97,6 +97,7 @@ export default function Ch12Mimic({ bundle, snapshot, ch, plcOk, canPress, pendi
   const zpos = ["up", "mid", "down"].find((p) => v(`z${n}_${p}_location`) === true);
   const ig = snapshot?.[`${ch}.ig.pressure_torr`];
   const wp = snapshot?.[`${ch}.mfc.pressure_mtorr`];
+  const valve = snapshot?.[`${ch}.mfc.valve_pct`];   // MFC 밸브 개도 % (0 닫힘~100 열림, GPC3000 R6) — 값 없으면 —
   const igText = typeof ig === "number" ? ig.toExponential(2) : "—";
 
   // 인터락 — 꺼진 것(미충족)만
@@ -167,6 +168,10 @@ export default function Ch12Mimic({ bundle, snapshot, ch, plcOk, canPress, pendi
             {node({ x: 88, y: r.y, w: 52, h: 32, label: gasName[r.g] ?? r.g, sw: r.sw, fs: 12 })}
           </g>
         ))}
+        {box(4, 178, 110, 32, <>
+          {txt(59, 188, "밸브 위치", { fs: 9, bold: true, fill: "#52525b" })}
+          {txt(59, 201, typeof valve === "number" && Number.isFinite(valve) ? `${short(valve)} %` : "—", { fs: 9, fill: "#3f3f46" })}
+        </>)}
         {node({ x: 160, y: 88, w: 54, h: 28, label: "Main 가스", sw: mainGas, fs: 9 })}
 
         {/* 배기 */}
