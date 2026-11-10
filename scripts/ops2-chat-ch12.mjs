@@ -205,6 +205,20 @@ const check = (name, cond, got) => NEW.push({ name, ok: !!cond, got });
     && !["run_end", "run_fail", "text", "aggregate", "resumed", "monitor", "oes"].some((k) => LIM.URGENT_KINDS.has(k));
   check("urgent 종류 = v1 urgent=True 카드(공정 시작·장비 오류·히터·PLC 연결·로봇 클라이언트)", urg, [...LIM.URGENT_KINDS]);
 }
+{
+  // 터보 꺼짐 지속·다시 켜짐(장비 2026-11-09 — plc turbo_off_long|turbo_back_on, PLC 웹훅 방·urgent)
+  const ev = (kind, card) => e("event", { level: "warn", code: kind.toUpperCase(), message: "x", context: { source: "plc", chamber: "shared", kind, data: { card } } }, `t-${kind}`);
+  const items = C.buildCh12Items([
+    ev("turbo_off_long", { title: "터보 꺼짐 지속", subtitle: "CH1 터보 꺼짐 30분째", status: "FAIL", urgent: true }),
+    ev("turbo_back_on", { title: "터보 다시 켜짐", subtitle: "꺼져 있던 시간 31분", status: "SUCCESS", urgent: true }),
+  ], { now: new Date(NOW) }, C.emptyState());
+  check("터보 카드 2장(plc_link·plc 방)", items.length === 2 && items.every((i) => i.kind === "plc_link" && i.channel === "plc"), items.map((i) => [i.kind, i.channel]));
+  check("터보 꺼짐 지속 제목·부제·상태", widgets(items[0])[0].textParagraph.text.includes("터보 꺼짐 지속") && sub(items[0]) === "CH1 터보 꺼짐 30분째"
+        && widgets(items[0])[0].textParagraph.text.includes("❌"), widgets(items[0]));
+  check("터보 다시 켜짐 제목·부제·상태", widgets(items[1])[0].textParagraph.text.includes("터보 다시 켜짐") && sub(items[1]) === "꺼져 있던 시간 31분"
+        && widgets(items[1])[0].textParagraph.text.includes("✅"), widgets(items[1]));
+  check("터보 카드도 urgent 종류(plc_link)", items.every((i) => LIM.URGENT_KINDS.has(i.kind)), items.map((i) => i.kind));
+}
 for (const n of NEW) if (!n.ok) console.log(`  ✗ ${n.name}\n      ${JSON.stringify(n.got).slice(0, 600)}`);
 console.log(`  새 카드·포털 규칙 ${NEW.length} · 맞음 ${NEW.filter((n) => n.ok).length} · 틀림 ${NEW.filter((n) => !n.ok).length}`);
 failed ||= NEW.some((n) => !n.ok);

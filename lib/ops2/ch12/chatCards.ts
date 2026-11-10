@@ -18,7 +18,7 @@
 //                                                     notify_text·notify_error_with_src)
 //   event tsp_engine·kind card(data.card started·finished) → TSP 시작·종료 카드
 //   event heater·kind card(data title·subtitle·status·fields) → CH2 히터 카드
-//   event plc·kind link_down·link_up(data.card)    → PLC 연결 끊김·재연결 카드(PLC 웹훅)
+//   event plc·kind link_down·link_up·turbo_off_long·turbo_back_on(data.card) → PLC 연결 끊김·재연결·터보 꺼짐 지속·다시 켜짐 카드(PLC 웹훅)
 //   event camera·kind disk_low                     → 집계 카드 '[CAM] …'(HOST)
 //   event selfwatch                                → '장비 오류' 즉시 카드 [SELFWATCH](PLC 웹훅, 없으면 공정 웹훅 — v1 chat_plc or chat_ch1)
 //   계약(장비가 아직 내지 않음 — 이 이름으로 내면 보낸다):
@@ -679,12 +679,13 @@ export function buildCh12Items(envs: Ch12Envelope[], ctx: Ch12Ctx, state: Ch12St
       continue;
     }
     // ── PLC 링크 카드(PLC 웹훅 — v1 chat_plc, 없으면 보내지 않음) ──
-    if (source === "plc" && (kind === "link_down" || kind === "link_up")) {
+    if (source === "plc" && (kind === "link_down" || kind === "link_up" || kind === "turbo_off_long" || kind === "turbo_back_on")) {
       const cd = isObj(data.card) ? data.card : {};
-      const title = str(cd.title) ?? (kind === "link_down" ? "PLC 연결 끊김" : "PLC 재연결");
+      const bad = kind === "link_down" || kind === "turbo_off_long";
+      const title = str(cd.title) ?? (kind === "link_down" ? "PLC 연결 끊김" : kind === "link_up" ? "PLC 재연결" : kind === "turbo_off_long" ? "터보 꺼짐 지속" : "터보 다시 켜짐");
       const sub = str(cd.subtitle) ?? msg;
       push({ kind: "plc_link", channel: "plc", msgId: e.id, notifier: null, title: `${title} · ${sub}`,
-             body: card(title, sub, str(cd.status) ?? (kind === "link_down" ? "FAIL" : "SUCCESS"), null), chamber });
+             body: card(title, sub, str(cd.status) ?? (bad ? "FAIL" : "SUCCESS"), null), chamber });
       continue;
     }
     // ── 카메라 디스크 여유 부족(HOST 집계 카드 '[CAM] …') ──

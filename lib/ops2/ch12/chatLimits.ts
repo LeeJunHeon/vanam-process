@@ -26,7 +26,7 @@ export const DROP_REASON = "대기 상한 초과 — 생략(v1 CHAT_PENDING_MAX)
 /** 대기 상한을 같이 세는 묶음(v1 ChatNotifier 인스턴스). null = 상한 없음(v1 이 바로 보내던 모니터·OES) */
 export function pendGroupOf(kind: Ch12ChatKind, channel: Ch12Channel, notifier: Notifier | null): string | null {
   if (channel === "monitor" || channel === "oes") return null;
-  if (channel === "plc") return "PLC";          // v1 chat_plc(PLC 연결 끊김·재연결·자기 감시)
+  if (channel === "plc") return "PLC";          // v1 chat_plc(PLC 연결 끊김·재연결·터보 꺼짐 지속·다시 켜짐·자기 감시)
   if (channel === "client" || kind === "client") return "CLIENT";   // v1 chat_client
   return notifier ?? "HOST";
 }
