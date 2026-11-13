@@ -198,22 +198,24 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
     : typeof cm === "string" && cm ? mode?.enumLabels?.[cm] ?? cm : "—";
   const tc1 = valTxt("heater.pv"), tc2 = valTxt("heater.pv2");
   // 묶음 15 — tc2(TC2 단독 제어): TC1 은 기록, 편차는 TC2 − SV2. TC2 PID 두 모드(tc2·cascade)에서 TC2 아래 TC2 목표(SV2)
+  //   SV2·편차는 TC2 제어가 돌 때만(꺼져 있으면 SV2 는 0)
   const tc2Only = cm === "tc2", tc2Pid = cm === "tc2" || cm === "cascade";
+  const cascOn = typeof cs === "string" && cs !== "" && cs !== "idle";
   const hSv = valTxt("heater.sv"), hSv2 = valTxt("heater.sv2");
-  const hDev = tc2Only && num(snap?.["heater.pv2"]) !== null && num(snap?.["heater.sv2"]) !== null
+  const hDev = tc2Only && cascOn && num(snap?.["heater.pv2"]) !== null && num(snap?.["heater.sv2"]) !== null
     ? (num(snap?.["heater.pv2"]) as number) - (num(snap?.["heater.sv2"]) as number) : null;
   /** 히터 온도 한 칸 — 이름(작게, 옆에 붙임말) · 값(TC1·TC2 같은 크기) · 아래 작은 줄 */
   const tcCell = (x: number, y: number, name: string, tag: string, v: { text: string; unit: string; color: string }, under: string) => (
     <g>
-      <text x={x} y={y + px(16)} fontFamily={FONT}>
+      <text x={x} y={y + px(20)} fontFamily={FONT}>
         <tspan fontSize={px(FSPX.body)} fill={T.muted}>{name}</tspan>
         {tag && <tspan fontSize={px(FSPX.small)} fill={T.muted}> · {tag}</tspan>}
       </text>
-      <text x={x} y={y + px(40)} fontFamily={FONT}>
+      <text x={x} y={y + px(44)} fontFamily={FONT}>
         <tspan fontSize={px(FSPX.title)} fontWeight={700} fill={v.color}>{v.text}</tspan>
         {v.unit && <tspan fontSize={px(FSPX.small)} fill={T.muted}> {v.unit}</tspan>}
       </text>
-      {under && <text x={x} y={y + px(58)} fontSize={px(FSPX.small)} fill={T.muted} fontFamily={FONT}>{under}</text>}
+      {under && <text x={x} y={y + px(61)} fontSize={px(FSPX.small)} fill={T.muted} fontFamily={FONT}>{under}</text>}
     </g>
   );
 
@@ -255,11 +257,11 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
               {tcCell(467, HY + px(20), "TC1", tc2Only ? "기록" : "", tc1,
                 hSv.unit ? `목표 ${hSv.text} ${hSv.unit}` : "")}
               {tcCell(585, HY + px(20), "TC2", "", tc2,
-                tc2Pid && hSv2.unit ? `목표 ${hSv2.text} ${hSv2.unit}` : "")}
+                tc2Pid && cascOn && hSv2.unit ? `목표 ${hSv2.text} ${hSv2.unit}` : "")}
               {hDev !== null && (
                 <g>
-                  <text x={467} y={HY + px(20) + px(78)} fontSize={px(FSPX.body)} fill={T.muted} fontFamily={FONT}>편차(TC2)</text>
-                  <text x={693} y={HY + px(20) + px(78)} textAnchor="end" fontFamily={FONT}>
+                  <text x={467} y={HY + px(20) + px(80)} fontSize={px(FSPX.body)} fill={T.muted} fontFamily={FONT}>편차(TC2)</text>
+                  <text x={693} y={HY + px(20) + px(80)} textAnchor="end" fontFamily={FONT}>
                     <tspan fontSize={px(FSPX.body)} fontWeight={700} fill={T.value}>{`${hDev >= 0 ? "+" : "−"}${Math.abs(hDev).toFixed(1)}`}</tspan>
                     <tspan fontSize={px(FSPX.small)} fill={T.muted}> °C</tspan>
                   </text>

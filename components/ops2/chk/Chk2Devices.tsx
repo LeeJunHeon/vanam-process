@@ -241,10 +241,12 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
   const ctrlText = typeof cs === "string" && cs && cs !== "idle" ? (casc?.enumLabels?.[cs] ?? cs)
     : typeof cm === "string" && cm ? (mode?.enumLabels?.[cm] ?? cm) : "";
   // 묶음 15 — tc2(TC2 단독 제어): 편차는 TC2 − SV2, TC1 은 기록. TC2 PID 두 모드(tc2·cascade)에서 TC2 아래 TC2 목표(SV2)
+  //   SV2·편차는 TC2 제어가 돌 때만(꺼져 있으면 SV2 는 0 이라 뜻 없는 숫자가 된다)
   const tc2Only = cm === "tc2", tc2Pid = cm === "tc2" || cm === "cascade";
+  const cascOn = typeof cs === "string" && cs !== "" && cs !== "idle";
   const pvF = fieldOf(d, "pv"), pv2F = fieldOf(d, "pv2"), sv2F = fieldOf(d, "sv2");
   const sv2 = num(snap?.["heater.sv2"]), pv2 = num(snap?.["heater.pv2"]);
-  const dev2 = tc2Only && sv2 !== null && pv2 !== null ? pv2 - sv2 : null;
+  const dev2 = tc2Only && cascOn && sv2 !== null && pv2 !== null ? pv2 - sv2 : null;
   const tcBig = (f: FieldDef | undefined, under: ReactNode) => {
     if (!f) return <div />;
     const t = fieldText(f, snap?.[f.column], snap, bundle?.snapshot?.blocks);
@@ -268,7 +270,7 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
           // TC1·TC2 같은 크기로 나란히, TC2 목표(SV2)는 TC2 아래 작게(v1 노트북 화면 a786b25 와 같은 배치)
           <div className="grid grid-cols-2 gap-x-3">
             {tcBig(pvF, tc2Only ? "기록" : "")}
-            {tcBig(pv2F, tc2Pid && sv2 !== null && sv2F ? `목표 ${fmtValue(sv2, sv2F.fmt)} ${sv2F.unit}` : "")}
+            {tcBig(pv2F, tc2Pid && cascOn && sv2 !== null && sv2F ? `목표 ${fmtValue(sv2, sv2F.fmt)} ${sv2F.unit}` : "")}
           </div>
         }
         note={<>
