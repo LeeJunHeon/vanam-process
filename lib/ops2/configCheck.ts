@@ -5,10 +5,20 @@ export const isObj = (v: unknown): v is Obj => !!v && typeof v === "object" && !
 export type ParamDefLite = {
   key: string; type?: string; min?: number | null; max?: number | null; enum?: unknown[] | null; pattern?: string | null;
   scope?: string; webLocked?: boolean; safety?: string; apply?: string; current?: unknown; default?: unknown;
+  choices?: unknown[] | null;      // 묶음 15 — int·float 의 허용 숫자 목록(통신 속도 등). 없으면(옛 묶음) 범위만 본다
 };
+
+/** 허용 숫자 목록(묶음 15 params[].choices) — 숫자만, 없거나 비면 null */
+export function numChoices(p: { choices?: unknown[] | null }): number[] | null {
+  const c = Array.isArray(p.choices) ? p.choices.filter((x): x is number => typeof x === "number") : [];
+  return c.length ? c : null;
+}
 
 const pyRepr = (v: unknown) => (typeof v === "string" ? `'${v}'` : v === null || v === undefined ? "None"
   : typeof v === "boolean" ? (v ? "True" : "False") : JSON.stringify(v));
+
+/** 파이썬 list 의 repr — [9600, 19200] · ['LF', 'CR'] (장비 오류 문구와 글자까지 같게) */
+const pyList = (l: unknown[]) => `[${l.map(pyRepr).join(", ")}]`;
 
 /** 키 하나 웹 검사(paramdef.check_value 와 같은 규칙) — 통과하면 null. 키 사이 규칙(crossRules)은 장비가 판단 */
 export function checkParamValue(p: ParamDefLite, v: unknown): string | null {
@@ -27,11 +37,14 @@ export function checkParamValue(p: ParamDefLite, v: unknown): string | null {
     }
     return null;
   } else if (t === "enum") {
-    return (p.enum ?? []).includes(v) ? null : `${p.key}: 허용값 ${JSON.stringify(p.enum ?? [])} 중 하나여야 함 (받은 값 ${pyRepr(v)})`;
+    return (p.enum ?? []).includes(v) ? null : `${p.key}: 허용값 ${pyList(p.enum ?? [])} 중 하나여야 함 (받은 값 ${pyRepr(v)})`;
   }
   const n = v as number;
   if (typeof p.min === "number" && n < p.min) return `${p.key}: ${n} < 최소 ${p.min}`;
   if (typeof p.max === "number" && n > p.max) return `${p.key}: ${n} > 최대 ${p.max}`;
+  // paramdef.check_value: 범위 검사 뒤 허용 숫자 목록 — f"{key}: 허용값 {list(choices)} 중 하나여야 함 (받은 값 {v!r})"
+  const ch = numChoices(p);
+  if (ch && !ch.includes(n)) return `${p.key}: 허용값 ${pyList(ch)} 중 하나여야 함 (받은 값 ${pyRepr(v)})`;
   return null;
 }
 
