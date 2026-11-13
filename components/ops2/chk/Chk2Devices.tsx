@@ -61,9 +61,9 @@ function Big({ f, snap, bundle, off }: { f?: FieldDef; snap: Snap; bundle: Bundl
 }
 
 /** 값 줄(필드 정의) — bool 은 상태 네모 */
-function Row({ f, snap, bundle, off }: { f?: FieldDef; snap: Snap; bundle: Bundle | null; off?: boolean }) {
+function Row({ f, snap, bundle, off, staleNote }: { f?: FieldDef; snap: Snap; bundle: Bundle | null; off?: boolean; staleNote?: string }) {
   if (!f) return null;
-  return <FieldValue f={f} v={snap?.[f.column]} dim={off} snap={snap} blocks={bundle?.snapshot?.blocks} />;
+  return <FieldValue f={f} v={snap?.[f.column]} dim={off} snap={snap} blocks={bundle?.snapshot?.blocks} staleNote={staleNote} />;
 }
 
 /** 실제 / 설정 한 줄 */
@@ -114,21 +114,29 @@ export function VacuumCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => voi
 }
 
 // ───────────── 가스·압력 ─────────────
+const VALVE_STALE = "명령 중이라 읽기 미룸";
 export function GasCard({ bundle, snap, st }: Ctx) {
   const d = blockOf(bundle, "mfc");
   const off = st?.links?.mfc?.q === "off";
+  const spF = fieldOf(d, "sp_active"), spN = num(snap?.["mfc.sp_active"]);      // 사용 중 설정점 — 1~5 는 "SP5" 처럼
   return (
     <DevCard title="가스·압력" sub={d?.desc} chip={<QBadge link={st?.links?.mfc} />} off={off}
       big={<Big f={fieldOf(d, "pressure_mtorr")} snap={snap} bundle={bundle} off={off} />}>
       <PairRow k="Ar 실제/설정" a={snap?.["mfc.ar_sccm"]} b={snap?.["mfc.ar_set"]} unit="sccm" off={off} />
       <PairRow k="O₂ 실제/설정" a={snap?.["mfc.o2_sccm"]} b={snap?.["mfc.o2_set"]} unit="sccm" off={off} />
       <Row f={fieldOf(d, "sp_mtorr")} snap={snap} bundle={bundle} off={off} />
-      <Row f={fieldOf(d, "sp_active")} snap={snap} bundle={bundle} off={off} />
+      {spF && (
+        <KV k={spF.label} title={spF.desc || undefined}>
+          <Val text={off || spN === null ? "" : spN >= 1 ? `SP${spN}` : "밸브 직접 조작"} />
+        </KV>
+      )}
+      {/* 밸브 위치(묶음 15) — 기록용 읽기라 설정 명령 중에는 장비가 읽기를 미룬다(품질 열 stale → 앞 값을 흐리게) */}
+      <Row f={fieldOf(d, "valve_pct")} snap={snap} bundle={bundle} off={off} staleNote={VALVE_STALE} />
       <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
         <StateBox on={snap?.["plc.ar_valve"] as boolean | undefined} label="Ar 차단밸브" />
         <StateBox on={snap?.["plc.o2_valve"] as boolean | undefined} label="O₂ 차단밸브" />
       </div>
-      <DetailRows d={d} snap={snap} bundle={bundle} shown={["pressure_mtorr", "ar_sccm", "ar_set", "o2_sccm", "o2_set", "sp_mtorr", "sp_active"]} />
+      <DetailRows d={d} snap={snap} bundle={bundle} shown={["pressure_mtorr", "ar_sccm", "ar_set", "o2_sccm", "o2_set", "sp_mtorr", "sp_active", "valve_pct"]} />
     </DevCard>
   );
 }

@@ -273,19 +273,28 @@ export function Dot({ on, alert, dim }: { on?: boolean | null; alert?: boolean; 
 }
 
 /** 묶음 snapshot 정의 그대로 값 하나 — 숫자는 fmt·단위, bool 은 상태 네모, str 은 enumLabels. 값이 비고 상태가 ok 가 아니면 상태 이름 */
-export function FieldValue({ f, v, dim, snap, blocks }: {
+export function FieldValue({ f, v, dim, snap, blocks, staleNote }: {
   f: FieldDef; v: unknown; dim?: boolean; snap?: Record<string, unknown>; blocks?: { fields: FieldDef[] }[];
+  staleNote?: string;      // 자기 품질 열(<column>.q)이 ok 가 아닐 때 값 옆에 붙이는 말 — 값은 흐리게(앞 값)
 }) {
   const { detail } = useChk2Mode();
   const tip = [f.desc, detail ? f.column : ""].filter(Boolean).join(" · ") || undefined;
   if (f.type === "bool") return <StateBox on={dim ? null : v === true} label={f.label} title={tip} />;
   const t = fieldText(f, v, snap, blocks);
+  const stale = !dim && !!staleNote && ownStale(f, snap);
   return (
     <KV k={f.label} title={tip}>
-      <Val text={dim ? "" : t.text} unit={f.unit} alt={dim ? null : t.alt} altWarn={t.warn} />
+      {stale && <span className={`mr-1.5 ${FS.small} text-[#8A929D]`}>{staleNote}</span>}
+      <Val text={dim ? "" : t.text} unit={f.unit} dim={stale} alt={dim ? null : t.alt} altWarn={t.warn} />
     </KV>
   );
 }
+
+/** 자기 품질 열이 있는 필드(ownQuality)의 이번 값이 새로 읽은 것이 아닌가 — <column>.q 가 있고 ok 가 아님 */
+export const ownStale = (f: FieldDef, snap?: Record<string, unknown>) => {
+  const q = f.ownQuality ? snap?.[`${f.column}.q`] : undefined;
+  return typeof q === "string" && q !== "" && q !== "ok";
+};
 
 /** 크게 보이는 값(카드 위 줄) */
 export function BigValue({ f, v, dim, snap, blocks }: {
