@@ -2,6 +2,7 @@
 // 옮긴 것(챔버K rewrite/v2 1859152, EXPORT_VERSION 7 — 2029ce5·8 골든으로 다시 확인):
 //   recipe.check_process_row(딜레이 행·zeroIsEmpty 포함)·check_heater_recipe, process_steps.row_to_params, blocks.template_blocks,
 //   process_engine._check_rows·_check_row(행 목록 — 빈 행 건너뛰기·"{i}행: 첫 오류", 블록 행은 blocks.ts).
+//   묶음 15(챔버K rewrite/v2 d8e02e3, W-11): 골든을 그 커밋 것으로 — 히터 tc2(기본)·SP5 단계.
 // 열 정의는 묶음 recipe.processColumns·heaterStepColumns·heaterGasColumns, 설정값은 묶음 params current(없으면 default).
 // igEnabled = IG_ENABLED, rfpulsePresent = RFPULSE_ENABLED(process_engine._start_row 와 같게 — 설정값으로).
 // 골든(lib/ops2/chk/golden/web_template_cases.json)을 npm run ops2:golden 이 이 파일로 확인한다.
@@ -17,7 +18,7 @@ import { blockEnvOf, checkBlocks, expandBlocks, pulseEdgeViolation, usesOf, type
 export { pyFixed, pyFloatRepr, pyG, pyNum, pyRound, pyTruthy } from "./py";
 
 /** 이 검사가 맞춘 묶음 버전(골든과 같음) — 묶음 version 이 다르면 화면이 "장비 판단만 믿을 것" 안내 */
-export const GOLDEN_EXPORT_VERSION = 14;
+export const GOLDEN_EXPORT_VERSION = 15;
 /** 챔버K recipe.DELAY_RE.pattern(IGNORECASE) — 골든 시험이 묶음 delayPattern 과 같은지 본다 */
 export const DELAY_PATTERN = String.raw`^\s*delay\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$`;
 const DELAY_RE = new RegExp(DELAY_PATTERN, "i");
