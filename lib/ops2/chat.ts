@@ -14,6 +14,9 @@
 import { ops2Db } from "@/lib/ops2/db";
 import { deviceBundle } from "@/lib/ops2/browser";
 import { fmtKst } from "@/lib/ops2/time";
+import { alertText, isAlertEvent } from "@/lib/ops2/chatText";
+
+export { NOTICE_CODES, alertText, isAlertEvent } from "@/lib/ops2/chatText";
 import type { Prisma } from "@/app/generated/prisma/client";
 
 type Obj = Record<string, unknown>;
@@ -241,10 +244,7 @@ export async function enqueueChat(equipment: string, envs: Env[], now: Date): Pr
       }
       const runId = evRuns.get(e.id) ?? null;
       const r = runId ? runs.get(runId) ?? await ops2Db.ops2Run.findUnique({ where: { runId }, select: { runId: true, name: true, recipeName: true, startedBy: true, startedAt: true, endedAt: true, params: true, blocks: true, stepNo: true } }) : null;
-      const icon = d.level === "error" ? "❌" : "⚠️";
-      const label = L.reason(code);
-      const text = `${icon} ${L.base} 이상 — ${label}${label !== code ? ` (${code})` : ""}${rule ? ` · ${rule}` : ""}`
-        + `${msg && msg !== label ? ` | ${msg.slice(0, 300)}` : ""}${r ? ` | 공정 ${name(r)}` : ""}`;
+      const text = alertText(L.base, d, L.reason(code), r ? name(r) : null);
       items.push({ kind: "alert", msgId: e.id, at: e.ts.getTime(), skip: late ? "늦게 받음" : null, key: `${rule ?? code}|${runId ?? "-"}`, runId,
                    payload: { title: text, body: { text } } });
     }
@@ -278,15 +278,6 @@ export async function enqueueChat(equipment: string, envs: Env[], now: Date): Pr
   const r = await ops2Db.ops2ChatOutbox.createMany({ data: rows, skipDuplicates: true });
   if (rows.some((x) => x.status === "queued")) wake();
   return r.count;
-}
-
-/** 이상 글이 되는 사건 — error 수준, safety 알람 발생(fired, warn 이상). PLC 링크 사건은 따로(plc_link) */
-export function isAlertEvent(d: Obj): boolean {
-  const code = str(d.code);
-  if (code === "PLC_DISCONNECTED" || code === "PLC_RECONNECTED") return true;
-  const c = isObj(d.context) ? d.context : {};
-  if (d.level === "error") return true;
-  return c.source === "safety" && c.kind === "fired" && d.level === "warn";
 }
 
 // ───────────── 장비 연결 끊김·복구(웹이 판단) ─────────────

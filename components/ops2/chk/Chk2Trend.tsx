@@ -127,7 +127,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
 const TREND_DEFS: { title: string; unit: string; lines: [string, string, string | null][] }[] = [
   { title: "압력", unit: "mTorr", lines: [["mfc.pressure_mtorr", "챔버 압력", "mfc.sp_mtorr"]] },
   { title: "파워", unit: "W", lines: [["dc.p", "DC Power", "dc.set_w"], ["rf.fwd_w", "RF Power", "rf.set_w"], ["rfp.fwd_w", "RF Pulse", "rfp.set_w"]] },
-  { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", null]] },
+  { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", "heater.sv2"]] },
 ];
 
 export default function Chk2Trend({ trend, equipment, runId, local, nowMs }: {

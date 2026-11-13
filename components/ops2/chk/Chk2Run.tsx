@@ -48,7 +48,10 @@ const KEYS: KeyDef[] = [
 ];
 const LIMIT_PARAM: Record<string, string> = { dc: "DC_MAX_POWER", rf: "RF_MAX_POWER", rfp: "RFPULSE_MAX_POWER", heater: "HEATER_MAX_TEMP" };
 
-function KeyTile({ d, bundle, snap }: { d: KeyDef; bundle: Bundle | null; snap: Snap }) {
+function KeyTile({ d: d0, bundle, snap }: { d: KeyDef; bundle: Bundle | null; snap: Snap }) {
+  // 묶음 15 — tc2(TC2 단독 제어)에서 히터 칸은 PID 가 따라가는 쪽(TC2 와 TC2 목표 SV2), TC1 은 아래 줄에 "기록"
+  const tc2Only = d0.key === "heater" && snap?.["heater.ctrl_mode"] === "tc2";
+  const d: KeyDef = tc2Only ? { ...d0, label: "히터 TC2", value: "heater.pv2", target: "heater.sv2" } : d0;
   const f = fieldOf(bundle, d.value), tf = d.target ? fieldOf(bundle, d.target) : undefined;
   const v = num(snap?.[d.value]), t = d.target ? num(snap?.[d.target]) : null;
   const unit = f?.unit ?? "";
@@ -60,7 +63,8 @@ function KeyTile({ d, bundle, snap }: { d: KeyDef; bundle: Bundle | null; snap: 
   const extra = d.key === "heater" ? (() => {
     const cs = snap?.["heater.casc_state"], csF = fieldOf(bundle, "heater.casc_state");
     const mv = num(snap?.["heater.mv"]), amp = num(snap?.["heater.current_est"]);
-    return [num(snap?.["heater.pv2"]) !== null ? `TC2 ${fmtN(num(snap?.["heater.pv2"]))} °C` : "",
+    const other = tc2Only ? num(snap?.["heater.pv"]) : num(snap?.["heater.pv2"]);
+    return [other !== null ? (tc2Only ? `TC1 ${fmtN(other)} °C(기록)` : `TC2 ${fmtN(other)} °C`) : "",
             mv !== null ? (snap?.["heater.run"] === true ? `DAC ${Math.round(mv)}${amp !== null ? ` ≈${amp.toFixed(1)} A` : ""}` : `정지 (DAC ${Math.round(mv)})`) : "",
             typeof cs === "string" && cs && cs !== "idle" ? csF?.enumLabels?.[cs] ?? cs : ""].filter(Boolean).join(" · ");
   })() : "";

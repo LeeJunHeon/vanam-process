@@ -77,10 +77,12 @@ function PairRow({ k, a, b, unit, off }: { k: string; a: unknown; b: unknown; un
 }
 
 /** '상세'에서만 보이는 나머지 필드 */
-function DetailRows({ d, snap, bundle, shown }: { d?: BlockDef; snap: Snap; bundle: Bundle | null; shown: string[] }) {
+function DetailRows({ d, snap, bundle, shown, hide }: {
+  d?: BlockDef; snap: Snap; bundle: Bundle | null; shown: string[]; hide?: (f: FieldDef) => boolean;
+}) {
   const { detail } = useChk2Mode();
   if (!detail || !d) return null;
-  const rest = d.fields.filter((f) => !shown.includes(f.name));
+  const rest = d.fields.filter((f) => !shown.includes(f.name) && !hide?.(f));
   if (!rest.length) return null;
   return (
     <div className="mt-1 border-t border-dashed border-[#E3E6EA] pt-1">
@@ -230,6 +232,22 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
   const cs = snap?.["heater.casc_state"], cm = snap?.["heater.ctrl_mode"];
   const ctrlText = typeof cs === "string" && cs && cs !== "idle" ? (casc?.enumLabels?.[cs] ?? cs)
     : typeof cm === "string" && cm ? (mode?.enumLabels?.[cm] ?? cm) : "";
+  // 묶음 15 — tc2(TC2 단독 제어): 편차는 TC2 − SV2, TC1 은 기록. TC2 PID 두 모드(tc2·cascade)에서 TC2 아래 TC2 목표(SV2)
+  const tc2Only = cm === "tc2", tc2Pid = cm === "tc2" || cm === "cascade";
+  const pvF = fieldOf(d, "pv"), pv2F = fieldOf(d, "pv2"), sv2F = fieldOf(d, "sv2");
+  const sv2 = num(snap?.["heater.sv2"]), pv2 = num(snap?.["heater.pv2"]);
+  const dev2 = tc2Only && sv2 !== null && pv2 !== null ? pv2 - sv2 : null;
+  const tcBig = (f: FieldDef | undefined, under: ReactNode) => {
+    if (!f) return <div />;
+    const t = fieldText(f, snap?.[f.column], snap, bundle?.snapshot?.blocks);
+    return (
+      <div className="min-w-0">
+        <p className={`${FS.small} text-[#5B6470]`}>{f.label}</p>
+        <Val text={off ? "" : t.text} unit={f.unit} size="big" alt={off ? null : t.alt} altWarn={t.warn} />
+        <p className={`min-h-[18px] truncate ${FS.small} text-[#5B6470]`}>{off ? "" : under}</p>
+      </div>
+    );
+  };
   const gas = st?.heater?.gas ?? null, owner = st?.heater?.owner ?? null;
   const hr = st?.heaterRecipe ?? null;
   const full = !m.webOnly("HEATER_ON");
@@ -238,7 +256,13 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
       <DevCard title={d?.label ?? "히터"} sub={d?.desc} off={off}
         chip={<>{issues.length ? <Chip tone="alarm">이상</Chip> : <Chip tone={run ? "dark" : "neutral"}>{run ? "운전" : "정지"}</Chip>}
           {st?.links?.heater?.q && st.links.heater.q !== "ok" && <QBadge link={st.links.heater} />}</>}
-        big={<Big f={fieldOf(d, "pv")} snap={snap} bundle={bundle} off={off} />}
+        big={
+          // TC1·TC2 같은 크기로 나란히, TC2 목표(SV2)는 TC2 아래 작게(v1 노트북 화면 a786b25 와 같은 배치)
+          <div className="grid grid-cols-2 gap-x-3">
+            {tcBig(pvF, tc2Only ? "기록" : "")}
+            {tcBig(pv2F, tc2Pid && sv2 !== null && sv2F ? `목표 ${fmtValue(sv2, sv2F.fmt)} ${sv2F.unit}` : "")}
+          </div>
+        }
         note={<>
           {issues.length > 0 && <Issue level="alarm">{issues.join(" · ")} — 원인을 확인한 뒤 이상 리셋</Issue>}
           {(owner || (gas && gas !== "IDLE")) && (
@@ -281,8 +305,12 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
               stop: true, note: "히터 레시피를 멈추고 히터를 끕니다(RUN=0·램프 복구·SV=PV)." })}><Square size={13} /> 레시피 정지</Btn>
           )}
         </>}>
-        <Row f={fieldOf(d, "pv2")} snap={snap} bundle={bundle} off={off} />
         <Row f={fieldOf(d, "sv")} snap={snap} bundle={bundle} off={off} />
+        {tc2Only && (
+          <KV k="목표와의 편차(TC2)" title="TC2 − TC2 목표(SV2) — TC2 단독 제어에서 PID 가 따라가는 쪽">
+            <Val text={off || dev2 === null ? "" : `${dev2 >= 0 ? "+" : "−"}${Math.abs(dev2).toFixed(1)}`} unit="°C" />
+          </KV>
+        )}
         {ctrlText && <KV k="제어 방식"><span className={`${FS.body} font-semibold text-[#1B1F24]`}>{ctrlText}</span></KV>}
         {num(snap?.["heater.bias"]) !== null && <Row f={fieldOf(d, "bias")} snap={snap} bundle={bundle} off={off} />}
         <KV k="출력"><Val text={off ? "" : outText} /></KV>
@@ -290,7 +318,8 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
           <StateBox on={run} label="운전(RUN)" />
           {snap?.["heater.itl"] !== undefined && <StateBox on={snap?.["heater.itl"] === true} label="인터록" />}
         </div>
-        <DetailRows d={d} snap={snap} bundle={bundle} shown={["pv", "pv2", "sv", "casc_state", "bias", "mv", "current_est", "run", "itl", "fault", "ot", "tc_err", "wd_err"]} />
+        <DetailRows d={d} snap={snap} bundle={bundle} shown={["pv", "pv2", "sv", "casc_state", "bias", "mv", "current_est", "run", "itl", "fault", "ot", "tc_err", "wd_err"]}
+          hide={(f) => /^bias/.test(f.name) && num(snap?.[f.column]) === null} />
       </DevCard>
       {modal === "on" && <HeaterOnModal bundle={bundle} snap={snap} onClose={() => setModal(null)} onAsk={onAsk} />}
       {modal === "sv" && <HeaterSvModal bundle={bundle} snap={snap} onClose={() => setModal(null)} onAsk={onAsk} />}
