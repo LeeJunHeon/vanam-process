@@ -225,10 +225,12 @@ function basePressureOf(p: Record<string, unknown>): number {
   }
 }
 
-/** heater_cascade.ctrl_mode — HEATER_CTRL_MODE(cascade·tc1), 모르는 값·없으면 cascade */
+/** heater_cascade.ctrl_mode — HEATER_CTRL_MODE(tc2·cascade·tc1), 모르는 값·없으면 tc2(묶음 15, v1 6e0685b — 장비 DEFAULT_MODE).
+ *  파이썬 `str(cfg.get(키, "tc2") or "")`: 키가 없으면 tc2, 빈 값(None·"")은 "" → 모르는 값이라 tc2 */
 export function heaterCtrlMode(cfg: Cfg): string {
-  const m = String(cfg.HEATER_CTRL_MODE ?? "cascade").trim().toLowerCase();
-  return m === "cascade" || m === "tc1" ? m : "cascade";
+  const raw = cfg.HEATER_CTRL_MODE;
+  const m = String(raw === undefined ? "tc2" : pyTruthy(raw) ? raw : "").trim().toLowerCase();
+  return m === "tc2" || m === "cascade" || m === "tc1" ? m : "tc2";
 }
 
 export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: boolean, rfpulsePresent: boolean): Block[] {
@@ -273,6 +275,16 @@ export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: 
     rfp_freq_khz: rfpW && fhz !== null && fhz !== undefined ? (fhz as number) / 1000.0 : null,
     rfp_duty: rfpW ? p.rf_pulse_duty ?? null : null, wait: true, timeout_sec: null,
   }));
+  // SP5(묶음 15, v1 a78b5ce·f5780ca): WP > SP5_MTORR 일 때만 — SP5 값 쓰기·선택 뒤 SP5_STABILIZE_SEC 고정 대기(압력 도달 판정 없음).
+  // WP 가 정확히 SP5_MTORR 이면 넣지 않는다. 묶음 14 이하 장비는 SP5_MTORR 설정이 없다 — 그때는 예전 목록 그대로
+  if (cfg.SP5_MTORR !== undefined) {
+    const sp5 = pyFloat(cfg.SP5_MTORR);
+    if (sp1 > sp5) {
+      const hold = pyRound(pyFloat(cfg.SP5_STABILIZE_SEC));
+      out.push(pressure(5, sp5, "Stage0(SP5)", "PRESSURE_SP5", false));
+      out.push(B("wait", `Stage0(SP5): 압력 안정화 대기(${hold}초)`, "PRESSURE_SP5", { sec: hold, watch: null }));
+    }
+  }
   const sp3 = pyFloat(cfg.SP3_MTORR), sp2 = pyFloat(cfg.SP2_MTORR);
   for (const [n, spv, lab] of [[3, sp3, "Stage1(SP3)"], [2, sp2, "Stage2(SP2)"]] as const) {
     if (sp1 < spv) out.push(pressure(n, spv, lab, `PRESSURE_SP${n}`, true));
@@ -285,7 +297,7 @@ export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: 
   const sd = Math.max(0, Math.ceil(fl(p.shutter_delay) * 60));
   if (sd > 0) out.push(B("wait", `Shutter Delay ${sd}s`, "SHUTTER_DELAY", { sec: sd, watch: { dc: true } }));
   const pt = Math.max(0, Math.ceil(fl(p.process_time) * 60));
-  // 셔터 전 히터 정착(묶음 13, v1 3328872) — 셔터 딜레이 뒤·메인 앞. 2단 제어·히터 사용·HEATER_SHUTTER_SETTLE_MAX_SEC > 0 일 때만
+  // 셔터 전 히터 정착(묶음 13, v1 3328872) — 셔터 딜레이 뒤·메인 앞. 2단 제어(cascade)·히터 사용·HEATER_SHUTTER_SETTLE_MAX_SEC > 0 일 때만(tc2·tc1 에는 없음)
   if (fl(p.process_time) > 0 && pyTruthy(p.use_heater) && fl(p.heater_temp) > 0 && heaterCtrlMode(cfg) === "cascade"
       && pyFloat(cfg.HEATER_SHUTTER_SETTLE_MAX_SEC) > 0) {
     out.push(B("heater_settle", "", "", { tol_c: null, sec: null, max_sec: null, fail_action: null }));
