@@ -23,6 +23,7 @@ import { useRecipes } from "../chk/useRecipes";
 import { fmtKst } from "@/lib/ops2/time";
 import Ch12Chamber from "./Ch12Chamber";
 import { HeaterThicknessPanel, LoadLockPanel, PcPanel, RobotPanel, TspPanel } from "./Ch12Aux";
+import Ch12Timing from "./Ch12Timing";
 import { Btn, PlcPanel } from "./Ch12Controls";
 import Ch12History from "./Ch12History";
 import { LocalFiles } from "./Ch12LocalFiles";
@@ -420,6 +421,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
             </div>
           </div>
           <Ch12History equipment={equipment} bundle={bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
+          {!neverConnected && <Ch12Timing st={st} />}
           {!neverConnected && (
             <Chk2Config equipment={equipment} bundle={d.bundle} st={st as unknown as StateData | null} perms={perms ?? null}
               connected={connected} reloadSchema={d.loadSchema} notify={notify} />
