@@ -132,16 +132,19 @@ await esbuild.build({
   define: { "process.env.NEXT_PUBLIC_BASE_PATH": '""' },
   stdin: {
     resolveDir: root, loader: "ts", contents: `
-      export { default as Ch12Chamber } from "./components/ops2/ch12/Ch12Chamber";
-      export { HeaterThicknessPanel, PcPanel, TspPanel, LoadLockPanel, RobotPanel } from "./components/ops2/ch12/Ch12Aux";
-      export { PlcPanel, CmdForm } from "./components/ops2/ch12/Ch12Controls";
-      export { EventFeed } from "./components/ops2/chk/Chk2Logs";
+      export { default as Ch12Run, ChamberRun, TREND_DEFS12, TREND_COLS12 } from "./components/ops2/ch12/Ch12Run";
+      export { HeaterThicknessPanel, PcPanel, TspPanel, PresputterPanel, RobotPanel, CommonOps, HeaterStatus } from "./components/ops2/ch12/Ch12Aux";
+      export { StatusBand12 } from "./components/ops2/ch12/Ch12Status";
+      export { default as Ch12Hmi, drawnTargets } from "./components/ops2/ch12/Ch12Hmi";
+      export { Ch12EventFeed, ch12LogLine } from "./components/ops2/ch12/Ch12Logs";
+      export { WEB_TABS, LOCAL_TABS } from "./components/ops2/ch12/Ch12Page";
+      export { Chk2ModeContext } from "./components/ops2/chk/mode";
       export { RgaChart, rgaPoints, OesChart, oesPoints } from "./components/ops2/ch12/Ch12Spectra";
       export { default as Ch12SeqEdit } from "./components/ops2/ch12/Ch12SeqEdit";
       export * as TH from "./components/ops2/ch12/Ch12Thickness";
       export * as PO from "./components/ops2/ch12/Ch12Popups";
       export * as LF from "./components/ops2/ch12/Ch12LocalFiles";
-      export { HeaterStatus } from "./components/ops2/ch12/Ch12Aux";
+      export * as PC from "./lib/ops2/ch12/pc";
       export { logLine } from "./components/ops2/chk/text";
       export * as L from "./components/ops2/ch12/logic";
       export * as T from "./components/ops2/ch12/types";
@@ -156,98 +159,156 @@ const L = U.L;
 /** 그린 HTML → 글(태그 빼고, 공백 하나로) */
 const textOf = (html) => html.replace(/<[^>]+>/g, " ").replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&")
   .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ");
-/** 버튼 글 → 막힘(disabled) 여부 */
+/** 버튼 글 → 막힘(disabled) 여부(같은 글이 여럿이면 마지막) */
 function buttons(html) {
   const outB = {};
   for (const m of html.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)) outB[textOf(m[2]).trim()] = /\sdisabled=""/.test(m[1]);
   return outB;
 }
-const render = (C, props) => renderToStaticMarkup(h(C, props));
-const can = () => true;
+/** 버튼 글 → 잠금 이유(title '잠김 — …') */
+function lockText(html, label) {
+  for (const m of html.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)) {
+    if (textOf(m[2]).trim() === label) { const t = /title="([^"]*)"/.exec(m[1]); return t ? t[1].replace(/&#x27;/g, "'") : ""; }
+  }
+  return null;
+}
+/** 상세(detail) 끄기·켜기 — 화면은 Chk2ModeContext 로 받는다 */
+const render = (C, props, mode = {}) => renderToStaticMarkup(h(U.Chk2ModeContext.Provider, { value: { local: false, hmiKinds: [], detail: false, ...mode } }, h(C, props)));
+const noLock = () => null;
 const noop = () => {};
+const can = () => true;
 
 const R = [];
 const check = (name, cond, got) => R.push({ name, ok: !!cond, got });
+
+// 작업자 화면에 보이면 안 되는 개발용 글(상세를 끈 화면) — 인자 형식 이름·명령 이름·코일 원래 이름·JSON
+const DEV_WORDS = ["any", "str", "obj", "rows", "JSON", "enum", "PROCESS_START", "RECIPE_LOAD", "PLC_BUTTON", "PC_START", "TSP_SCHEDULE", "HEATER_ONOFF",
+  "BLOCK_SKIP", "PRESPUTTER_RESERVE", "RUNTIME_DUMP", "POWER_SELECT", "_SW", "L_VAC_READY", "SW_RF_SELECT", "proc.ch1", "ch1.mfc", "plc."];
+const devHits = (t) => DEV_WORDS.filter((w) => new RegExp(`(^|[^A-Za-z0-9가-힣_.])${w.replace(/[.]/g, "\\.")}([^A-Za-z0-9_]|$)`).test(t));
 
 // ───────────── 1) 화면(장비 sim 값) ─────────────
 const kindsUsed = Object.entries(L.KINDS);
 const kindsMissing = kindsUsed.filter(([, cands]) => !L.hasKind(bundle, cands)).map(([k]) => k);
 check("ui:bundle-kinds — 화면 버튼이 부르는 명령이 장비 명령 표에 모두 있음", kindsMissing.length === 0, kindsMissing);
 
+const nowMs = Date.parse(fx.state.ts);
 const chamberProps = (ch) => ({
-  bundle, st, ch, connected: true, plcOk: true, allowed: () => true, canPlc: () => true, pending: {}, onAsk: noop, feed, skewMs: 0,
-  mimicNote: "", nowMs: Date.parse(fx.state.ts), onEditSeq: noop,
+  bundle, st, ch, connected: true, lock: noLock, onAsk: noop, feed, trend: [], nowMs, skewMs: 0, equipment: "CH12-SIM", local: false,
+  recipes: [], getRecipe: async () => null, onEditSeq: noop, onLog: noop,
 });
 {
-  const html = render(U.Ch12Chamber, chamberProps("ch1"));
+  const html = render(U.ChamberRun, chamberProps("ch1"));
   const t = textOf(html), b = buttons(html);
   const cs = st.chambers.ch1;
   check("ui:chamber-running — 공정 중 상태 글·블록 n/전체·남은 시간·ETA, STOP 은 늘 눌림(v1 START/STOP 늘 활성)",
         cs.procState === "RUNNING" && t.includes(L.stateInfo(bundle, "RUNNING", "ch1").label) && t.includes("블록 1/1")
-        && t.includes(L.clockOrDash(cs.remainS)) && t.includes("ETA(공정 끝까지)") && b["CH1 STOP"] === false,
-        { procState: cs.procState, stop: b["CH1 STOP"], text: t.slice(0, 400) });
-  check("ui:chamber-log — 이 챔버 사건만 로그(로그 줄 = 장비 시각 + 종류 + 글)",
-        t.includes("로그") && feed.filter((e) => L.feedChamber(e) === "ch1").length > 0
-        && feed.filter((e) => L.feedChamber(e) === "ch1").some((e) => t.includes(U.logLine(bundle, e).text)), t.slice(-600));
+        && t.includes(L.clockOrDash(cs.remainS)) && t.includes("ETA(공정 끝까지)") && b["CH1 STOP"] === false
+        && b["건너뛰기"] === false && b["일시정지"] === false && b["시퀀스 편집"] === false,
+        { procState: cs.procState, stop: b["CH1 STOP"], b, text: t.slice(0, 400) });
+  const mine = feed.filter((e) => L.feedChamber(e) === "ch1").map((e) => U.ch12LogLine(bundle, e)).filter((l) => l.main);
+  check("ui:chamber-log — 이 챔버 사건만 로그(로그 줄 = 장비 시각 + 종류 + 글, 평소 보기에 공정 단계 줄)",
+        t.includes("알림·로그") && mine.length > 0 && mine.every((l) => t.includes(l.text.replace(/\s+/g, " ")))
+        && mine.some((l) => l.kind === "공정 단계" && l.text.includes("시작")), mine.map((l) => `${l.kind} ${l.text}`));
+  check("ui:no-dev-text — 운전 탭 CH1 칸에 개발용 글(인자 형식·명령 이름·코일 이름·열 이름)이 없음(상세 끔)", devHits(t).length === 0, devHits(t));
 }
 {
-  const html = render(U.Ch12Chamber, chamberProps("ch2"));
+  const html = render(U.ChamberRun, chamberProps("ch2"));
   const t = textOf(html), b = buttons(html);
-  check("ui:chamber-idle — 대기 중·공정 시작·적재 해제·오류 해제·STOP(늘 눌림)",
-        t.includes("대기 중") && b["공정 시작"] === false && b["적재 해제"] === false && b["오류 해제"] === false && b["CH2 STOP"] === false,
-        b);
+  check("ui:chamber-idle — 대기 중·공정 시작·적재 해제·오류 해제·STOP(늘 눌림)·다음 공정 레시피 고르기",
+        t.includes("대기 중") && b["공정 시작"] === false && b["적재 해제"] === false && b["오류 해제"] === false && b["CH2 STOP"] === false
+        && t.includes("CH2 공정 레시피 고르기") && "적재" in b, b);
   const pop = feed.find((e) => e.type === "event" && e.data.context?.kind === "popup" && e.data.context?.chamber === "ch2");
-  const pl = pop && U.logLine(bundle, pop);
+  const pl = pop && U.ch12LogLine(bundle, pop);
   check("ui:popup-line — v1 경고창(시작 가드 '대기 필요' 등)은 로그 줄(경고)로 — 문구 그대로, 시작은 COOLDOWN 거부",
         !!pop && pl.level === "warn" && pop.data.message.startsWith("이전 공정 종료 후 1분 대기 필요합니다.") && t.includes(pl.text.replace(/\s+/g, " "))
         && fx.cmd.start2_cooldown.reason === "COOLDOWN", { pop: pop?.data, cmd: fx.cmd.start2_cooldown });
+  const ht = textOf(render(U.HeaterThicknessPanel, { bundle, st, lock: noLock, onAsk: noop, plcOk: true }));
+  // 히터 레지스터 카드(41칸)는 처음 접어 둠 — PV·목표·MV 는 그 위 히터 상태 줄(v1 히터 패널 글)에. 라벨의 레지스터 주소 '(D112)' 는 상세에서만
+  const plain = (l) => l.replace(/\s*\((?:[DM]\d+)[^)]*\)/g, "").trim();
   const blocks = (bundle.chambers.find((c) => c.id === "ch2").blocks ?? []).map((n) => bundle.snapshot.blocks.find((x) => x.name === n))
-    .filter((x) => x && !["dcpulse", "rfpulse", "stm100", "oes", "rga", "dc", "rf"].includes(x.name.split(".").pop()));
-  const labels = blocks.flatMap((x) => x.fields.slice(0, 2).map((f) => f.label));
-  check("ui:chamber-values — 챔버 장비 1초 값 칸(묶음 chambers[].blocks 순서 — 접힌 칸 제외)", labels.length > 0 && labels.every((l) => t.includes(l)),
-        labels.filter((l) => !t.includes(l)));
-  check("ui:presputter — 프리스퍼터 예약·예약 취소 칸(시각 HH:MM), 장비가 매일 예약을 잡음·형식 오류는 TIME_FORMAT 거부",
-        t.includes("프리스퍼터 예약") && t.includes("시각(HH:MM)") && "예약" in b && b["예약 취소"] === false
+    .filter((x) => x && !["dcpulse", "rfpulse", "stm100", "oes", "rga", "dc", "rf", "heater"].includes(x.name.split(".").pop()));
+  const labels = blocks.flatMap((x) => x.fields.slice(0, 2).map((f) => [x.name, plain(f.label)]));
+  const miss = labels.filter(([n, l]) => !(["ch2.thk"].includes(n) ? ht : t).includes(l));
+  const heaterVals = ht.includes(String(L.short(st.snapshot["ch2.heater.pv"]))) && ht.includes("CH2 히터") && !/\(D1\d\d\)/.test(ht);
+  check("ui:chamber-values — 챔버 장비 1초 값 칸(묶음 chambers[].blocks 순서 — 접힌 칸 제외, CH2 두께는 히터·두께 칸, 히터 값은 히터 상태 줄)",
+        labels.length > 0 && miss.length === 0 && heaterVals, { miss, heaterVals });
+}
+{
+  const html = render(U.PresputterPanel, { bundle, st, lock: noLock, onAsk: noop });
+  const t = textOf(html), b = buttons(html);
+  check("ui:presputter — 프리스퍼터 예약·예약 취소 칸(시각 HH:MM 고르기), 장비가 매일 예약을 잡음·형식 오류는 TIME_FORMAT 거부",
+        t.includes("프리스퍼터 예약") && t.includes("시각(HH:MM)") && (html.match(/aria-label="시각\(HH:MM\) 시"/g) ?? []).length === 2
+        && "예약" in b && b["예약 취소"] === false && t.includes(String(st.engines["proc.ch2"].presputter.status_text))
         && fx.cmd.pre.ok && fx.cmd.pre_bad.reason === "TIME_FORMAT" && fx.cmd.pre_bad.detail === "시간 형식 오류 (HH:MM)", fx.cmd);
 }
 {
-  const html = render(U.HeaterThicknessPanel, { bundle, st, can, onAsk: noop, plcOk: true });
+  const html = render(U.HeaterThicknessPanel, { bundle, st, lock: noLock, onAsk: noop, plcOk: true });
   const t = textOf(html), b = buttons(html);
   const pv = st.snapshot["ch2.heater.pv"];
-  check("ui:heater-panel — CH2 히터 PV·SV·MV, 켜기/끄기(RUN 이면 끄기)·목표 적용·이상 리셋",
-        typeof pv === "number" && t.includes(String(L.short(pv))) && b["히터 켜기"] === false && "목표 적용" in b
-        && b["이상 리셋"] === false && st.heater?.run === false, { pv, b });
+  check("ui:heater-panel — CH2 히터 PV·SV·MV, 목표 온도 칸(범위 0~상한 °C)·켜기(목표를 넣어야)/끄기(RUN 이면)·목표 적용·이상 리셋",
+        typeof pv === "number" && t.includes(String(L.short(pv))) && "히터 켜기" in b && lockText(html, "히터 켜기").includes("목표 온도를 넣으세요")
+        && "목표 적용" in b && b["이상 리셋"] === false && st.heater?.run === false && t.includes("목표 온도") && /범위 0~\d+ °C/.test(t), { pv, b });
   check("ui:thickness-panel — 두께(ch2.thk)·STM-100(두께·증착률) 값, 두께 영점",
         t.includes("두께") && b["두께 영점"] === false && !!bundle.snapshot.blocks.find((x) => x.name === "ch2.stm100"), b);
 }
 {
-  const html = render(U.PcPanel, { bundle, st, can, onAsk: noop });
-  const b = buttons(html);
-  check("ui:pc-panel — 플라즈마 클리닝 채널 선택·시작·정지·오류 해제(장비가 PC 실행 중 전환 거부)",
-        "채널 선택" in b && b["클리닝 시작"] === false && b["클리닝 정지"] === false && b["오류 해제"] === false && fx.cmd.pc_sel.ok, b);
-}
-{
-  const html = render(U.TspPanel, { bundle, st, can, onAsk: noop, nowMs: Date.parse(fx.state.ts) });
+  const pcList = [{ id: "r1", kind: "pc", name: "PC-1", rowCount: 1, check: { errors: 0, warnings: 0, first: null } }];
+  const html = render(U.PcPanel, { bundle, st, lock: noLock, onAsk: noop, recipes: pcList, getRecipe: async () => null });
   const t = textOf(html), b = buttons(html);
-  check("ui:tsp-panel — TSP 시작·정지·매일 예약(시각)", t.includes("매일 예약") && Object.keys(b).some((k) => k.includes("예약")), b);
+  check("ui:pc-panel — 플라즈마 클리닝 채널(CH1/CH2) 선택·PC 레시피 목록에서 고르기(JSON 칸 없음)·시작·정지·오류 해제(장비가 PC 실행 중 전환 거부)",
+        "채널 선택" in b && "CH1" in b && "CH2" in b && b["클리닝 시작"] === false && b["클리닝 정지"] === false && b["오류 해제"] === false
+        && t.includes("PC-1") && !/<textarea|font-mono/.test(html) && devHits(t).length === 0 && fx.cmd.pc_sel.ok, { b, dev: devHits(t) });
+  const rg = U.PC.pcRanges(bundle);
+  const good = { use_ch: "2", process_name: "PC", base_pressure: "5e-6", gas_flow: "20", working_pressure: "2", rf_power: "100", process_time: "1" };
+  check("ui:pc-recipe — PC 레시피 열(v1 PC CSV 첫 행)·범위(묶음 PC_DEFAULT_*)·검사(빈 칸·범위 밖 막음)",
+        U.PC.checkPcRow(good, rg).length === 0 && U.PC.checkPcRow({ ...good, rf_power: "9999" }, rg)[0]?.includes("밖입니다")
+        && U.PC.checkPcRow({ ...good, gas_flow: "" }, rg)[0]?.includes("값을 넣으세요") && U.PC.checkPcRow({ ...good, use_ch: "3" }, rg).length === 1
+        && rg.rf_power.max === 600 && U.PC.PC_FIELDS.map((f) => f.key).join() === "use_ch,process_name,base_pressure,gas_flow,working_pressure,rf_power,process_time",
+        rg);
 }
 {
-  const html = render(U.LoadLockPanel, { bundle, st, plcOk: true, can, onAsk: noop });
-  const b = buttons(html);
+  const html = render(U.TspPanel, { bundle, st, lock: noLock, onAsk: noop, nowMs });
+  const t = textOf(html), b = buttons(html);
+  check("ui:tsp-panel — TSP 목표 압력(Torr, 지수 표기)·사이클 수·시작·정지·매일 예약 켜기/끄기 + 시각(HH:MM 고르기)",
+        t.includes("매일 예약") && t.includes("목표 압력") && t.includes("사이클 수") && "예약 켜기" in b && "예약 끄기" in b
+        && b["TSP 시작"] === false && b["TSP 정지"] === false && (html.match(/aria-label="예약 시각 [시분]"/g) ?? []).length === 2, b);
+  const tr = { min: 0, max: 1, unit: "Torr", minExclusive: true };
+  const cr = L.paramRange(bundle, "TSP_UI_DEFAULT_CYCLES", { int: true });
+  check("ui:inputs-range — 입력 칸은 범위 밖·숫자 아님을 보내기 전에 막음(지수 표기 받음, 범위 = 묶음 파라미터 min·max)",
+        L.checkNum("5e-7", tr).error === null && L.checkNum("0", tr).error?.includes("밖입니다") && L.checkNum("abc", tr).error === "숫자가 아닙니다"
+        && L.checkNum("0", cr).error?.includes("밖입니다") && L.checkNum("2.5", cr).error === "정수여야 합니다" && L.checkNum("", tr, true).error === "값을 넣으세요"
+        && L.isHHMM("06:30") && !L.isHHMM("25:99"), { cr });
+}
+{
+  const html = render(U.CommonOps, { bundle, st, lock: noLock, onAsk: noop, plcOk: true });
+  const t = textOf(html), b = buttons(html);
   const coil = bundle.plcButtons.find((x) => x.name === "SW_POWER_SELECT")?.coil;
-  check("ui:loadlock-panel — Power Select(SW_POWER_SELECT 코일 215)·런타임 덤프",
-        b["Power Select 보내기"] === false && b["런타임 덤프"] === false && coil === 215 && fx.cmd.power_select.ok, { b, coil });
+  check("ui:loadlock-panel — Power Select(SW_POWER_SELECT 코일 215 — 켜기·끄기 확인창)·런타임 덤프(사유 선택)",
+        b["켜기"] === false && b["끄기"] === false && b["런타임 덤프"] === false && t.includes("런타임 덤프 사유(선택)") && coil === 215
+        && fx.cmd.power_select.ok && devHits(t).length === 0, { b, coil, dev: devHits(t) });
 }
 {
-  const html = render(U.RobotPanel, { bundle, st, can, onAsk: noop, feed });
+  const html = render(U.RobotPanel, { bundle, st, feed });
   const t = textOf(html);
-  check("ui:robot-panel — 로봇 연결 상태 칸(서버 페이지 자리)", t.includes("로봇"), t.slice(0, 300));
+  const r = st.engines.robot;
+  check("ui:robot-panel — 로봇 연결 상태 칸(장비 engines.robot — 받는 중·처리한 명령·처리 중·마지막 명령, 값 없으면 그렇게)",
+        t.includes("로봇") && !!r && t.includes(r.listening ? "받는 중" : "받지 않음") && new RegExp(`처리한 명령 ${r.count} ?건`).test(t) && t.includes(r.last ? String(r.last.cmd) : "아직 없음")
+        && !t.includes("모름"), t.slice(0, 300));
 }
 {
-  const html = render(U.PlcPanel, { bundle, snapshot: st.snapshot, plcOk: true, canPress: () => true, pending: {}, onAsk: noop, note: "" });
+  const html = render(U.Ch12Hmi, { bundle, snapshot: st.snapshot, plcOk: true, lockOf: noLock, pending: {}, onAsk: noop, note: "노드를 눌러 조작" });
   const t = textOf(html);
-  check("ui:plc-buttons — 장비 PLC 버튼 전부(Power Select·부저 정지 포함)", bundle.plcButtons.length > 20
-        && bundle.plcButtons.every((x) => t.includes(x.label)), bundle.plcButtons.filter((x) => !t.includes(x.label)).map((x) => x.label));
+  const drawn = U.drawnTargets(bundle);
+  const shown = bundle.plcButtons.filter((x) => drawn.has(x.target) ? html.includes(`<title>${L.plcName(x)} · `) : t.includes(L.plcName(x)));
+  check("ui:plc-buttons — 장비 PLC 버튼 전부(계통도 노드 + 그 밖의 버튼 목록 — Power Select·부저 정지 포함), 이름은 한국어(코일 원래 이름은 상세에서만)",
+        bundle.plcButtons.length > 20 && shown.length === bundle.plcButtons.length && !/[A-Za-z0-9]+_SW/.test(t),
+        bundle.plcButtons.filter((x) => !shown.includes(x)).map((x) => x.label));
+  const dt = textOf(render(U.Ch12Hmi, { bundle, snapshot: st.snapshot, plcOk: true, lockOf: noLock, pending: {}, onAsk: noop, note: "" }, { detail: true }));
+  const locked = render(U.Ch12Hmi, { bundle, snapshot: st.snapshot, plcOk: false, lockOf: () => "PLC 값이 오래됨", pending: { [bundle.plcButtons[5].target]: true }, onAsk: noop, note: "PLC 응답 늦음 — 조작 잠금" });
+  check("ui:hmi-map — HMI 계통도(CH1·CH2·로드락 2D — 진회색 = 켜짐·열림, 전환 중 파란 점선, 잠금 이유 aria·흐리게, 상세면 원래 이름)",
+        html.includes('aria-label="CH1 계통도"') && html.includes('aria-label="CH2 계통도"') && html.includes('aria-label="로드락 계통도"')
+        && html.includes('role="button"') && locked.includes("opacity-50") && locked.includes("잠김: PLC 값이 오래됨") && locked.includes("조작 잠금")
+        && /[A-Z0-9]+_SW/.test(dt) && t.includes("열림·켜짐") && t.includes("전환 중"), null);
 }
 {
   const reasons = ["TIME_FORMAT", "LINK_DOWN", "CHANNEL_SWITCH_RUNNING", "COOLDOWN", "RUNNER_BUSY", "PC_RUNNING", "DUMP_BUSY",
@@ -255,7 +316,45 @@ const chamberProps = (ch) => ({
   const miss = reasons.filter((c) => !bundle.reasons.some((r) => r.code === c && r.label));
   check("ui:cmd-reject-text — 거부 사유 코드마다 화면 이름(묶음 reasons)", miss.length === 0, miss);
 }
-
+{
+  // 상태 띠 — CH1·CH2 공정 상태·블록·남은 시간·ETA, PC·TSP·로드락 요약, 모드·연결 칩, ALL STOP·부저 정지(늘 눌림)
+  const html = render(U.StatusBand12, { bundle, st, connected: true, conn: { label: "장비 연결됨 · 1초 전", tone: "neutral" },
+    links: [{ label: "PLC 정상", tone: "neutral" }], mode: "sim", equipment: "CH12-SIM", label: null, lock: noLock, onAsk: noop, nowMs, plcOk: true });
+  const t = textOf(html), b = buttons(html);
+  check("ui:status-band — 상태 띠(CH1·CH2 상태·블록·남은·ETA, 로드락·플라즈마 클리닝·TSP 요약, SIM·연결·PLC 칩, ALL STOP·부저 정지)",
+        t.includes(L.stateInfo(bundle, "RUNNING", "ch1").label) && t.includes("블록 1/1") && t.includes("대기 중") && t.includes("로드락")
+        && t.includes("플라즈마 클리닝") && t.includes("TSP") && t.includes("SIM — 모의 장비") && t.includes("PLC 정상") && b["ALL STOP"] === false
+        && b["부저 정지"] === false && (html.match(/data-band-chamber="ch[12]"/g) ?? []).length === 2, b);
+}
+{
+  // 탭·잠금 — 웹 운전·HMI·레시피·기록·설정 / 노트북 운전·HMI·기록, 잠금 순서·문구 = 챔버K lockOf
+  const base = { authLost: false, perms: { canOperate: true, kinds: ["PLC_BUTTON", "PROCESS_STOP", "PROCESS_START", "RECIPE_LOAD"] }, local: false, bench: false,
+    benchOk: (k) => k === "RECIPE_LOAD", connected: true, webOnline: true, streamUp: true, plcOk: true, inflight: () => false };
+  const lr = L.lockReason;
+  check("ui:tabs-locks — 탭(웹 운전·HMI·레시피·기록·설정 / 노트북 운전·HMI·기록)·잠금 순서와 문구(로그인 → 권한 → bench → 정지 쪽 → 기다림 → 끊김 → PLC)",
+        U.WEB_TABS.map((x) => x.label).join() === "운전,HMI,레시피,기록,설정" && U.LOCAL_TABS.map((x) => x.label).join() === "운전,HMI,기록"
+        && lr({ ...base, authLost: true }, "PROCESS_STOP") === "로그인이 끊김 — 새로고침하세요" && lr({ ...base, perms: undefined }, "X") === "권한 정보를 읽는 중"
+        && lr({ ...base, local: true }, "PC_START") === "노트북 화면에서 받지 않는 조작 — 웹에서" && lr(base, "PC_START") === "권한 없음 — 장비 담당자·관리자만"
+        && lr({ ...base, bench: true }, "PROCESS_START") === "읽기 전용(bench) — 장비로 보내는 조작은 잠김" && lr({ ...base, bench: true }, "RECIPE_LOAD") === null
+        && lr({ ...base, connected: false }, "PROCESS_STOP") === null && lr({ ...base, connected: false, webOnline: false }, "PROCESS_STOP") === "장비 끊김"
+        && lr({ ...base, inflight: () => true }, "PROCESS_START") === "결과를 기다리는 중" && lr({ ...base, inflight: () => true }, "PROCESS_STOP") === null
+        && lr({ ...base, connected: false }, "PROCESS_START") === "장비 끊김" && lr({ ...base, local: true, connected: false, streamUp: false }, "PROCESS_START") === "노트북 프로그램 연결 끊김"
+        && lr({ ...base, plcOk: false }, "PLC_BUTTON") === "PLC 값이 오래됨" && lr({ ...base, local: true }, "PLC_BUTTON") === null, null);
+}
+{
+  // 로그 — 평소 보기(묶음 eventKinds main: 공정 단계 줄)·같은 글 두 번 막기·챔버 고르기
+  const dup = { id: "d1", type: "event", ts: fx.state.ts, seq: 1, instance: "i",
+    data: { level: "info", code: "STATUS", message: "STATUS on=1 fwd=10.0W", context: { source: "rfpulse", chamber: "ch1", kind: "status" } } };
+  const dl = U.ch12LogLine(bundle, dup);
+  const blk = feed.find((e) => e.type === "event" && e.data.context?.kind === "block");
+  const bl = blk && U.ch12LogLine(bundle, blk);
+  const html = render(U.Ch12EventFeed, { bundle, feed: [...feed, dup] }, { detail: true });
+  const t = textOf(html);
+  const plain = textOf(render(U.Ch12EventFeed, { bundle, feed }));
+  check("ui:log-main — 로그 평소 보기에 공정 진행 줄(공정 단계 '1/1 … 시작' — 묶음 eventKinds main)·같은 글이 한 줄에 두 번 붙지 않음('STATUS … STATUS STATUS' 없음)·챔버 고르기",
+        !!bl && bl.main && /^1\/1 .+ 시작$/.test(bl.text) && plain.includes(bl.text) && !t.includes("STATUS STATUS") && (t.match(/on=1 fwd=10\.0W/g) ?? []).length === 1
+        && dl.raw === "STATUS" && ["전체", "CH1", "CH2", "플라즈마 클리닝", "TSP", "공통"].every((x) => t.includes(x)), { bl, dl });
+}
 {
   // RGA 그래프 — 장비 rga data 사건(드라이버 rga_link 'data' {mass_axis, pressures}) 마지막 것, v1 규칙으로 점 거름
   const ev = (ch, xs, ys) => ({ id: `r${ch}${xs.length}`, type: "event", ts: fx.state.ts, seq: 1, instance: "i",
@@ -269,7 +368,6 @@ const chamberProps = (ch) => ({
         && html.includes("Atomic Mass") && html.includes("Partial Pressure") && html.includes("1e-11") && html.includes("1e-5")
         && render(U.RgaChart, { feed: f, ch: "ch2" }) === "" && !!kind, { pts, kind });
 }
-
 {
   // OES 그래프 — 장비 state.spectra(v1 거르기·0.5 s 쓰로틀·512점 솎기 — drivers/oes_spectrum), v1 축·빨간 선
   const pts = U.oesPoints(st, "ch1");
@@ -285,7 +383,6 @@ const chamberProps = (ch) => ({
         && ticks.every((x) => t.includes(x)) && yt.every((y) => t.includes(y))
         && !/data-oes-line/.test(empty) && textOf(empty).includes("값 없음") && st.spectra.ch2 === null,
         { n: pts?.length, spectra: Object.keys(st.spectra ?? {}) });
-  // 지우기(v1 graph.reset·clear_rga_plot) — 그 챔버 run_end·스캔 시작 뒤에는 RGA 그림 없음
   const ev = (kind, extra) => ({ id: `x${Math.random()}`, type: "event", ts: fx.state.ts, seq: 1, instance: "i",
     data: { level: "info", code: "X", message: extra?.message ?? "", context: { source: "rga", chamber: "ch1", kind, data: extra?.data ?? {} } } });
   const dat = ev("data", { data: { mass_axis: [18, 28], pressures: [1e-7, 2e-8] } });
@@ -299,18 +396,19 @@ const chamberProps = (ch) => ({
   // 장비 키 state.engines["proc.chN"](assembly.register_engine) — 블록 목록·수정 항목·시작한 블록 수·시퀀스 편집 창
   const eng = st.engines["proc.ch1"];
   const cb = L.currentBlocks(st, feed, "ch1");
-  const html = render(U.Ch12Chamber, chamberProps("ch1"));
+  const html = render(U.ChamberRun, chamberProps("ch1"));
   const seq = textOf(render(U.Ch12SeqEdit, { bundle, st, feed, ch: "ch1", can, onAsk: noop, onClose: noop }));
-  check("ui:engines-key — 포털이 장비 키 proc.chN 을 읽음(엔진 상태 글·블록 목록·started_upto·수정 항목·시퀀스 편집 창이 채워짐)",
+  check("ui:engines-key — 포털이 장비 키 proc.chN 을 읽음(엔진 상태 글·블록 목록(공정 순서)·started_upto·수정 항목·시퀀스 편집 창이 채워짐)",
         L.engineOf(st, "ch1") === eng && !!eng && cb.from === "engine" && cb.blocks.length === eng.blocks.length && eng.blocks.length > 0
         && L.startedUpto(st, "ch1", cb.blocks.length) === eng.started_upto && eng.started_upto >= 1 && Array.isArray(eng.adjust)
-        && textOf(html).includes(eng.text) && !seq.includes("아직 받지 못했습니다") && !seq.includes("모르는 키") && !seq.includes("오류 ") && seq.includes(`시작한 블록 ${eng.started_upto}/${eng.blocks.length}`)
+        && textOf(html).includes(eng.text) && textOf(html).includes(`시작한 블록 ${eng.started_upto}/${eng.blocks.length}`)
+        && !seq.includes("아직 받지 못했습니다") && !seq.includes("모르는 키") && !seq.includes("오류 ") && seq.includes(`시작한 블록 ${eng.started_upto}/${eng.blocks.length}`)
         && L.engineOf(st, "ch2") === st.engines["proc.ch2"], { keys: Object.keys(st.engines), from: cb.from, seq: seq.slice(0, 200) });
 }
 {
   // 히터 패널 글(v1 ui/heater_panel.py 우선순위 문구 — 장비 heater_panel_text)
   const p = st.heater.panel;
-  const t = textOf(render(U.HeaterThicknessPanel, { bundle, st, can, onAsk: noop, plcOk: true }));
+  const t = textOf(render(U.HeaterThicknessPanel, { bundle, st, lock: noLock, onAsk: noop, plcOk: true }));
   check("ui:heater-text — v1 히터 패널 상태 문구·상태 줄·배지·소유자·램프(값 표 대신)",
         !!p && t.includes(p.status_text) && t.includes(p.state_line) && t.includes(p.badge) && t.includes(`소유 ${p.owner_text}`)
         && ["TC", "D/A", "냉각수", "진공", "인터락", "과온", "TC 이상", "워치독"].every((x) => t.includes(x))

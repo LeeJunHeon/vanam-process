@@ -55,7 +55,8 @@ function newId(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-export function useChk2(equipment: string, mode: Chk2Mode = "web") {
+/** trendCols — 추세에 쌓을 열(기본 TREND_COLS = 챔버K). 챔버12 화면은 챔버별 열을 넘긴다(값이 바뀌지 않는 상수로) */
+export function useChk2(equipment: string, mode: Chk2Mode = "web", trendCols: readonly string[] = TREND_COLS) {
   const local = mode === "local";
   const api = useCallback((_eq: string, path: string) => (local ? `/api/v1/${path}` : webApi(_eq, path)), [local]);
   const [hello, setHello] = useState<Hello | null>(null);
@@ -198,7 +199,7 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web") {
             const last = cur[cur.length - 1];
             if (last && t - last.t < TREND_EVERY_MS && t >= last.t) return cur;
             const v: Record<string, number | null> = {};
-            for (const c of TREND_COLS) v[c] = typeof snap[c] === "number" && Number.isFinite(snap[c]) ? (snap[c] as number) : null;
+            for (const c of trendCols) v[c] = typeof snap[c] === "number" && Number.isFinite(snap[c]) ? (snap[c] as number) : null;
             const keep = cur.filter((p) => p.t > t - TREND_KEEP_MS && p.t < t);
             return [...keep, { t, v }];
           });
@@ -227,7 +228,7 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web") {
       if (retry) clearTimeout(retry);
       if (cmdTimer) clearTimeout(cmdTimer);
     };
-  }, [equipment, authLost, loadHello, loadCommands, loadRuns, api, local]);
+  }, [equipment, authLost, loadHello, loadCommands, loadRuns, api, local, trendCols]);
 
   /** 명령 보내기 — web: ?wait=10 으로 결과(accepted·rejected·expired)까지 / local: POST 응답 {ok, reason, detail} 이 곧 결과 */
   const send = useCallback(async (kind: string, args: Record<string, unknown>, label?: string): Promise<SendResult> => {

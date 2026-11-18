@@ -168,12 +168,12 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-label={title}>
-      <div className={`flex max-h-[92vh] w-full ${wide ? "max-w-3xl" : "max-w-xl"} flex-col rounded-2xl bg-white p-4`}>
+      <div className={`flex max-h-[92vh] w-full ${wide ? "max-w-3xl" : "max-w-xl"} flex-col rounded-[12px] bg-white p-4`}>
         <div className="mb-2 flex items-center gap-2">
-          <b className="text-sm text-gray-900">{title}</b>
-          <button onClick={onClose} className="ml-auto rounded p-1 text-gray-400 hover:bg-gray-100" aria-label="닫기"><X size={16} /></button>
+          <b className="text-[14px] text-[#1B1F24]">{title}</b>
+          <button onClick={onClose} className="ml-auto rounded p-1 text-[#8A929D] hover:bg-[#EEF0F3]" aria-label="닫기"><X size={16} /></button>
         </div>
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto text-xs">{children}</div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto text-[12px]">{children}</div>
       </div>
     </div>
   );
@@ -182,14 +182,14 @@ function Modal({ title, onClose, children, wide }: { title: string; onClose: () 
 function Alert({ msg, onClose }: { msg: { title: string; text: string; tone: "warn" | "info" } | null; onClose: () => void }) {
   if (!msg) return null;
   return (
-    <div className={`whitespace-pre-wrap rounded-lg border px-2 py-1.5 ${msg.tone === "warn" ? "border-amber-300 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+    <div className={`whitespace-pre-wrap rounded-lg border px-2 py-1.5 ${msg.tone === "warn" ? "border-[#F5D9A8] bg-[#FFFAEB] text-[#B54708]" : "border-[#D9DDE3] bg-[#EEF0F3] text-[#3A424D]"}`}>
       <b>{msg.title}</b> — {msg.text}
-      <button onClick={onClose} className="ml-2 text-[10px] underline">확인</button>
+      <button onClick={onClose} className="ml-2 text-[12px] underline">확인</button>
     </div>
   );
 }
 
-const btn = "rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40";
+const btn = "rounded-lg border border-[#D9DDE3] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40";
 
 /** Factor 설정 창 */
 export function FactorDialog({ win, feed, can, send, onClose, onReload }: {
@@ -248,15 +248,15 @@ export function FactorDialog({ win, feed, can, send, onClose, onReload }: {
 
   return (
     <Modal title={f.title} onClose={onClose}>
-      <p className="text-gray-700">{f.tooling_header}</p>
+      <p className="text-[#1B1F24]">{f.tooling_header}</p>
       <table className="w-full border-collapse text-center">
-        <thead><tr><th className="w-16" />{GUNS.map((g) => <th key={g} className="border border-gray-200 bg-gray-50 px-1 py-0.5 font-semibold">{g}</th>)}</tr></thead>
+        <thead><tr><th className="w-16" />{GUNS.map((g) => <th key={g} className="border border-[#D9DDE3] bg-[#F5F6F8] px-1 py-0.5 font-semibold">{g}</th>)}</tr></thead>
         <tbody>
           {CHUCKS.map((c) => (
             <tr key={c}>
-              <th className="border border-gray-200 bg-gray-50 px-1 font-semibold">{CHUCK_TEXT[c]}</th>
+              <th className="border border-[#D9DDE3] bg-[#F5F6F8] px-1 font-semibold">{CHUCK_TEXT[c]}</th>
               {GUNS.map((g) => (
-                <td key={g} className="border border-gray-200 p-0">
+                <td key={g} className="border border-[#D9DDE3] p-0">
                   <input aria-label={`tooling ${CHUCK_TEXT[c]}/${g}`} value={tool[c]?.[g] ?? ""}
                     onChange={(e) => setTool((t) => ({ ...t, [c]: { ...t[c], [g]: e.target.value } }))}
                     className={`w-full px-1 py-1 text-center tabular-nums outline-none ${bad.includes(`tooling.${c}.${g}`) ? BAD : "bg-white"}`} />
@@ -266,7 +266,7 @@ export function FactorDialog({ win, feed, can, send, onClose, onReload }: {
           ))}
         </tbody>
       </table>
-      <p className="text-gray-700">{f.material_header}</p>
+      <p className="text-[#1B1F24]">{f.material_header}</p>
       <datalist id="ch12-thk-materials">{f.choices.map(([label]) => <option key={label} value={label} />)}</datalist>
       <div className="space-y-1">
         {GUNS.map((g) => (
@@ -274,30 +274,30 @@ export function FactorDialog({ win, feed, can, send, onClose, onReload }: {
             <span className="w-6 font-semibold">{g}</span>
             <input list="ch12-thk-materials" aria-label={`재료 ${g}`} value={mt[g] ?? ""} placeholder={NONE_TEXT}
               onChange={(e) => setMt((m) => ({ ...m, [g]: e.target.value }))}
-              className={`w-64 rounded-md border border-gray-200 px-1.5 py-1 ${bad.includes(`material.${g}`) ? BAD : "bg-white"}`} />
+              className={`w-64 rounded-md border border-[#D9DDE3] px-1.5 py-1 ${bad.includes(`material.${g}`) ? BAD : "bg-white"}`} />
             <span className="text-[#37474f]" title={chosen(mt[g] ?? "", mats, g).m ? "" : undefined}>{valueText(mt[g] ?? "", mats, g)}</span>
           </div>
         ))}
       </div>
-      <p className="whitespace-pre-wrap text-[10px] text-gray-500">{f.info}</p>
-      {f.warning_text && <p className="whitespace-pre-wrap text-[10px] text-[#ef6c00]">{f.warning_text}</p>}
-      <div className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
-        <span className="font-semibold text-gray-600">장비에 바로 쓰기</span>
-        <select aria-label="chuck" value={wc} onChange={(e) => setWc(e.target.value)} className="rounded-md border border-gray-200 px-1 py-0.5">
+      <p className="whitespace-pre-wrap text-[12px] text-[#5B6470]">{f.info}</p>
+      {f.warning_text && <p className="whitespace-pre-wrap text-[12px] text-[#ef6c00]">{f.warning_text}</p>}
+      <div className="flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-2">
+        <span className="font-semibold text-[#5B6470]">장비에 바로 쓰기</span>
+        <select aria-label="chuck" value={wc} onChange={(e) => setWc(e.target.value)} className="rounded-md border border-[#D9DDE3] px-1 py-0.5">
           {CHUCKS.map((c) => <option key={c} value={c}>{CHUCK_TEXT[c]}</option>)}
         </select>
-        <select aria-label="건" value={wg} onChange={(e) => setWg(e.target.value)} className="rounded-md border border-gray-200 px-1 py-0.5">
+        <select aria-label="건" value={wg} onChange={(e) => setWg(e.target.value)} className="rounded-md border border-[#D9DDE3] px-1 py-0.5">
           {GUNS.map((g) => <option key={g} value={g}>{g}</option>)}
         </select>
         <button className={btn} disabled={working || !can("THICKNESS_FACTOR_WRITE")} onClick={write}
           title="고른 chuck×건의 tooling 과 그 건 재료의 density·Z 를 지금 창의 값으로 장비에 바로 씀">장비에 쓰기</button>
       </div>
-      <p className="text-[10px] text-gray-500">{f.write_note}</p>
+      <p className="text-[12px] text-[#5B6470]">{f.write_note}</p>
       <Alert msg={shown} onClose={() => { setMsg(null); setWriteAfter(undefined); }} />
-      <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-2">
+      <div className="flex flex-wrap gap-2 border-t border-[#E3E6EA] pt-2">
         <button className={btn} disabled={!can("THICKNESS_MATERIALS_SAVE")} onClick={() => setMatOpen(true)}>재료 목록 편집</button>
         <span className="ml-auto" />
-        <button className={`${btn} border-blue-300 text-blue-700`} disabled={working || !can("THICKNESS_FACTOR_SAVE")} onClick={save}>저장</button>
+        <button className={`${btn} border-[#C7D5FB] text-[#1D4ED8]`} disabled={working || !can("THICKNESS_FACTOR_SAVE")} onClick={save}>저장</button>
         <button className={btn} onClick={onClose}>취소</button>
       </div>
       {matOpen && (
@@ -344,16 +344,16 @@ export function MaterialsDialog({ win, used, can, send, onClose, onSaved }: {
 
   return (
     <Modal title={m.title} onClose={onClose} wide>
-      <p className="text-gray-700">{m.header}</p>
-      {m.warning_text && <p className="whitespace-pre-wrap text-[10px] text-[#ef6c00]">{m.warning_text}</p>}
-      <div className="max-h-[45vh] overflow-auto rounded-lg border border-gray-200">
+      <p className="text-[#1B1F24]">{m.header}</p>
+      {m.warning_text && <p className="whitespace-pre-wrap text-[12px] text-[#ef6c00]">{m.warning_text}</p>}
+      <div className="max-h-[45vh] overflow-auto rounded-lg border border-[#D9DDE3]">
         <table className="w-full border-collapse">
-          <thead className="sticky top-0 bg-gray-50"><tr>{m.columns.map((h) => <th key={h} className="border-b border-gray-200 px-1 py-0.5 text-left font-semibold">{h}</th>)}</tr></thead>
+          <thead className="sticky top-0 bg-[#F5F6F8]"><tr>{m.columns.map((h) => <th key={h} className="border-b border-[#D9DDE3] px-1 py-0.5 text-left font-semibold">{h}</th>)}</tr></thead>
           <tbody>
             {rows.map((row, r) => (
-              <tr key={r} onClick={() => setSel(r)} className={sel === r ? "bg-blue-50" : ""}>
+              <tr key={r} onClick={() => setSel(r)} className={sel === r ? "bg-[#E8EEFC]" : ""}>
                 {row.map((v, c) => (
-                  <td key={c} className="border-b border-gray-100 p-0">
+                  <td key={c} className="border-b border-[#E3E6EA] p-0">
                     <input aria-label={`${r + 1}행 ${m.columns[c]}`} value={v} ref={r === rows.length - 1 && c === 0 ? firstNew : undefined}
                       onFocus={() => setSel(r)}
                       onChange={(e) => setRows((x) => x.map((rr, i) => (i === r ? rr.map((vv, j) => (j === c ? e.target.value : vv)) : rr)))}
@@ -365,10 +365,10 @@ export function MaterialsDialog({ win, used, can, send, onClose, onSaved }: {
           </tbody>
         </table>
       </div>
-      <p className="whitespace-pre-wrap text-[10px] text-gray-500">{m.note}</p>
+      <p className="whitespace-pre-wrap text-[12px] text-[#5B6470]">{m.note}</p>
       <Alert msg={msg} onClose={() => setMsg(null)} />
       {ask && (
-        <div className="whitespace-pre-wrap rounded-lg border border-amber-300 bg-amber-50 p-2 text-amber-900">
+        <div className="whitespace-pre-wrap rounded-lg border border-[#F5D9A8] bg-[#FFFAEB] p-2 text-[#B54708]">
           <b>재료 삭제</b>{"\n"}{ask.text}
           <div className="mt-1 flex gap-2">
             <button className={btn} autoFocus onClick={() => setAsk(null)}>아니오</button>
@@ -376,11 +376,11 @@ export function MaterialsDialog({ win, used, can, send, onClose, onSaved }: {
           </div>
         </div>
       )}
-      <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-2">
+      <div className="flex flex-wrap gap-2 border-t border-[#E3E6EA] pt-2">
         <button className={btn} onClick={add}>행 추가</button>
         <button className={btn} disabled={sel === null} onClick={del}>행 삭제</button>
         <span className="ml-auto" />
-        <button className={`${btn} border-blue-300 text-blue-700`} disabled={busy || !can("THICKNESS_MATERIALS_SAVE")} onClick={save}>저장</button>
+        <button className={`${btn} border-[#C7D5FB] text-[#1D4ED8]`} disabled={busy || !can("THICKNESS_MATERIALS_SAVE")} onClick={save}>저장</button>
         <button className={btn} onClick={onClose}>취소</button>
       </div>
     </Modal>

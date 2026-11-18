@@ -10,14 +10,18 @@ import { useChk2Mode } from "../chk/mode";
 type Common = { def?: BlockDef; snap?: Record<string, unknown>; link?: Link };
 
 /** 블록 하나 — big 은 위 줄에 크게, 나머지 숫자·문자 필드는 목록, bool 은 점 */
-export function BlockCard({ def, snap, link, big = [], foldable, hide = [], children }: Common & {
-  big?: string[]; foldable?: boolean; hide?: string[]; children?: ReactNode;
+/** 라벨 끝의 PLC 레지스터·코일 주소 '(D119)'·'(D148/D149)'·'(D128×6)'·'(M00401)' — 개발용, '상세'에서만 */
+export const plainLabel = (label: string) => label.replace(/\s*\((?:[DM]\d+)[^)]*\)/g, "").trim() || label;
+
+export function BlockCard({ def: def0, snap, link, big = [], foldable, hide = [], children, startOpen = true }: Common & {
+  big?: string[]; foldable?: boolean; hide?: string[]; children?: ReactNode; startOpen?: boolean;   // startOpen=false — 처음 접어 둠
 }) {
   const [manual, setManual] = useState<boolean | null>(null);   // 누르기 전에는 품질대로(off 면 접음)
   const { detail } = useChk2Mode();
-  if (!def) return null;
+  if (!def0) return null;
+  const def = detail ? def0 : { ...def0, fields: def0.fields.map((f) => ({ ...f, label: plainLabel(f.label) })) };
   const off = link?.q === "off";
-  const open = manual ?? (!foldable || !off);
+  const open = manual ?? (startOpen && (!foldable || !off));
   const dimOf = (column: string, own?: boolean) =>
     off || (own && snap?.[`${column}.q`] !== undefined && snap?.[`${column}.q`] !== "ok");
   const bigs = big.map((n) => def.fields.find((f) => f.name === n)).filter((f) => !!f);
@@ -26,7 +30,8 @@ export function BlockCard({ def, snap, link, big = [], foldable, hide = [], chil
   const bools = rest.filter((f) => f.type === "bool");
   const others = rest.filter((f) => f.type !== "bool");
 
-  const title = <>{def.label}{def.desc && <span className="text-[11px] font-normal text-gray-400">{def.desc}</span>}</>;
+  // 블록 설명(기종·통신·레지스터 범위)은 개발용 — '상세'에서만
+  const title = <>{def.label}{detail && def.desc && <span className="text-[12px] font-normal text-[#8A929D]">{def.desc}</span>}</>;
   return (
     <Card
       title={
@@ -36,12 +41,12 @@ export function BlockCard({ def, snap, link, big = [], foldable, hide = [], chil
           </button>
         ) : title
       }
-      right={<span className="flex items-center gap-1.5">{foldable && !open && off && <span className="text-[10px] text-gray-400">꺼져 있음 — 접어 둠</span>}<QBadge link={link} /></span>}
+      right={<span className="flex items-center gap-1.5">{foldable && !open && off && <span className="text-[12px] text-[#8A929D]">꺼져 있음 — 접어 둠</span>}<QBadge link={link} /></span>}
     >
       {open && (
         <>
           {bigs.length > 0 && (
-            <div className={`grid divide-x divide-gray-100 rounded-xl border border-gray-100`}
+            <div className={`grid divide-x divide-gray-100 rounded-[10px] border border-[#E3E6EA]`}
               style={{ gridTemplateColumns: `repeat(${bigs.length}, minmax(0, 1fr))` }}>
               {bigs.map((f) => <BigValue key={f.column} f={f} v={snap?.[f.column]} dim={dimOf(f.column, f.ownQuality)} />)}
             </div>

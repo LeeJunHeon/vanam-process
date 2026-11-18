@@ -124,7 +124,8 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
   );
 }
 
-type TrendDef = { title: string; unit: string; lines: [string, string, string | null][] };
+/** 그래프 하나 — 제목·단위·선([값 열, 이름, 목표 열]). 챔버12 화면은 자기 열로 만든 목록을 defs 로 넘긴다 */
+export type TrendDef = { title: string; unit: string; lines: [string, string, string | null][] };
 const trendDefs = (pressureTarget: string): TrendDef[] => [
   // 압력 목표선 = pressureTarget(묶음 16 은 선택된 설정점의 값 mfc.sp_sel_mtorr, 옛 장비는 mfc.sp_mtorr)
   { title: "압력", unit: "mTorr", lines: [["mfc.pressure_mtorr", "챔버 압력", pressureTarget]] },
@@ -134,10 +135,12 @@ const trendDefs = (pressureTarget: string): TrendDef[] => [
   { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", "heater.sv2"]] },
 ];
 
-export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr" }: {
+export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세" }: {
   trend: TrendPt[]; equipment: string; runId: string | null; local: boolean; nowMs: number; pressureTarget?: string;
+  defs?: TrendDef[];          // 없으면 챔버K 그래프(압력·밸브 위치·파워·히터) — 챔버12 는 챔버별 열(값이 바뀌지 않게 메모해서)
+  title?: string;
 }) {
-  const TREND_DEFS = useMemo(() => trendDefs(pressureTarget), [pressureTarget]);
+  const TREND_DEFS = useMemo(() => defs ?? trendDefs(pressureTarget), [defs, pressureTarget]);
   const [range, setRange] = useState<Range>("15m");
   const [rows, setRows] = useState<SummaryRow[] | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
@@ -196,7 +199,7 @@ export default function Chk2Trend({ trend, equipment, runId, local, nowMs, press
   const tabs: { key: Range; label: string }[] = [{ key: "15m", label: "15분" }, { key: "1h", label: "1시간" },
     ...(!local && runId ? [{ key: "run" as Range, label: "공정 전체" }] : [])];
   return (
-    <Card title="추세" right={<div className="w-56"><Tabs small tabs={tabs} value={range} onChange={setRange} /></div>}>
+    <Card title={title} right={<div className="w-56"><Tabs small tabs={tabs} value={range} onChange={setRange} /></div>}>
       <div ref={box} className="min-w-0">
         {range !== "run" && <p className={`mb-1 ${FS.small} text-[#5B6470]`}>이 화면을 연 뒤부터 쌓은 값입니다(2초 간격).</p>}
         {range === "run" && rows === null ? <Empty>1분 요약을 읽는 중…</Empty>

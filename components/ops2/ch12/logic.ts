@@ -198,3 +198,69 @@ export function clockOrDash(sec: number | null | undefined): string {
 /** 숫자 짧게(유효 6자리) */
 export const short = (v: unknown): string =>
   typeof v === "number" && Number.isFinite(v) ? String(Number(v.toPrecision(6))) : v === null || v === undefined || v === "" ? "—" : String(v);
+
+// ───────────── 잠금(2026-11-18 화면 다시 만들기 — 챔버K Chk2Page lockOf 와 같은 순서·문구) ─────────────
+/** PLC 값이 있어야 하는 명령(PLC 값이 오래되면 잠금 — 챔버K PLC_KINDS 의 챔버12 짝) */
+export const PLC_KINDS12: readonly string[] = ["PLC_BUTTON", "HEATER_ONOFF", "HEATER_APPLY", "HEATER_RESET", "POWER_SELECT"];
+
+export type LockCtx = {
+  authLost: boolean; perms: { canOperate: boolean; kinds: readonly string[] } | undefined; local: boolean; bench: boolean;
+  benchOk: (kind: string) => boolean; connected: boolean; webOnline: boolean; streamUp: boolean; plcOk: boolean;
+  inflight: (key: string) => boolean;
+};
+
+/** 잠금 이유(없으면 null) — 로그인 끊김 → 권한(노트북은 장비가 이 화면에서 받는 명령 hello.commandKinds) → bench(benchOk 아닌 명령) →
+ *  정지 쪽(연결 또는 웹 온라인이면 됨) → 결과 기다리는 중 → 장비 끊김 → PLC 값 오래됨. 마지막 판단은 장비 */
+export function lockReason(c: LockCtx, kind: string, key: string = kind): string | null {
+  if (c.authLost) return "로그인이 끊김 — 새로고침하세요";
+  if (!c.perms) return "권한 정보를 읽는 중";
+  if (c.local && !c.perms.kinds.includes(kind)) return "노트북 화면에서 받지 않는 조작 — 웹에서";
+  if (!c.perms.canOperate || !c.perms.kinds.includes(kind)) return "권한 없음 — 장비 담당자·관리자만";
+  if (c.bench && !c.benchOk(kind)) return "읽기 전용(bench) — 장비로 보내는 조작은 잠김";
+  if (STOP_KINDS12.includes(kind)) return c.connected || c.webOnline ? null : "장비 끊김";
+  if (c.inflight(key)) return "결과를 기다리는 중";
+  if (!c.connected) return c.local && !c.streamUp ? "노트북 프로그램 연결 끊김" : "장비 끊김";
+  if (PLC_KINDS12.includes(kind) && !c.plcOk) return "PLC 값이 오래됨";
+  return null;
+}
+
+// ───────────── PLC 버튼 이름 ─────────────
+/** 작업자에게 보이는 PLC 버튼 이름 — 묶음 label 끝의 코일 원래 이름 '(L_VAC_READY_SW)' 를 빼고, 이름이 같은 건 셔터는 번호를 붙인다.
+ *  원래 이름은 '상세'에서만(부르는 쪽) */
+export function plcName(b: { target: string; label?: string | null; name?: string | null }): string {
+  const m = /^shutter_(\d)_sw$/.exec(b.target);
+  if (m) return `Gun${m[1]} 셔터`;
+  const t = String(b.label ?? "").replace(/\s*\([A-Za-z0-9_]+\)/g, "").trim();
+  return t || b.target;
+}
+
+/** 버튼의 지금 값 열 — 묶음 addr(있으면) 또는 target, plc.<소문자> */
+export const plcCol = (b: { target: string; addr?: string | null }) => `plc.${String(b.addr || b.target).toLowerCase()}`;
+
+// ───────────── 입력 칸 ─────────────
+export type NumRange = { min: number | null; max: number | null; unit: string; int?: boolean; minExclusive?: boolean };
+
+/** 입력 글 → 값·오류(빈 칸은 value null, required 면 '값을 넣으세요'). 지수 표기(5e-6) 받음. 범위 문구는 장비 검사(D11)와 같은 '최소~최대 단위' */
+export function checkNum(text: string, r: NumRange | null, required = false): { value: number | null; error: string | null } {
+  const t = text.trim();
+  if (!t) return { value: null, error: required ? "값을 넣으세요" : null };
+  const v = Number(t);
+  if (!Number.isFinite(v)) return { value: null, error: "숫자가 아닙니다" };
+  if (r?.int && !Number.isInteger(v)) return { value: v, error: "정수여야 합니다" };
+  const lo = r?.min ?? null, hi = r?.max ?? null;
+  const span = `${lo ?? ""}~${hi ?? ""}${r?.unit ? ` ${r.unit}` : ""}`;
+  if (lo !== null && (r?.minExclusive ? v <= lo : v < lo)) return { value: v, error: `${span} 밖입니다` };
+  if (hi !== null && v > hi) return { value: v, error: `${span} 밖입니다` };
+  return { value: v, error: null };
+}
+
+/** 묶음 파라미터의 범위(min·max·단위) — 입력 칸이 장비 설정 범위(D11)와 같게 */
+export function paramRange(b: Ch12Bundle | null, key: string, extra: Partial<NumRange> = {}): NumRange | null {
+  const p = b?.params?.find((x) => x.key === key);
+  if (!p) return null;
+  return { min: typeof p.min === "number" ? p.min : null, max: typeof p.max === "number" ? p.max : null, unit: p.unit ?? "",
+           int: p.type === "int", ...extra };
+}
+
+/** "HH:MM"(0~23·0~59 두 자리) 인가 */
+export const isHHMM = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);

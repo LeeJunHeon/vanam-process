@@ -9,12 +9,14 @@
 import { capsFromCfg, checkBlocks, envOf, WEB_BLOCKS_VERSION, type Cfg, type Ch12Defs, type Ch12Env } from "./blocks";
 import { checkNormParams, checkRawRows, templateFromRow, type Row } from "./recipe";
 import { PyError } from "./py";
-import { CH12_RECIPE_KINDS, type Ch12RecipeKind } from "./ids";
+import { CH12_RECIPE_KINDS, type Ch12ChamberRecipeKind, type Ch12RecipeKind } from "./ids";
+import { checkPcRow, pcRanges } from "./pc";
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === "object" && !Array.isArray(v);
 
-export type Ch12RecipeEnv = { ch12: true; defs: Ch12Defs; cfg: Cfg; envs: Record<1 | 2, Ch12Env | null> };
+export type Ch12RecipeEnv = { ch12: true; defs: Ch12Defs; cfg: Cfg; envs: Record<1 | 2, Ch12Env | null>;
+  pcRanges?: Record<string, { min: number | null; max: number | null }> };      // PC 레시피 범위(묶음 PC_DEFAULT_* — pc.ts)
 export type Ch12CheckSummary = { errors: number; warnings: number; first: string | null };
 
 /** 묶음 → 정의(web_blocks.definitions() 모양) — blocks·recipe 가 없으면 null */
@@ -40,7 +42,7 @@ export function ch12RecipeEnvOf(bundle: unknown): Ch12RecipeEnv | null {
   const cfg = ch12CfgOf(bundle);
   const envs = { 1: envOf(defs, cfg, 1), 2: envOf(defs, cfg, 2) };
   if (!envs[1] || !envs[2]) return null;
-  return { ch12: true, defs, cfg, envs };
+  return { ch12: true, defs, cfg, envs, pcRanges: pcRanges(bundle) };
 }
 
 /** 묶음 블록 정의 판이 이 웹 검사와 다른가(화면 안내 — 검사는 하지 않음) */
@@ -54,7 +56,7 @@ export const isCh12RecipeKind = (k: unknown): k is Ch12RecipeKind => (CH12_RECIP
 export type Ch12RowCheck = { row: number; kind: "blocks" | "v1" | "delay" | "test" | "bad"; errors: string[]; warnings: string[] };
 
 /** 레시피 하나(행 목록) 검사 — 행마다 오류·경고(문구) + E230 전 행 오류 */
-export function ch12CheckRecipe(kind: Ch12RecipeKind, rows: unknown, env: Ch12RecipeEnv) {
+export function ch12CheckRecipe(kind: Ch12ChamberRecipeKind, rows: unknown, env: Ch12RecipeEnv) {
   const ch = kind === "ch1" ? 1 : 2;
   const benv = env.envs[ch]!;
   const list = Array.isArray(rows) ? rows : [];
@@ -96,6 +98,11 @@ export function ch12CheckRecipe(kind: Ch12RecipeKind, rows: unknown, env: Ch12Re
 /** 저장 응답·목록의 검사 수 */
 export function ch12CheckSummary(kind: string, rows: unknown, env: Ch12RecipeEnv | null): Ch12CheckSummary | null {
   if (!env || !isCh12RecipeKind(kind)) return null;
+  if (kind === "pc") {                                   // 플라즈마 클리닝 — 행 하나, 열 형식·범위(pc.ts)
+    const list = Array.isArray(rows) ? rows : [];
+    const errs = list.length !== 1 ? ["PC 레시피는 행 하나"] : checkPcRow(list[0], env.pcRanges ?? {}).map((m) => `1행: ${m}`);
+    return { errors: errs.length, warnings: 0, first: errs[0] ?? null };
+  }
   const r = ch12CheckRecipe(kind, rows, env);
   const rowErr = r.rows.flatMap((x) => x.errors.map((m) => `${x.row}행: ${m}`));
   const errors = [...r.listErrors, ...rowErr];

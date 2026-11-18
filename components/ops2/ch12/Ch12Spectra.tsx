@@ -114,7 +114,7 @@ export function OesChart({ st, ch }: { st: Ch12State | null; ch: string }) {
   const yt = Array.from({ length: 9 }, (_, k) => k * 2000).map((v) => ({ v, t: String(v) }));
   const path = pts ? pts.map((p, k) => `${k ? "L" : "M"}${ox(p.x).toFixed(1)} ${oy(p.y).toFixed(1)}`).join("") : "";
   return (
-    <Card title="OES" right={<span className="text-[10px] text-gray-400">{pts ? `${pts.length}점` : "값 없음"}</span>}>
+    <Card title="OES" right={<span className="text-[12px] text-[#8A929D]">{pts ? `${pts.length}점` : "값 없음"}</span>}>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="OES Intensity">
         <Axes xt={xt} yt={yt} xl="Wavelength (nm)" yl="Intensity" xs={ox} ys={oy} />
         {pts && <path d={path} fill="none" stroke="#dc2626" strokeWidth="1" data-oes-line="" />}

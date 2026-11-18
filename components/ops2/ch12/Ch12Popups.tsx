@@ -114,17 +114,17 @@ export function PopupStack({ list, onClose }: { list: Popup[]; onClose: (id: str
     <div className="pointer-events-none fixed inset-x-0 top-16 z-[75] flex flex-col items-center gap-2 px-4">
       {list.map((p) => (
         <div key={p.id} role="alertdialog" aria-label={p.title} data-popup={p.kind}
-          className={`pointer-events-auto w-full max-w-md rounded-2xl border bg-white p-3 shadow-xl ${p.kind === "warning" ? "border-amber-300" : "border-rose-300"}`}>
-          <p className="flex items-center gap-2 text-sm font-bold text-gray-900">
-            {p.kind === "warning" ? <AlertTriangle size={16} className="text-amber-500" /> : <OctagonAlert size={16} className="text-rose-600" />}
+          className={`pointer-events-auto w-full max-w-md rounded-[12px] border bg-white p-3 shadow-xl ${p.kind === "warning" ? "border-[#F5D9A8]" : "border-[#F7C1BB]"}`}>
+          <p className="flex items-center gap-2 text-[14px] font-bold text-[#1B1F24]">
+            {p.kind === "warning" ? <AlertTriangle size={16} className="text-[#B54708]" /> : <OctagonAlert size={16} className="text-[#B42318]" />}
             {p.title}
-            {p.chamber !== "shared" && <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-500">{p.chamber.toUpperCase()}</span>}
+            {p.chamber !== "shared" && <span className="rounded bg-[#EEF0F3] px-1.5 py-0.5 text-[12px] font-semibold text-[#5B6470]">{p.chamber.toUpperCase()}</span>}
           </p>
-          <p className="mt-1.5 whitespace-pre-wrap text-xs text-gray-700">{p.text}</p>
+          <p className="mt-1.5 whitespace-pre-wrap text-[12px] text-[#1B1F24]">{p.text}</p>
           <div className="mt-2 flex items-center gap-2">
-            {p.autoMs && <span className="text-[10px] text-gray-400">{Math.round(p.autoMs / 1000)}초 뒤 닫힘</span>}
-            {p.clear && <span className="text-[10px] text-gray-400">확인하면 오류 표시가 해제됩니다</span>}
-            <button onClick={() => onClose(p.id)} className="ml-auto rounded-lg bg-gray-900 px-3 py-1 text-xs font-semibold text-white hover:bg-gray-700">OK</button>
+            {p.autoMs && <span className="text-[12px] text-[#8A929D]">{Math.round(p.autoMs / 1000)}초 뒤 닫힘</span>}
+            {p.clear && <span className="text-[12px] text-[#8A929D]">확인하면 오류 표시가 해제됩니다</span>}
+            <button onClick={() => onClose(p.id)} className="ml-auto rounded-lg bg-[#3A424D] px-3 py-1 text-[12px] font-semibold text-white hover:bg-[#3A424D]">OK</button>
           </div>
         </div>
       ))}

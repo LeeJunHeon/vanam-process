@@ -80,38 +80,38 @@ export function LocalFiles({ bundle, can, onAsk, fetcher, initial }: {
   const targets = fileTargets(bundle, pick);
   return (
     <Card title={<><FileText size={15} /> 레시피 파일(장비 폴더)</>}
-      right={<button onClick={() => go(list?.dir ?? "")} disabled={busy} className="rounded p-1 text-gray-400 hover:bg-gray-100" aria-label="새로 읽기"><RefreshCw size={13} /></button>}>
-      <p className="mb-1 truncate font-mono text-[10px] text-gray-500" title={list?.abs}>{list ? list.abs : "시작 폴더 읽는 중…"}</p>
-      {err && <p className="mb-1 rounded-lg bg-rose-50 px-2 py-1 text-[11px] text-rose-700">{err}</p>}
+      right={<button onClick={() => go(list?.dir ?? "")} disabled={busy} className="rounded p-1 text-[#8A929D] hover:bg-[#EEF0F3]" aria-label="새로 읽기"><RefreshCw size={13} /></button>}>
+      <p className="mb-1 truncate font-mono text-[12px] text-[#5B6470]" title={list?.abs}>{list ? list.abs : "시작 폴더 읽는 중…"}</p>
+      {err && <p className="mb-1 rounded-lg bg-[#FEE4E2] px-2 py-1 text-[12px] text-[#B42318]">{err}</p>}
       {list && (
-        <ul className="max-h-56 overflow-y-auto rounded-lg border border-gray-100 text-xs">
+        <ul className="max-h-56 overflow-y-auto rounded-lg border border-[#E3E6EA] text-[12px]">
           {list.parent !== null && (
-            <li><button onClick={() => go(list.parent ?? "")} className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-gray-600 hover:bg-gray-50">
+            <li><button onClick={() => go(list.parent ?? "")} className="flex w-full items-center gap-1.5 px-2 py-1 text-left text-[#5B6470] hover:bg-[#F5F6F8]">
               <FolderUp size={13} /> 위 폴더</button></li>
           )}
           {list.entries.map((e) => (
             <li key={e.path}>
               <button onClick={() => (e.kind === "dir" ? go(e.path) : setPick(e))}
-                className={`flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-gray-50 ${pick?.path === e.path ? "bg-blue-50 font-semibold" : ""}`}>
-                {e.kind === "dir" ? <Folder size={13} className="text-amber-500" /> : <FileText size={13} className="text-gray-400" />}
+                className={`flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-[#F5F6F8] ${pick?.path === e.path ? "bg-[#E8EEFC] font-semibold" : ""}`}>
+                {e.kind === "dir" ? <Folder size={13} className="text-[#B54708]" /> : <FileText size={13} className="text-[#8A929D]" />}
                 <span className="truncate">{e.name}</span>
-                {e.size !== null && <span className="ml-auto shrink-0 text-[10px] text-gray-400">{(e.size / 1024).toFixed(1)} KB</span>}
+                {e.size !== null && <span className="ml-auto shrink-0 text-[12px] text-[#8A929D]">{(e.size / 1024).toFixed(1)} KB</span>}
               </button>
             </li>
           ))}
-          {!list.entries.length && <li className="px-2 py-2 text-center text-[11px] text-gray-400">레시피 파일(*.csv·*.xlsx)·폴더 없음</li>}
+          {!list.entries.length && <li className="px-2 py-2 text-center text-[12px] text-[#8A929D]">레시피 파일(*.csv·*.xlsx)·폴더 없음</li>}
         </ul>
       )}
-      {list?.truncated && <p className="text-[10px] text-gray-400">항목이 많아 일부만 보입니다</p>}
+      {list?.truncated && <p className="text-[12px] text-[#8A929D]">항목이 많아 일부만 보입니다</p>}
       {pick && (
         <div className="mt-2 space-y-1">
-          <p className="truncate text-[11px] text-gray-700">선택된 파일: <span className="font-mono">{pick.full}</span></p>
+          <p className="truncate text-[12px] text-[#1B1F24]">선택된 파일: <span className="font-mono">{pick.full}</span></p>
           <div className="flex flex-wrap gap-1.5">
             {targets.map((t) => (
               <button key={t.label} disabled={!can(t.kind)}
                 onClick={() => onAsk({ kind: t.kind, label: t.label, detail: pick.name, args: t.args, key: `${t.kind}@${t.label}`,
                                        lines: [`파일: ${pick.full}`] })}
-                className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-40">
+                className="rounded-lg border border-[#D9DDE3] bg-white px-2 py-1 text-[12px] font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40">
                 {t.label}
               </button>
             ))}

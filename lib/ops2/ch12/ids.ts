@@ -12,6 +12,8 @@ export const CH12_CHAMBERS = ["ch1", "ch2", "pc", "tsp"] as const;
 export type Ch12Chamber = (typeof CH12_CHAMBERS)[number];
 export const isCh12Chamber = (v: unknown): v is Ch12Chamber => typeof v === "string" && (CH12_CHAMBERS as readonly string[]).includes(v);
 
-/** 레시피 저장 kind — 챔버별 블록 레시피(ch1·ch2). 행은 v1 행 또는 블록 행({name?, blocks}) */
-export const CH12_RECIPE_KINDS = ["ch1", "ch2"] as const;
+/** 레시피 저장 kind — 챔버별 블록 레시피(ch1·ch2 — 행은 v1 행 또는 블록 행 {name?, blocks}) + 플라즈마 클리닝(pc — v1 PC CSV 첫 행 열,
+ *  lib/ops2/ch12/pc.ts, 2026-11-18) */
+export const CH12_RECIPE_KINDS = ["ch1", "ch2", "pc"] as const;
 export type Ch12RecipeKind = (typeof CH12_RECIPE_KINDS)[number];
+export type Ch12ChamberRecipeKind = Exclude<Ch12RecipeKind, "pc">;

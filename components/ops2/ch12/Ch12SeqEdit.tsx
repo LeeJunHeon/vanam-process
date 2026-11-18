@@ -63,29 +63,29 @@ export default function Ch12SeqEdit({ bundle, st, feed, ch, can, onAsk, onClose 
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-2xl bg-white p-4">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-[12px] bg-white p-4">
         <div className="mb-2 flex items-center gap-2">
-          <b className="text-sm text-gray-900">{label} 시퀀스 편집</b>
-          <span className="text-[11px] text-gray-500">레시피 판 {rev} · 시작한 블록 {k}/{blocks.length}</span>
-          <button onClick={onClose} className="ml-auto rounded p-1 text-gray-400 hover:bg-gray-100" aria-label="닫기"><X size={16} /></button>
+          <b className="text-[14px] text-[#1B1F24]">{label} 시퀀스 편집</b>
+          <span className="text-[12px] text-[#5B6470]">레시피 판 {rev} · 시작한 블록 {k}/{blocks.length}</span>
+          <button onClick={onClose} className="ml-auto rounded p-1 text-[#8A929D] hover:bg-[#EEF0F3]" aria-label="닫기"><X size={16} /></button>
         </div>
-        <p className="mb-2 rounded-lg bg-gray-50 px-2 py-1 text-[11px] text-gray-600">
+        <p className="mb-2 rounded-lg bg-[#F5F6F8] px-2 py-1 text-[12px] text-[#5B6470]">
           아직 시작 안 한 블록만 추가·삭제·순서 변경할 수 있습니다. 편집마다 장비가 전체를 다시 검사하고 판 번호를 올리며, 원래 레시피와 실제 실행 순서를 모두 기록합니다.
         </p>
         <div className="min-h-0 flex-1 overflow-y-auto">
           {!src.blocks ? (
-            <p className="py-6 text-center text-xs text-gray-400">지금 공정의 블록 목록을 아직 받지 못했습니다(장비 엔진 상태 또는 공정 시작 기록이 필요).</p>
+            <p className="py-6 text-center text-[12px] text-[#8A929D]">지금 공정의 블록 목록을 아직 받지 못했습니다(장비 엔진 상태 또는 공정 시작 기록이 필요).</p>
           ) : (
             <Ch12BlockEditor blocks={blocks} env={env} lockUpto={k} current={k > 0 ? k - 1 : null} onChange={can(kind) ? onEdit : undefined} />
           )}
           {ins && env && (() => {
             const def = env.byType.get(ins.b.type);
             return (
-              <div className="mt-2 space-y-1.5 rounded-xl border border-blue-200 bg-blue-50/40 p-2">
-                <p className="text-xs font-semibold text-gray-800">새 블록 — {def?.label ?? ins.b.type}</p>
-                <label className="flex items-center gap-2 text-[11px] text-gray-600">넣을 자리(번호 앞)
+              <div className="mt-2 space-y-1.5 rounded-[10px] border border-[#C7D5FB] bg-[#E8EEFC] p-2">
+                <p className="text-[12px] font-semibold text-[#1B1F24]">새 블록 — {def?.label ?? ins.b.type}</p>
+                <label className="flex items-center gap-2 text-[12px] text-[#5B6470]">넣을 자리(번호 앞)
                   <select value={ins.at} onChange={(e) => setIns({ ...ins, at: Number(e.target.value) })}
-                    className="rounded-md border border-gray-200 px-1 py-0.5 text-[11px]">
+                    className="rounded-md border border-[#D9DDE3] px-1 py-0.5 text-[12px]">
                     {Array.from({ length: blocks.length - k + 1 }, (_, i) => k + i).map((at) => (
                       <option key={at} value={at}>{at === blocks.length ? "맨 끝" : `${at + 1}번 앞`}</option>
                     ))}
@@ -94,15 +94,15 @@ export default function Ch12SeqEdit({ bundle, st, feed, ch, can, onAsk, onClose 
                 {def && <BlockParams def={def} b={ins.b} onChange={(b) => setIns({ ...ins, b })} />}
                 <div className="flex gap-2">
                   <button onClick={() => send({ op: "insert", at: ins.at, block: ins.b }, `${def?.label ?? ins.b.type} 넣기`)}
-                    className="rounded-lg bg-blue-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-blue-700">넣기 보내기</button>
-                  <button onClick={() => setIns(null)} className="rounded-lg px-2 py-1 text-[11px] text-gray-500 hover:bg-gray-100">취소</button>
+                    className="rounded-lg bg-[#1D4ED8] px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-[#1D4ED8]">넣기 보내기</button>
+                  <button onClick={() => setIns(null)} className="rounded-lg px-2 py-1 text-[12px] text-[#5B6470] hover:bg-[#EEF0F3]">취소</button>
                 </div>
               </div>
             );
           })()}
         </div>
-        {errs.length > 0 && <div className="mt-2 space-y-0.5">{errs.map((e, i) => <p key={i} className="text-[11px] text-rose-600">{e}</p>)}</div>}
-        {!can(kind) && <p className="mt-2 text-[11px] text-gray-400">보기만 — 시퀀스 편집 권한·연결이 없거나 장비가 이 명령을 내지 않습니다.</p>}
+        {errs.length > 0 && <div className="mt-2 space-y-0.5">{errs.map((e, i) => <p key={i} className="text-[12px] text-[#B42318]">{e}</p>)}</div>}
+        {!can(kind) && <p className="mt-2 text-[12px] text-[#8A929D]">보기만 — 시퀀스 편집 권한·연결이 없거나 장비가 이 명령을 내지 않습니다.</p>}
       </div>
     </div>
   );
