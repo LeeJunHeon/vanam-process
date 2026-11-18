@@ -124,17 +124,20 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
   );
 }
 
-const TREND_DEFS: { title: string; unit: string; lines: [string, string, string | null][] }[] = [
-  { title: "압력", unit: "mTorr", lines: [["mfc.pressure_mtorr", "챔버 압력", "mfc.sp_mtorr"]] },
+type TrendDef = { title: string; unit: string; lines: [string, string, string | null][] };
+const trendDefs = (pressureTarget: string): TrendDef[] => [
+  // 압력 목표선 = pressureTarget(묶음 16 은 선택된 설정점의 값 mfc.sp_sel_mtorr, 옛 장비는 mfc.sp_mtorr)
+  { title: "압력", unit: "mTorr", lines: [["mfc.pressure_mtorr", "챔버 압력", pressureTarget]] },
   // 밸브 위치(묶음 15) — 압력과 단위가 달라 그림을 따로(한 그래프 = 단위 하나), 압력 바로 아래
   { title: "밸브 위치", unit: "%", lines: [["mfc.valve_pct", "MFC 밸브 위치", null]] },
   { title: "파워", unit: "W", lines: [["dc.p", "DC Power", "dc.set_w"], ["rf.fwd_w", "RF Power", "rf.set_w"], ["rfp.fwd_w", "RF Pulse", "rfp.set_w"]] },
   { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", "heater.sv2"]] },
 ];
 
-export default function Chk2Trend({ trend, equipment, runId, local, nowMs }: {
-  trend: TrendPt[]; equipment: string; runId: string | null; local: boolean; nowMs: number;
+export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr" }: {
+  trend: TrendPt[]; equipment: string; runId: string | null; local: boolean; nowMs: number; pressureTarget?: string;
 }) {
+  const TREND_DEFS = useMemo(() => trendDefs(pressureTarget), [pressureTarget]);
   const [range, setRange] = useState<Range>("15m");
   const [rows, setRows] = useState<SummaryRow[] | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
@@ -171,7 +174,7 @@ export default function Chk2Trend({ trend, equipment, runId, local, nowMs }: {
       }
       return { t: (Date.parse(r.fromTs) + Date.parse(r.toTs)) / 2, v };
     });
-  }, [range, rows, trend]);
+  }, [range, rows, trend, TREND_DEFS]);
 
   const lastT = pts.length ? pts[pts.length - 1].t : nowMs;
   const t1 = range === "run" ? lastT : Math.max(lastT, trend.length ? trend[trend.length - 1].t : lastT);

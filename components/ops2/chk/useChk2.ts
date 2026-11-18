@@ -30,6 +30,7 @@ export const TREND_COLS = [
   "mfc.pressure_mtorr", "mfc.sp_mtorr", "mfc.ar_sccm", "mfc.ar_set", "mfc.o2_sccm", "mfc.o2_set",
   "dc.p", "dc.set_w", "rf.fwd_w", "rf.set_w", "rfp.fwd_w", "rfp.set_w", "heater.pv", "heater.pv2", "heater.sv", "heater.r1",
   "heater.sv2", "mfc.valve_pct",                      // 묶음 15 — TC2 목표선·밸브 위치
+  "mfc.sp_sel_mtorr",                                  // 묶음 16 — 압력 목표(선택된 설정점의 값)
 ] as const;
 /** 추세 점 — t 는 장비 시계(ms) */
 export type TrendPt = { t: number; v: Record<string, number | null> };

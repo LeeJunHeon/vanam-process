@@ -43,13 +43,24 @@ export function blockTitle(b: Bundle | null, st: StateData | null, v1Row: boolea
   return tag && tag !== name ? `${name} · ${tag}` : name;
 }
 
+/** 압력 목표 열 — 묶음 16 장비는 mfc.sp_sel_mtorr(지금 선택된 설정점에 쓴 값 — SP4·SP5 단계에도), 옛 장비는 mfc.sp_mtorr
+ *  (SP1 확인값). 묶음 스냅샷 정의나 상태 스냅샷에 그 열이 있으면 새 열 */
+export const PRESSURE_TARGET = "mfc.sp_sel_mtorr";
+export function pressureTargetCol(snap?: Record<string, unknown> | null, b?: Bundle | null): string {
+  const inDefs = b?.snapshot?.blocks?.some((x) => x.fields.some((f) => f.column === PRESSURE_TARGET));
+  return inDefs || (!!snap && PRESSURE_TARGET in snap) ? PRESSURE_TARGET : "mfc.sp_mtorr";
+}
+
 const fmtN = (v: number | null, unit: string) => (v === null ? "" : `${Number(v.toPrecision(5))} ${unit}`);
 
 /** 지금 블록의 목표(스냅샷 설정값) — 블록 종류별 */
 export function blockTarget(type: string | null | undefined, snap: Record<string, unknown> | undefined): string {
   const g = (c: string) => num(snap?.[c]);
   switch (type) {
-    case "pressure": return g("mfc.sp_mtorr") !== null ? `목표 ${fmtN(g("mfc.sp_mtorr"), "mTorr")}` : "";
+    case "pressure": {
+      const c = pressureTargetCol(snap);
+      return g(c) !== null ? `목표 ${fmtN(g(c), "mTorr")}` : "";
+    }
     case "gas_intro": case "gas_prep":
       return [g("mfc.ar_set") ? `Ar ${fmtN(g("mfc.ar_set"), "sccm")}` : "", g("mfc.o2_set") ? `O₂ ${fmtN(g("mfc.o2_set"), "sccm")}` : ""]
         .filter(Boolean).join(" · ");
