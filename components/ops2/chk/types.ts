@@ -24,6 +24,8 @@ export type FieldDef = {
   summary?: string;                              // 1분 요약 방식 mean·max·min·last·any
   detail?: boolean; desc?: string; enumLabels?: Record<string, string> | null;   // 묶음 v11 — detail 은 '상세'에서만
   stateColumn?: string | null;                   // 묶음 12 — 값이 비고 이 상태 열이 ok 가 아니면 상태 이름을 값 자리에
+  // 묶음 16 — 다른 열(column) 값에 따라 바뀌는 이름: labels[그 열 값][이 값] 이 있으면 그것, 없으면 enumLabels
+  enumLabelsBy?: { column: string; labels: Record<string, Record<string, string>> } | null;
 };
 export type BlockDef = { name: string; label: string; worker: string; quality: string[]; fields: FieldDef[]; desc?: string };
 /** 정지 순서 단계(묶음 stopSequence·allStopSequence) */
@@ -43,6 +45,7 @@ export type ParamDef = {
   group?: string; min?: number | null; max?: number | null; enum?: unknown[] | null; pattern?: string | null;
   safety?: string; apply?: string; scope?: string; role?: string; webLocked?: boolean; desc?: string; note?: string;
   v1Key?: string | null; v1Source?: string | null; v1Default?: unknown; pendingConfirm?: boolean;
+  choices?: unknown[] | null;                    // 묶음 15 — int·float 의 허용 숫자 목록(있으면 선택 목록으로 그린다)
 };
 /** 공정 중 수정 항목(묶음 adjust.items — blocks.ADJUST_ITEMS) */
 export type AdjustItemDef = {
