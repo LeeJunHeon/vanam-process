@@ -61,12 +61,12 @@ function KeyTile({ d: d0, bundle, snap }: { d: KeyDef; bundle: Bundle | null; sn
   const band = bandOf(bundle, d.key, t);
   const max = scaleMax(t, v, lim);
   const extra = d.key === "heater" ? (() => {
-    const cs = snap?.["heater.casc_state"], csF = fieldOf(bundle, "heater.casc_state");
+    const cs = snap?.["heater.casc_state"], csF = fieldOf(bundle, "heater.casc_state");     // 이름은 enumLabelsBy(묶음 16) 먼저
     const mv = num(snap?.["heater.mv"]), amp = num(snap?.["heater.current_est"]);
     const other = tc2Only ? num(snap?.["heater.pv"]) : num(snap?.["heater.pv2"]);
     return [other !== null ? (tc2Only ? `TC1 ${fmtN(other)} °C(기록)` : `TC2 ${fmtN(other)} °C`) : "",
             mv !== null ? (snap?.["heater.run"] === true ? `DAC ${Math.round(mv)}${amp !== null ? ` ≈${amp.toFixed(1)} A` : ""}` : `정지 (DAC ${Math.round(mv)})`) : "",
-            typeof cs === "string" && cs && cs !== "idle" ? csF?.enumLabels?.[cs] ?? cs : ""].filter(Boolean).join(" · ");
+            typeof cs === "string" && cs && cs !== "idle" ? enumLabel(csF, cs, snap) ?? cs : ""].filter(Boolean).join(" · ");
   })() : "";
   return (
     <Tile className="p-3">

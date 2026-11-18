@@ -16,7 +16,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { AlertTriangle, Lock } from "lucide-react";
 import { Btn, Card, Chip, Dot, FS, FSPX, StateBox, T, type Ask } from "./kit";
-import { fieldText } from "./text";
+import { enumLabel, fieldText } from "./text";
 import type { Bundle, FieldDef, Link } from "./types";
 
 const DANGER = new Set(["vent", "door_up", "door_down"]);
@@ -194,8 +194,9 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
   ));
   const casc = fieldOf("heater.casc_state"), mode = fieldOf("heater.ctrl_mode");
   const cs = snap?.["heater.casc_state"], cm = snap?.["heater.ctrl_mode"];
-  const ctrl = typeof cs === "string" && cs && cs !== "idle" ? casc?.enumLabels?.[cs] ?? cs
-    : typeof cm === "string" && cm ? mode?.enumLabels?.[cm] ?? cm : "—";
+  // 상태 이름은 제어 구조에 따라(묶음 16 enumLabelsBy), 옛 묶음은 enumLabels
+  const ctrl = typeof cs === "string" && cs && cs !== "idle" ? enumLabel(casc, cs, snap) ?? cs
+    : typeof cm === "string" && cm ? enumLabel(mode, cm, snap) ?? cm : "—";
   const tc1 = valTxt("heater.pv"), tc2 = valTxt("heater.pv2");
   // 묶음 15 — tc2(TC2 단독 제어): TC1 은 기록, 편차는 TC2 − SV2. TC2 PID 두 모드(tc2·cascade)에서 TC2 아래 TC2 목표(SV2)
   //   SV2·편차는 TC2 제어가 돌 때만(꺼져 있으면 SV2 는 0)

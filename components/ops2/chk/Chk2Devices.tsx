@@ -13,7 +13,7 @@ import { useState, type ReactNode } from "react";
 import { Flame, Gauge, PauseCircle, Play, SkipForward, Square, Workflow } from "lucide-react";
 import { FS, BigValue, Btn, Card, Chip, Dot, FieldValue, Issue, KV, Modal, QBadge, StateBox, Val, type Ask } from "./kit";
 import { argRange, capRange, checkInput, rangeText, type Range } from "./logic";
-import { fieldText } from "./text";
+import { enumLabel, fieldText } from "./text";
 import { GAS_STATE, HEATER_OWNER, fmtValue, type BlockDef, type Bundle, type FieldDef, type StateData } from "./types";
 import { useChk2Mode } from "./mode";
 import type { LockFn } from "./Chk2Status";
@@ -238,8 +238,9 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
     : `정지 (DAC ${Math.round(mv)})`;
   const casc = fieldOf(d, "casc_state"), mode = fieldOf(d, "ctrl_mode");
   const cs = snap?.["heater.casc_state"], cm = snap?.["heater.ctrl_mode"];
-  const ctrlText = typeof cs === "string" && cs && cs !== "idle" ? (casc?.enumLabels?.[cs] ?? cs)
-    : typeof cm === "string" && cm ? (mode?.enumLabels?.[cm] ?? cm) : "";
+  // 상태 이름은 제어 구조에 따라(묶음 16 enumLabelsBy — tc2 의 running 은 "TC2 제어(단독)"), 옛 묶음은 enumLabels
+  const ctrlText = typeof cs === "string" && cs && cs !== "idle" ? (enumLabel(casc, cs, snap) ?? cs)
+    : typeof cm === "string" && cm ? (enumLabel(mode, cm, snap) ?? cm) : "";
   // 묶음 15 — tc2(TC2 단독 제어): 편차는 TC2 − SV2, TC1 은 기록. TC2 PID 두 모드(tc2·cascade)에서 TC2 아래 TC2 목표(SV2)
   //   SV2·편차는 TC2 제어가 돌 때만(꺼져 있으면 SV2 는 0 이라 뜻 없는 숫자가 된다)
   const tc2Only = cm === "tc2", tc2Pid = cm === "tc2" || cm === "cascade";
