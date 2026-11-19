@@ -9,7 +9,7 @@
 // 적재·시작·실행은 저장된 최신 + 웹 검사 오류 없음일 때만 — 막히면 버튼에 자물쇠와 이유(마우스를 올리면).
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { BellRing, ChevronDown, ChevronRight, FileEdit, Flame, Play, Upload, X } from "lucide-react";
-import { checkEnvOf, checkHeaterRecipe, checkProcessRecipe, type RecipeCheck, type Row } from "@/lib/ops2/chk/recipe";
+import { checkEnvOf, checkHeaterRecipe, checkProcessRecipe, devSpOf, type RecipeCheck, type Row } from "@/lib/ops2/chk/recipe";
 import { expectedTime } from "@/lib/ops2/chk/blocks";
 import { fmtKst } from "@/lib/ops2/time";
 import { FS, Btn, Card, Chip, Empty, KV, RangeBar, StateBox, Tile, Val, Dot, type Ask } from "./kit";
@@ -179,7 +179,12 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   bundle: Bundle | null; st: StateData | null; recipes: ReturnType<typeof useRecipes>; lock: LockFn; onAsk: (a: Ask) => void;
   onEdit: (id: string | null) => void;
 }) {
-  const env = useMemo(() => checkEnvOf(bundle), [bundle]);
+  // 묶음 17 — 기본 템플릿이 장비 값 출처 단계를 고를 때 장비에 저장된 설정점 값(스냅샷 mfc.sp{n}_dev_mtorr)을 쓴다
+  const devKey = JSON.stringify(devSpOf(st?.snapshot ?? null));
+  const env = useMemo(() => {
+    const e = checkEnvOf(bundle);
+    return e ? { ...e, devSp: JSON.parse(devKey) as Record<string, number | null> | null } : e;
+  }, [bundle, devKey]);
   const [pid, setPid] = useState("");
   const [hid, setHid] = useState("");
   const [full, setFull] = useState<RecipeFull | null>(null);

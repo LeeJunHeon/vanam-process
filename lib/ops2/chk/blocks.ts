@@ -8,6 +8,8 @@
 //   pulseEdge·autoEndStopLabel)와 stopSequence(steps.no·endStopMustKeep), 설정값은 recipe.ts checkEnvOf 의 cfg.
 // 묶음에 없어 코드로 옮긴 것: 스텝 동작·문구·드라이버 명령 이름(블록 종류마다 펼치는 방법), 셔터 PLC 버튼
 //   (S1_button·S2_button·MS_button), 가스 밸브 버튼(Ar_Button·O2_Button), 오류 문구 틀, valueRules.when 문법 해석.
+// 묶음 17(5-19 ③, W-13): pressure set=false = 장비에 저장된 값 — 값을 쓰지 않고 선택만, 도달 대기 목표는 장비가 그때 읽은 값
+//   (WAIT_PRESSURE args device_sp·target null, 문구 "target=장비 값 SP{n}"), valueRules kind "empty"·조건 "<값>=false".
 // 숫자 모양: _as_type 으로 값이 정의 형식이 되므로(float → float, int 는 정수값이면 int) 문구는 정의 형식대로 찍는다.
 // 골든(lib/ops2/chk/golden/web_block_cases.json)을 npm run ops2:golden 이 이 파일로 확인한다.
 import type { Cfg } from "./recipe";
@@ -100,6 +102,8 @@ function when(env: BlockEnv, w: string, out: Record<string, unknown>): boolean {
       ok = isNum(v) && 0 < v && v < env.defs.heaterRampMin;
     } else if (c.endsWith("=true")) {
       ok = out[c.slice(0, -5)] === true;
+    } else if (c.endsWith("=false")) {                   // 묶음 17(5-19) — 장비 값(set=false)
+      ok = out[c.slice(0, -6)] === false;
     } else if (c.endsWith(":num")) {
       ok = isNum(out[c.slice(0, -4)]);
     } else if (c.includes("^=")) {
@@ -117,7 +121,7 @@ function when(env: BlockEnv, w: string, out: Record<string, unknown>): boolean {
 function ruleUses(r: ValueRule): string[] {
   if (Array.isArray(r.uses)) return r.uses;
   const names = [...r.msg.matchAll(/{(w+)}/g)].map((m) => m[1])
-    .concat(r.when.split("·").filter(Boolean).map((c) => c.split(/=true|:num|^=|∉|<heaterRampMin/)[0].replace(/^0</, "")));
+    .concat(r.when.split("·").filter(Boolean).map((c) => c.split(/=true|=false|:num|\^=|∉|<heaterRampMin/)[0].replace(/^0</, "")));
   return [...new Set(names.filter((n) => n !== "edge"))];
 }
 
@@ -231,6 +235,8 @@ function checkOne(env: BlockEnv, b: unknown, path: string, depth: number, errs: 
   for (const r of env.defs.valueRules) {                 // 값 사이(같은 블록 안) — 순서 규칙이 아니라 값의 짝
     if (!r.blocks.includes(d.type) || ruleUses(r).some((n) => bad.has(n)) || !when(env, r.when, out)) continue;
     if (r.kind === "need" && empty(out[r.key])) {
+      errs.push(`${pre}: ${fmtMsg(r.msg, out, d)}`);
+    } else if (r.kind === "empty" && !empty(out[r.key])) {   // 묶음 17 — 조건이면 그 값을 비워야(set=false 면 value)
       errs.push(`${pre}: ${fmtMsg(r.msg, out, d)}`);
     } else if (r.kind === "device" && !pyTruthy(r.key in env.cfg ? env.cfg[r.key] : true)) {
       errs.push(`${pre}: ${fmtMsg(r.msg, out, d)}`);
@@ -429,7 +435,9 @@ function expandBlock(ctx: Ctx, b: CleanBlock, no: string): void {
       const n = pyInt(p.sp);
       let v: unknown = p.value;
       const dk = env.defs.spDefaultKey[String(n)];
-      if (empty(v) && dk) v = c[dk];
+      const dev = p.set === false;                       // 묶음 17 — 장비에 저장된 값: 쓰지 않고, 도달 목표는 그때 읽은 장비 값
+      if (dev) v = null;
+      else if (empty(v) && dk) v = c[dk];
       const val = empty(v) ? null : pyFloat(v);
       const ref = n === 1 ? "mfc.wp" : "";
       const tol = pyFloat(p.tol_ratio ?? c.PRESSURE_WAIT_TOL_RATIO);
@@ -443,10 +451,12 @@ function expandBlock(ctx: Ctx, b: CleanBlock, no: string): void {
           { params: [`SP${n}_SET`, { value: val }], ref }));
       }
       if (pyTruthy(p.select)) out.push(S("MFC_CMD", bare ? `SP${n} ON` : `${tag}: SP${n}_ON`, { params: [`SP${n}_ON`, {}] }));
-      if (pyTruthy(p.wait) && val !== null) {
+      if (pyTruthy(p.wait) && (val !== null || dev)) {
         const a: Record<string, unknown> = { target: val, tolerance_ratio: tol, stable_sec: stable, timeout_sec: to, fail_on_timeout: fail };
+        if (dev) a.device_sp = n;                        // 목표 = 장비가 그때 읽은 SPn(모르면 그 단계 실패)
         if (fail && n !== 1) a.fail_code = "PRESSURE_WAIT_TIMEOUT";
-        out.push(S("MFC_CMD", `${tag}: 압력 도달 대기 (target=${pyFixed(val, 2)}, ±${pyFixed(tol * 100, 0)}%, timeout=${Math.trunc(to)}s`
+        const tgt = dev ? `장비 값 SP${n}` : pyFixed(val as number, 2);
+        out.push(S("MFC_CMD", `${tag}: 압력 도달 대기 (target=${tgt}, ±${pyFixed(tol * 100, 0)}%, timeout=${Math.trunc(to)}s`
           + (fail ? ", FAIL ON TIMEOUT" : "") + ")", { params: ["WAIT_PRESSURE", a], ref }));
       }
       break;
