@@ -111,7 +111,7 @@ function ParamInput({ p, value, onChange, readOnly, error }: {
   if (p.type === "enum") {
     return (
       <select disabled={readOnly} value={String(value ?? "")} className={cls} onChange={(e) => onChange(e.target.value)}>
-        {(p.enum ?? []).map((x) => <option key={String(x)} value={String(x)}>{String(x)}</option>)}
+        {(p.enum ?? []).map((x) => <option key={String(x)} value={String(x)}>{p.enumLabels?.[String(x)] ?? String(x)}</option>)}
       </select>
     );
   }
@@ -428,7 +428,10 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                               {pendingWeb.has(p.key) && <Tag kind="wait">웹 v{pendingWeb.get(p.key)!.join("·v")} 에서 바뀜</Tag>}
                             </span>
                           </td>
-                          <td className="px-2 py-1.5 tabular-nums text-[#1B1F24]">{show(nowVal(p))}{p.unit && <span className="text-[#5B6470]"> {p.unit}</span>}</td>
+                          <td className="px-2 py-1.5 tabular-nums text-[#1B1F24]">
+                            {typeof nowVal(p) === "string" && p.enumLabels?.[nowVal(p) as string] ? p.enumLabels[nowVal(p) as string] : show(nowVal(p))}
+                            {p.unit && <span className="text-[#5B6470]"> {p.unit}</span>}
+                          </td>
                           <td className="px-2 py-1.5">
                             <ParamInput p={p} value={v} readOnly={readOnly || !!p.webLocked} error={e}
                               onChange={(x) => setEdits((m) => ({ ...m, [p.key]: x }))} />
@@ -437,7 +440,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                           <td className="px-2 py-1.5 text-[#5B6470]">
                             {detail ? p.type : TYPE_TEXT[p.type ?? ""] ?? p.type}{range && ` · ${range}`}{p.unit && ` ${p.unit}`}
                             {choices && <p className={`${FS.small} tabular-nums`}>{choices.join(" · ")}</p>}
-                            {p.enum && <p className={`${FS.small}`}>{p.enum.map(String).join(" · ")}</p>}
+                            {p.enum && <p className={`${FS.small}`}>{p.enum.map((x) => p.enumLabels?.[String(x)] ?? String(x)).join(" · ")}</p>}
                             {p.pattern && <p className={`font-mono ${FS.small}`}>/{p.pattern}/</p>}
                           </td>
                           <td className="px-2 py-1.5 tabular-nums text-[#5B6470]">{show(p.default)}</td>
