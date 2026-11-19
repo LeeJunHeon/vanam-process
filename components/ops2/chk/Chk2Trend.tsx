@@ -30,6 +30,15 @@ function spread(want: number[], gap: number, lo: number, hi: number): number[] {
   for (const o of idx) { const y = Math.max(o.y, prev + gap, lo); out[o.i] = y; prev = y; }
   const over = prev - hi;
   if (over > 0) for (let i = 0; i < out.length; i++) out[i] = Math.max(lo, out[i] - over);
+  // 아래 끝을 넘어 전체를 끌어올릴 때 맨 위가 lo 에 걸리면 그 아래 라벨만 올라와 간격이 무너진다(위·아래 양쪽에 라벨 쌍 — 2026-11-19).
+  // 그럴 때만: 위→아래로 간격을 벌린 값에서 아래→위로 한 번 더 맞춘다(뒤에서부터 y[i] = min(y[i], y[i+1] − 간격), 맨 아래는 hi).
+  // 띠에 다 들어가는 한(layoutTrendLabels 가 먼저 확인) 모든 간격이 지켜지고 맨 위도 lo 아래로 가지 않는다. 겹침이 없던 결과는 그대로(챔버K HTML 같음).
+  if (idx.every((o, k) => k === 0 || out[o.i] - out[idx[k - 1].i] >= gap - 1e-9)) return out;
+  const ys: number[] = [];
+  prev = -Infinity;
+  for (const o of idx) { prev = Math.max(o.y, prev + gap, lo); ys.push(prev); }
+  for (let k = ys.length - 1; k >= 0; k--) ys[k] = Math.min(ys[k], k === ys.length - 1 ? hi : ys[k + 1] - gap);
+  idx.forEach((o, k) => { out[o.i] = Math.max(lo, ys[k]); });
   return out;
 }
 // 오른쪽 라벨 — 글자 줄 높이(FSPX.small 의 1.25 배)에 여유 1 px 를 더한 간격으로 띄운다(예전 14 px 는 12 px 글자의 줄 높이 15 px 보다 좁아
