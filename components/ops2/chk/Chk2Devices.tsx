@@ -13,7 +13,7 @@ import { useState, type ReactNode } from "react";
 import { Flame, Gauge, PauseCircle, Play, SkipForward, Square, Workflow } from "lucide-react";
 import { FS, BigValue, Btn, Card, Chip, Dot, FieldValue, Issue, KV, Modal, QBadge, StateBox, Val, type Ask } from "./kit";
 import { argRange, capRange, checkInput, rangeText, type Range } from "./logic";
-import { fieldText } from "./text";
+import { enumLabel, fieldText } from "./text";
 import { GAS_STATE, HEATER_OWNER, fmtValue, type BlockDef, type Bundle, type FieldDef, type StateData } from "./types";
 import { useChk2Mode } from "./mode";
 import type { LockFn } from "./Chk2Status";
@@ -61,9 +61,9 @@ function Big({ f, snap, bundle, off }: { f?: FieldDef; snap: Snap; bundle: Bundl
 }
 
 /** 값 줄(필드 정의) — bool 은 상태 네모 */
-function Row({ f, snap, bundle, off }: { f?: FieldDef; snap: Snap; bundle: Bundle | null; off?: boolean }) {
+function Row({ f, snap, bundle, off, staleNote }: { f?: FieldDef; snap: Snap; bundle: Bundle | null; off?: boolean; staleNote?: string }) {
   if (!f) return null;
-  return <FieldValue f={f} v={snap?.[f.column]} dim={off} snap={snap} blocks={bundle?.snapshot?.blocks} />;
+  return <FieldValue f={f} v={snap?.[f.column]} dim={off} snap={snap} blocks={bundle?.snapshot?.blocks} staleNote={staleNote} />;
 }
 
 /** 실제 / 설정 한 줄 */
@@ -77,10 +77,12 @@ function PairRow({ k, a, b, unit, off }: { k: string; a: unknown; b: unknown; un
 }
 
 /** '상세'에서만 보이는 나머지 필드 */
-function DetailRows({ d, snap, bundle, shown }: { d?: BlockDef; snap: Snap; bundle: Bundle | null; shown: string[] }) {
+function DetailRows({ d, snap, bundle, shown, hide }: {
+  d?: BlockDef; snap: Snap; bundle: Bundle | null; shown: string[]; hide?: (f: FieldDef) => boolean;
+}) {
   const { detail } = useChk2Mode();
   if (!detail || !d) return null;
-  const rest = d.fields.filter((f) => !shown.includes(f.name));
+  const rest = d.fields.filter((f) => !shown.includes(f.name) && !hide?.(f));
   if (!rest.length) return null;
   return (
     <div className="mt-1 border-t border-dashed border-[#E3E6EA] pt-1">
@@ -112,21 +114,32 @@ export function VacuumCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => voi
 }
 
 // ───────────── 가스·압력 ─────────────
+const VALVE_STALE = "명령 중이라 읽기 미룸";
 export function GasCard({ bundle, snap, st }: Ctx) {
   const d = blockOf(bundle, "mfc");
   const off = st?.links?.mfc?.q === "off";
+  const spF = fieldOf(d, "sp_active"), spN = num(snap?.["mfc.sp_active"]);
+  const spSelF = fieldOf(d, "sp_sel_mtorr");      // 사용 중 설정점 — 1~5 는 "SP5" 처럼
   return (
     <DevCard title="가스·압력" sub={d?.desc} chip={<QBadge link={st?.links?.mfc} />} off={off}
       big={<Big f={fieldOf(d, "pressure_mtorr")} snap={snap} bundle={bundle} off={off} />}>
       <PairRow k="Ar 실제/설정" a={snap?.["mfc.ar_sccm"]} b={snap?.["mfc.ar_set"]} unit="sccm" off={off} />
       <PairRow k="O₂ 실제/설정" a={snap?.["mfc.o2_sccm"]} b={snap?.["mfc.o2_set"]} unit="sccm" off={off} />
-      <Row f={fieldOf(d, "sp_mtorr")} snap={snap} bundle={bundle} off={off} />
-      <Row f={fieldOf(d, "sp_active")} snap={snap} bundle={bundle} off={off} />
+      {/* 압력 목표 — 묶음 16 은 선택된 설정점의 값(mfc.sp_sel_mtorr: SP4·SP5 단계에도), 옛 장비는 SP1 확인값(mfc.sp_mtorr) */}
+      <Row f={spSelF ?? fieldOf(d, "sp_mtorr")} snap={snap} bundle={bundle} off={off} />
+      {spF && (
+        <KV k={spF.label} title={spF.desc || undefined}>
+          <Val text={off || spN === null ? "" : spN >= 1 ? `SP${spN}` : "밸브 직접 조작"} />
+        </KV>
+      )}
+      {/* 밸브 위치(묶음 15) — 기록용 읽기라 설정 명령 중에는 장비가 읽기를 미룬다(품질 열 stale → 앞 값을 흐리게) */}
+      <Row f={fieldOf(d, "valve_pct")} snap={snap} bundle={bundle} off={off} staleNote={VALVE_STALE} />
       <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
         <StateBox on={snap?.["plc.ar_valve"] as boolean | undefined} label="Ar 차단밸브" />
         <StateBox on={snap?.["plc.o2_valve"] as boolean | undefined} label="O₂ 차단밸브" />
       </div>
-      <DetailRows d={d} snap={snap} bundle={bundle} shown={["pressure_mtorr", "ar_sccm", "ar_set", "o2_sccm", "o2_set", "sp_mtorr", "sp_active"]} />
+      <DetailRows d={d} snap={snap} bundle={bundle}
+        shown={["pressure_mtorr", "ar_sccm", "ar_set", "o2_sccm", "o2_set", spSelF ? "sp_sel_mtorr" : "sp_mtorr", "sp_active", "valve_pct"]} />
     </DevCard>
   );
 }
@@ -228,8 +241,27 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
     : `정지 (DAC ${Math.round(mv)})`;
   const casc = fieldOf(d, "casc_state"), mode = fieldOf(d, "ctrl_mode");
   const cs = snap?.["heater.casc_state"], cm = snap?.["heater.ctrl_mode"];
-  const ctrlText = typeof cs === "string" && cs && cs !== "idle" ? (casc?.enumLabels?.[cs] ?? cs)
-    : typeof cm === "string" && cm ? (mode?.enumLabels?.[cm] ?? cm) : "";
+  // 상태 이름은 제어 구조에 따라(묶음 16 enumLabelsBy — tc2 의 running 은 "TC2 제어(단독)"), 옛 묶음은 enumLabels
+  const ctrlText = typeof cs === "string" && cs && cs !== "idle" ? (enumLabel(casc, cs, snap) ?? cs)
+    : typeof cm === "string" && cm ? (enumLabel(mode, cm, snap) ?? cm) : "";
+  // 묶음 15 — tc2(TC2 단독 제어): 편차는 TC2 − SV2, TC1 은 기록. TC2 PID 두 모드(tc2·cascade)에서 TC2 아래 TC2 목표(SV2)
+  //   SV2·편차는 TC2 제어가 돌 때만(꺼져 있으면 SV2 는 0 이라 뜻 없는 숫자가 된다)
+  const tc2Only = cm === "tc2", tc2Pid = cm === "tc2" || cm === "cascade";
+  const cascOn = typeof cs === "string" && cs !== "" && cs !== "idle";
+  const pvF = fieldOf(d, "pv"), pv2F = fieldOf(d, "pv2"), sv2F = fieldOf(d, "sv2");
+  const sv2 = num(snap?.["heater.sv2"]), pv2 = num(snap?.["heater.pv2"]);
+  const dev2 = tc2Only && cascOn && sv2 !== null && pv2 !== null ? pv2 - sv2 : null;
+  const tcBig = (f: FieldDef | undefined, under: ReactNode) => {
+    if (!f) return <div />;
+    const t = fieldText(f, snap?.[f.column], snap, bundle?.snapshot?.blocks);
+    return (
+      <div className="min-w-0">
+        <p className={`${FS.small} text-[#5B6470]`}>{f.label}</p>
+        <Val text={off ? "" : t.text} unit={f.unit} size="big" alt={off ? null : t.alt} altWarn={t.warn} />
+        <p className={`min-h-[18px] truncate ${FS.small} text-[#5B6470]`}>{off ? "" : under}</p>
+      </div>
+    );
+  };
   const gas = st?.heater?.gas ?? null, owner = st?.heater?.owner ?? null;
   const hr = st?.heaterRecipe ?? null;
   const full = !m.webOnly("HEATER_ON");
@@ -238,7 +270,13 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
       <DevCard title={d?.label ?? "히터"} sub={d?.desc} off={off}
         chip={<>{issues.length ? <Chip tone="alarm">이상</Chip> : <Chip tone={run ? "dark" : "neutral"}>{run ? "운전" : "정지"}</Chip>}
           {st?.links?.heater?.q && st.links.heater.q !== "ok" && <QBadge link={st.links.heater} />}</>}
-        big={<Big f={fieldOf(d, "pv")} snap={snap} bundle={bundle} off={off} />}
+        big={
+          // TC1·TC2 같은 크기로 나란히, TC2 목표(SV2)는 TC2 아래 작게(v1 노트북 화면 a786b25 와 같은 배치)
+          <div className="grid grid-cols-2 gap-x-3">
+            {tcBig(pvF, tc2Only ? "기록" : "")}
+            {tcBig(pv2F, tc2Pid && cascOn && sv2 !== null && sv2F ? `목표 ${fmtValue(sv2, sv2F.fmt)} ${sv2F.unit}` : "")}
+          </div>
+        }
         note={<>
           {issues.length > 0 && <Issue level="alarm">{issues.join(" · ")} — 원인을 확인한 뒤 이상 리셋</Issue>}
           {(owner || (gas && gas !== "IDLE")) && (
@@ -281,8 +319,12 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
               stop: true, note: "히터 레시피를 멈추고 히터를 끕니다(RUN=0·램프 복구·SV=PV)." })}><Square size={13} /> 레시피 정지</Btn>
           )}
         </>}>
-        <Row f={fieldOf(d, "pv2")} snap={snap} bundle={bundle} off={off} />
         <Row f={fieldOf(d, "sv")} snap={snap} bundle={bundle} off={off} />
+        {tc2Only && (
+          <KV k="목표와의 편차(TC2)" title="TC2 − TC2 목표(SV2) — TC2 단독 제어에서 PID 가 따라가는 쪽">
+            <Val text={off || dev2 === null ? "" : `${dev2 >= 0 ? "+" : "−"}${Math.abs(dev2).toFixed(1)}`} unit="°C" />
+          </KV>
+        )}
         {ctrlText && <KV k="제어 방식"><span className={`${FS.body} font-semibold text-[#1B1F24]`}>{ctrlText}</span></KV>}
         {num(snap?.["heater.bias"]) !== null && <Row f={fieldOf(d, "bias")} snap={snap} bundle={bundle} off={off} />}
         <KV k="출력"><Val text={off ? "" : outText} /></KV>
@@ -290,7 +332,8 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
           <StateBox on={run} label="운전(RUN)" />
           {snap?.["heater.itl"] !== undefined && <StateBox on={snap?.["heater.itl"] === true} label="인터록" />}
         </div>
-        <DetailRows d={d} snap={snap} bundle={bundle} shown={["pv", "pv2", "sv", "casc_state", "bias", "mv", "current_est", "run", "itl", "fault", "ot", "tc_err", "wd_err"]} />
+        <DetailRows d={d} snap={snap} bundle={bundle} shown={["pv", "pv2", "sv", "casc_state", "bias", "mv", "current_est", "run", "itl", "fault", "ot", "tc_err", "wd_err"]}
+          hide={(f) => /^bias/.test(f.name) && num(snap?.[f.column]) === null} />
       </DevCard>
       {modal === "on" && <HeaterOnModal bundle={bundle} snap={snap} onClose={() => setModal(null)} onAsk={onAsk} />}
       {modal === "sv" && <HeaterSvModal bundle={bundle} snap={snap} onClose={() => setModal(null)} onAsk={onAsk} />}

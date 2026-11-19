@@ -27,12 +27,21 @@ export function fmtClock(sec: number): string {
 /** 상태 열 값 중 이상(주의색) — 연결 안 됨·영점 안 됨·음수·형식 오류. 하한 아래(below)·꺼짐(off)·측정 준비 중은 대기 때 정상(기본색) */
 const ALT_WARN = new Set(["disconnected", "unzeroed", "negative", "invalid"]);
 
-/** 스냅샷 값 하나를 글로(묶음 정의 fmt·enumLabels). 값이 비고 그 값의 상태 열(stateColumn — 묶음 12)이 ok 가 아니면
+/** 값 이름 — 묶음 16 enumLabelsBy(기준 열 값에 따라 바뀌는 이름, 예: 히터 제어 구조 tc2 의 "TC2 제어(단독)")에 있으면 그것,
+ *  없으면 enumLabels(옛 장비·그 줄에 없는 값). 이름이 없으면 null */
+export function enumLabel(f: FieldDef | undefined, v: string, snap?: Record<string, unknown>): string | null {
+  const by = f?.enumLabelsBy;
+  const k = by && snap ? snap[by.column] : undefined;
+  return (typeof k === "string" ? by?.labels?.[k]?.[v] : undefined) ?? f?.enumLabels?.[v] ?? null;
+}
+
+/** 스냅샷 값 하나를 글로(묶음 정의 fmt·enumLabels·enumLabelsBy). 값이 비고 그 값의 상태 열(stateColumn — 묶음 12)이 ok 가 아니면
  *  상태 이름(상태 열 enumLabels)을 alt 로 — 카드·HMI·그래프 툴팁이 모두 이 규칙(장비 종류를 따로 보지 않는다).
  *  warn = 그 상태가 이상(ALT_WARN)일 때만 */
 export function fieldText(f: FieldDef, v: unknown, snap?: Record<string, unknown>, blocks?: { fields: FieldDef[] }[]):
   { text: string; alt: string | null; warn: boolean } {
-  const text = typeof v === "string" && f.enumLabels?.[v] ? f.enumLabels[v] : fmtValue(v, f.fmt);
+  const lab = typeof v === "string" ? enumLabel(f, v, snap) : null;
+  const text = lab ?? fmtValue(v, f.fmt);
   if (text || !f.stateColumn || !snap) return { text, alt: null, warn: false };
   const st = snap[f.stateColumn];
   if (typeof st !== "string" || st === "" || st === "ok") return { text, alt: null, warn: false };

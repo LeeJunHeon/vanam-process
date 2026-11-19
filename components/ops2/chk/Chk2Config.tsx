@@ -12,14 +12,17 @@
 // W-9: 묶음 고르기 = paramGroups label(v11), 표 첫 칸 = label 굵게·키는 아래 작은 회색, 등급 높음·중간·낮음, 적용 시점은 한글만.
 // desc 는 보이고 note·v1 출처·원래 적용 시점 이름은 '상세'에서만.
 // 웹 검사는 키 하나씩(lib/ops2/configCheck) — 키 사이 규칙(crossRules)은 설명만, 판단은 장비(CONFIG_INVALID errors 그대로).
+// W-11(묶음 15): params[].choices(허용 숫자 목록)가 있으면 int 여도 선택 목록 — 값은 숫자로 보낸다. 지금 값이 목록에 없으면
+// "목록 밖" 으로 보이고 다른 값을 고르기 전에는 적용을 막는다(조용히 바꾸지 않음). 묶음 고르기 순서 = paramGroups 순서(장비별
+// 통신 묶음 comm_plc·comm_mfc·comm_dc·comm_rfpulse·comm_ig·comm), 통신 묶음 위에 "노트북 쪽 설정" 안내 한 줄.
 // 이력: 버전 목록 → 하나(changes·ack) → 두 버전 비교.
 // W-10a: 배지·오류·주의는 아이콘 + 글자(kit Tag·ErrText·Issue) — 색만으로 뜻을 전하지 않는다. 바꾼 줄은 '바꿈' 배지, 고른 버전은 표시.
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  AlertOctagon, ChevronRight, DownloadCloud, Eraser, GitCompare, HardDrive, History, PencilLine, RotateCcw, Save, Settings2,
+  AlertOctagon, ChevronRight, DownloadCloud, Eraser, GitCompare, HardDrive, History, Info, PencilLine, RotateCcw, Save, Settings2,
   Shield, ShieldAlert, ShieldCheck,
 } from "lucide-react";
-import { CONFIG_REASON, checkParamValue } from "@/lib/ops2/configCheck";
+import { CONFIG_REASON, checkParamValue, numChoices } from "@/lib/ops2/configCheck";
 import { fmtKst } from "@/lib/ops2/time";
 import { FS, Card, ErrText, Issue, SimpleConfirm, Tag, type Notice } from "./kit";
 import { reasonLabel, type Bundle, type ParamDef, type Perms, type StateData } from "./types";
@@ -90,6 +93,18 @@ function ParamInput({ p, value, onChange, readOnly, error }: {
       <select disabled={readOnly} value={value === true ? "true" : value === false ? "false" : ""} className={cls}
         onChange={(e) => onChange(e.target.value === "true")}>
         <option value="true">true</option><option value="false">false</option>
+      </select>
+    );
+  }
+  const choices = numChoices(p);
+  if (choices && (p.type === "int" || p.type === "float")) {
+    // 허용 숫자 목록 — 값은 숫자 그대로. 목록에 없는 지금 값은 지우지 않고 "목록 밖" 항목으로 보인다
+    const out = typeof value === "number" && choices.includes(value) ? null : value;
+    return (
+      <select disabled={readOnly} value={value === undefined || value === null ? "" : String(value)} className={`${cls} tabular-nums`}
+        onChange={(e) => onChange(Number(e.target.value))}>
+        {out !== null && <option value={out === undefined ? "" : String(out)} disabled>{show(out)} (목록 밖)</option>}
+        {choices.map((x) => <option key={x} value={String(x)}>{x}</option>)}
       </select>
     );
   }
@@ -189,14 +204,27 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
   }, [cmp, fetchVersion]);
 
   const params = useMemo(() => (bundle?.params ?? []).filter((p) => p.scope !== "secret"), [bundle]);
-  const groups = useMemo(() => [...new Set(params.map((p) => p.group ?? "기타"))], [params]);
+  // 묶음 고르기 순서 = 묶음 paramGroups 순서(v15 — 장비별 통신 묶음이 장비 순서대로), 거기 없는 묶음은 뒤에 나온 순서대로
+  const groups = useMemo(() => {
+    const have = [...new Set(params.map((p) => p.group ?? "기타"))];
+    const order = (bundle?.paramGroups ?? []).map((g) => g.key).filter((k) => have.includes(k));
+    return [...order, ...have.filter((g) => !order.includes(g))];
+  }, [params, bundle]);
   const nowVal = (p: ParamDef) => (ov?.current ? ov.current[p.key] : p.current);
   const changed = Object.keys(edits).filter((k) => {
     const p = params.find((x) => x.key === k);
     return p && !same(edits[k], nowVal(p));
   });
   const errors = Object.fromEntries(changed.map((k) => [k, checkParamValue(params.find((x) => x.key === k)!, edits[k])]));
-  const bad = changed.filter((k) => errors[k]);
+  // 허용 숫자 목록 밖(옛 설정의 MFC_BAUD 1200 등) — 바꾸지 않은 키도 오류로 보이고 적용을 막는다(장비가 버전 전체를 거부한다)
+  const listErrors: Record<string, string> = {};
+  for (const p of params) {
+    if (changed.includes(p.key) || !numChoices(p)) continue;
+    const v = nowVal(p);
+    const e = v === undefined ? null : checkParamValue(p, v);
+    if (e) listErrors[p.key] = e;
+  }
+  const bad = [...changed.filter((k) => errors[k]), ...Object.keys(listErrors)];
   const canApply = !!ov?.canApply && connected;
   const readOnly = !ov?.canApply;
   const idleP = ov?.statePending?.idle ?? {}, restartP = ov?.statePending?.restart ?? {};
@@ -358,6 +386,17 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                   )}
                 </span>
               </div>
+              {!onlyChanged && !q.trim() && /^comm(_|$)/.test(group) && (
+                <p className={`flex items-start gap-1.5 rounded-lg bg-[#EEF3FF] px-2 py-1.5 ${FS.small} text-[#1D4ED8]`}>
+                  <Info size={14} className="mt-px shrink-0" aria-hidden />
+                  여기 값은 노트북 쪽 설정입니다. 장비 쪽도 같은 값이어야 하고, 프로그램을 다시 켜야 적용됩니다.
+                </p>
+              )}
+              {Object.keys(listErrors).length > 0 && (
+                <Issue level="warn">
+                  지금 값이 허용값 목록에 없는 키가 있습니다({Object.keys(listErrors).join(", ")}) — 목록에서 값을 골라야 적용할 수 있습니다.
+                </Issue>
+              )}
               <div className="overflow-x-auto rounded-[10px] border border-[#E3E6EA]">
                 <table className={`min-w-full ${FS.small}`}>
                   <thead className="bg-[#F5F6F8] text-[#5B6470]">
@@ -366,8 +405,9 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                   <tbody>
                     {shown.map((p) => {
                       const v = p.key in edits ? edits[p.key] : nowVal(p);
-                      const e = changed.includes(p.key) ? errors[p.key] : null;
-                      const range = p.type === "int" || p.type === "float" ? `${p.min ?? ""}~${p.max ?? ""}` : "";
+                      const e = changed.includes(p.key) ? errors[p.key] : listErrors[p.key] ?? null;
+                      const choices = numChoices(p);
+                      const range = choices ? "" : p.type === "int" || p.type === "float" ? `${p.min ?? ""}~${p.max ?? ""}` : "";
                       return (
                         <tr key={p.key} className={`border-t border-[#E3E6EA] align-top ${rejected.has(p.key) ? "bg-[#FEE4E2]/60" : changed.includes(p.key) ? "bg-[#E8EEFC]/40" : ""}`}>
                           <td className="px-2 py-1.5">
@@ -381,6 +421,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                                 </Tag>
                               )}
                               {rejected.has(p.key) && <Tag kind="alarmSolid">거부됨</Tag>}
+                              {listErrors[p.key] && <Tag kind="alarm" title="지금 값이 허용값 목록에 없다 — 다른 값을 골라야 적용할 수 있다">목록 밖</Tag>}
                               {!rejected.has(p.key) && changed.includes(p.key) && <Tag kind="info" icon={PencilLine}>바꿈</Tag>}
                               {p.key in idleP && <Tag kind="wait" title={`대기 값 ${show(idleP[p.key])}`}>대기(공정 끝나면) → {show(idleP[p.key])}</Tag>}
                               {p.key in restartP && <Tag kind="wait" title={`대기 값 ${show(restartP[p.key])}`}>대기(재시작) → {show(restartP[p.key])}</Tag>}
@@ -395,6 +436,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                           </td>
                           <td className="px-2 py-1.5 text-[#5B6470]">
                             {detail ? p.type : TYPE_TEXT[p.type ?? ""] ?? p.type}{range && ` · ${range}`}{p.unit && ` ${p.unit}`}
+                            {choices && <p className={`${FS.small} tabular-nums`}>{choices.join(" · ")}</p>}
                             {p.enum && <p className={`${FS.small}`}>{p.enum.map(String).join(" · ")}</p>}
                             {p.pattern && <p className={`font-mono ${FS.small}`}>/{p.pattern}/</p>}
                           </td>
