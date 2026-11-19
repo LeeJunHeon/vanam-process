@@ -123,9 +123,10 @@ function useDraw(p: Props, scale: number) {
       </text>
     </>);
   };
-  /** 사각 버튼(도어·게이트·핀) — 안에 이름 + 상태(램프 코일) */
-  const square = (t: string, x: number, y: number, w: number, name: string, lamp: string, kind: "open" | "run" = "run") => {
-    const st = word(t, lamp, kind);
+  /** 사각 버튼(도어·게이트·핀·진공 준비) — 안에 이름 + 상태(램프 코일). 버튼이라 상태 글은 켜짐/꺼짐(챔버K Chk2Hmi 도어 버튼과 같은 규칙 —
+   *  '게이트 닫기' 램프가 켜져 있으면 '켜짐', 열림/닫힘으로 읽으면 '게이트 닫기 … 열림' 처럼 거꾸로 보인다) */
+  const square = (t: string, x: number, y: number, w: number, name: string, lamp: string) => {
+    const st = word(t, lamp, "run");
     const h = px(16) + px(16) + 10;
     return node(t, name, st, <>
       <rect className="ring" x={x - 4} y={y - 4} width={w + 8} height={h + 8} rx={10} fill="none" stroke={T.primary} strokeWidth={2} opacity={0} />
@@ -208,8 +209,8 @@ function ChamberMap(p: Props & { ch: "ch1" | "ch2" }) {
         {/* 벤트·게이트 */}
         {D.valve(`vent_${n}_sw`, 574, 110, "벤트", { lamp: `vent_${n}_lamp` })}
         {text(620, 112, "대기", { size: FSPX.small, color: T.muted, anchor: "end" })}
-        {D.square(`g_v_${n}_open_sw`, 538, 196, 96, "게이트 열기", `g_v_${n}_open_lamp`, "open")}
-        {D.square(`g_v_${n}_close_sw`, 538, 252, 96, "게이트 닫기", `g_v_${n}_close_lamp`, "open")}
+        {D.square(`g_v_${n}_open_sw`, 538, 196, 96, "게이트 열기", `g_v_${n}_open_lamp`)}
+        {D.square(`g_v_${n}_close_sw`, 538, 252, 96, "게이트 닫기", `g_v_${n}_close_lamp`)}
         {text(586, 252 + px(32) + 30, "→ 로드락", { size: FSPX.small, color: T.muted })}
         {/* 배기 */}
         {D.valve(`m_v_${n}_sw`, 360, 346, "M.V.", { vertical: true, side: "right" })}

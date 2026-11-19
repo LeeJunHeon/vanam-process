@@ -51,6 +51,7 @@ const SEND_ERROR: Record<string, string> = {
 };
 
 export type TabKey = "run" | "hmi" | "recipe" | "log" | "config";
+export const FEED_MAIN_KEEP12 = 1500;
 export const WEB_TABS: { key: TabKey; label: string }[] = [
   { key: "run", label: "운전" }, { key: "hmi", label: "HMI" }, { key: "recipe", label: "레시피" }, { key: "log", label: "기록" }, { key: "config", label: "설정" },
 ];
@@ -129,7 +130,9 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
   equipment: string; dirtyRef: MutableRefObject<boolean>; mode?: Chk2Mode;
 }) {
   const local = screen === "local";
-  const d = useChk2(equipment, screen, TREND_COLS12);
+  // 로그 목록 — 기본 보기 줄(공정 진행·경고·오류·공정 시작/끝·명령 결과)은 상세 줄과 따로 1500 개(장비 허브 HUB_KEEP_MAIN 300 × 챔버 5)까지 —
+  // 화면을 다시 열면 장비·웹이 앞선 공정 진행 줄을 먼저 보내는데, 상세 줄에 밀려 다시 잘리지 않게(2026-11-19)
+  const d = useChk2(equipment, screen, TREND_COLS12, FEED_MAIN_KEEP12);
   const recipes = useRecipes(equipment, !local);
   const bundle = asCh12(d.bundle);
   const [now, setNow] = useState(() => Date.now());

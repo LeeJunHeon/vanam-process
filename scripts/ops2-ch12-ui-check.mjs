@@ -139,6 +139,10 @@ await esbuild.build({
       export { Ch12EventFeed, ch12LogLine } from "./components/ops2/ch12/Ch12Logs";
       export { WEB_TABS, LOCAL_TABS } from "./components/ops2/ch12/Ch12Page";
       export { Chk2ModeContext } from "./components/ops2/chk/mode";
+      export { default as Chk2Trend, layoutTrendLabels, LABEL_LINE, LABEL_GAP } from "./components/ops2/chk/Chk2Trend";
+      export { trimFeed, feedIsMain } from "./components/ops2/chk/useChk2";
+      export { mainKindsOf, mainWhere, mergeFirstEvents, MAIN_PER_CHAMBER, FIRST_CONTEXTS } from "./lib/ops2/ch12/firstEvents";
+      export { FEED_MAIN_KEEP12 } from "./components/ops2/ch12/Ch12Page";
       export { RgaChart, rgaPoints, OesChart, oesPoints } from "./components/ops2/ch12/Ch12Spectra";
       export { default as Ch12SeqEdit } from "./components/ops2/ch12/Ch12SeqEdit";
       export * as TH from "./components/ops2/ch12/Ch12Thickness";
@@ -309,6 +313,88 @@ const chamberProps = (ch) => ({
         html.includes('aria-label="CH1 계통도"') && html.includes('aria-label="CH2 계통도"') && html.includes('aria-label="로드락 계통도"')
         && html.includes('role="button"') && locked.includes("opacity-50") && locked.includes("잠김: PLC 값이 오래됨") && locked.includes("조작 잠금")
         && /[A-Z0-9]+_SW/.test(dt) && t.includes("열림·켜짐") && t.includes("전환 중"), null);
+}
+{
+  // 사각 버튼(도어·게이트·핀·진공 준비) 상태 글 = 켜짐/꺼짐(챔버K Chk2Hmi 도어 버튼 규칙) — '게이트 닫기 … 열림' 처럼 거꾸로 보이지 않게(2026-11-19)
+  const lamps = { g_v_1_close_lamp: true, g_v_1_open_lamp: false, g_v_2_close_lamp: false, g_v_2_open_lamp: true,
+                  door_1_open_lamp: false, door_1_close_lamp: true, l_pin_up_lamp: true, l_pin_down_lamp: false, l_vac_ready_sw: false };
+  const snap = { ...st.snapshot, ...Object.fromEntries(Object.entries(lamps).map(([k, v]) => [`plc.${k}`, v])) };
+  const html = render(U.Ch12Hmi, { bundle, snapshot: snap, plcOk: true, lockOf: noLock, pending: {}, onAsk: noop, note: "" });
+  const aria = (name) => (html.match(new RegExp(`aria-label="${name} — ([^"— ]+)`, "g")) ?? []).map((m) => m.split(" — ")[1]);
+  const got = { "게이트 닫기": aria("게이트 닫기"), "게이트 열기": aria("게이트 열기"), "도어 닫기": aria("도어 닫기"), "도어 열기": aria("도어 열기"),
+                "4핀 올림": aria("4핀 올림"), "4핀 내림": aria("4핀 내림"), "진공 준비": aria("진공 준비") };
+  const words = Object.values(got).flat();
+  check("ui:hmi-buttons — 사각 버튼 상태 글 켜짐/꺼짐(게이트 닫기 램프 켜짐 → '게이트 닫기 켜짐', 열기 → '꺼짐'), 열림/닫힘은 밸브·셔터만",
+        got["게이트 닫기"].join() === "켜짐,꺼짐" && got["게이트 열기"].join() === "꺼짐,켜짐" && got["도어 닫기"][0] === "켜짐"
+        && got["도어 열기"][0] === "꺼짐" && got["4핀 올림"][0] === "켜짐" && got["4핀 내림"][0] === "꺼짐" && got["진공 준비"][0] === "꺼짐"
+        && words.length >= 9 && !words.some((w) => w === "열림" || w === "닫힘"), got);
+}
+{
+  // 추세 그래프 오른쪽 라벨(공용 Chk2Trend — 챔버K 도 같은 부품, 2026-11-19): 라벨 상자(글자 줄 높이 LABEL_LINE)끼리 겹치지 않음을 좌표로.
+  // 같은 값 2~4개, 축 맨 위·맨 아래 값, 그림 높이를 아주 작게 해도(띠를 늘리거나 같은 값은 한 줄로) — 순수 함수 + 실제 그림(HTML 의 text y)
+  const LH = U.LABEL_LINE, GAP = U.LABEL_GAP;
+  const boxesOk = (ys, h) => ys.every((a, i) => a - LH / 2 >= 0 && a + LH / 2 <= h + 0.01 && ys.every((b, j) => i === j || Math.abs(a - b) >= LH));
+  const it = (y, text, group, dashed = false) => ({ y, text, group, dashed });
+  const pure = [];
+  for (const n of [2, 3, 4]) {                                 // 같은 값 n 개 — 위·가운데·아래
+    for (const y0 of [24, 68, 112]) {
+      const items = Array.from({ length: n }, (_, i) => it(y0, "20", `s${i >> 1}`, i % 2 === 1));
+      const r = U.layoutTrendLabels(items, 24, 112, 132);
+      pure.push({ n, y0, ok: boxesOk(r.labels.map((l) => l.y), r.height), h: r.height, labels: r.labels.length });
+    }
+  }
+  for (const h of [40, 56, 70]) {                              // 그림 높이가 작아 띠에 다 못 들어갈 때(위 22 · 아래 20 은 그대로)
+    const items = [it(30, "20", "a"), it(30, "20", "a", true), it(30, "5", "b"), it(30, "7", "b", true)];
+    const r = U.layoutTrendLabels(items, 24, h - 20, h);
+    pure.push({ min: h, ok: boxesOk(r.labels.map((l) => l.y), r.height), h: r.height, labels: r.labels.map((l) => l.text) });
+  }
+  const merged = U.layoutTrendLabels([it(30, "20", "a"), it(30, "20", "a", true), it(30, "5", "b"), it(30, "7", "b", true)], 24, 36, 56);
+  const t0 = 1_760_000_000_000;
+  const mk = (v) => Array.from({ length: 20 }, (_, i) => ({ t: t0 + i * 2000, v }));
+  const labelYs = (html) => [...html.matchAll(/<text x="536" y="([0-9.]+)"[^>]*>(.*?)<\/text>/g)].map((m) => ({ y: Number(m[1]) - 3.5, t: m[2].replace(/<!-- -->/g, "") }));
+  const svgH = (html) => [...html.matchAll(/<svg width="640" height="([0-9.]+)"/g)].map((m) => Number(m[1]));
+  const drawn = [
+    ["같은 값 2(압력=목표)", { "mfc.pressure_mtorr": 3, "mfc.sp_mtorr": 3 }],
+    ["같은 값 4(DC·RF 와 목표 모두 100)", { "dc.p": 100, "dc.set_w": 100, "rf.fwd_w": 100, "rf.set_w": 100 }],
+    ["축 맨 위 4개", { "dc.p": 300, "dc.set_w": 300, "rf.fwd_w": 299, "rf.set_w": 300 }],
+    ["축 맨 아래 4개", { "dc.p": 300, "dc.set_w": 1, "rf.fwd_w": 0.5, "rf.set_w": 0.8, "rfp.fwd_w": 0.2, "rfp.set_w": 0.3 }],
+  ].map(([name, v]) => {
+    const html = renderToStaticMarkup(h(U.Chk2Trend, { trend: mk(v), equipment: "CHK2", runId: null, local: true, nowMs: t0 + 40000 }));
+    const labs = labelYs(html), hs = svgH(html);
+    const ok = labs.length >= 2 && boxesOk(labs.map((l) => l.y), Math.max(...hs));
+    return { name, ok, labs: labs.map((l) => `${l.t}@${l.y}`) };
+  });
+  check("ui:trend-labels — 추세 라벨 상자 겹침 없음(간격 = 글자 줄 높이 + 여유, 같은 값 2~4·축 위/아래·그림 높이 최소 — 띠 늘림·같은 값 한 줄 '20 · 목표 20')",
+        GAP > LH && LH >= 12 * 1.2 && pure.every((x) => x.ok) && drawn.every((x) => x.ok)
+        && merged.labels.some((l) => l.text === "20 · 목표 20") && pure.some((x) => x.min && x.h > x.min), { pure: pure.filter((x) => !x.ok), drawn: drawn.filter((x) => !x.ok), merged });
+}
+{
+  // 화면을 다시 열어도 앞선 공정 진행 줄(2026-11-19 — 장비 허브 D418 의 웹·화면 쪽): ① 웹 첫 묶음 = 최근 사건 100 + 챔버별 기본 보기 줄
+  // (묶음 eventKinds main·경고·오류, 챔버마다 100), 같은 것 한 번·오래된 것부터 ② 화면 로그 목록은 기본 보기 줄을 상세 줄과 따로 1500 까지(챔버K 는 그대로 300)
+  const kinds = U.mainKindsOf(bundle);
+  const w = U.mainWhere("CH12", "ch2", kinds, 1_760_000_000_000);
+  const T0 = Date.parse(fx.state.ts);
+  const row = (i, source, kind, chamber, level = "info") => ({ msgId: `m${i}`, ts: new Date(T0 + i * 100), seq: i, level, source, kind, context: { chamber } });
+  const mainsCh2 = Array.from({ length: 30 }, (_, i) => row(i, "process", "block", "ch2"));                        // 앞선 공정 진행 줄
+  const flood = Array.from({ length: 100 }, (_, i) => row(5000 + i, "rf", "display", "ch2")).reverse();          // 최근 사건 100(새 것부터) = 상세 줄뿐
+  const merged = U.mergeFirstEvents(flood, [[...mainsCh2].reverse(), [row(29, "process", "block", "ch2")]]);
+  const ordered = merged.every((r, i) => i === 0 || merged[i - 1].ts <= r.ts);
+  const env = (r) => ({ id: r.msgId, type: "event", ts: r.ts.toISOString(), seq: r.seq, instance: "i",
+                        data: { level: r.level, code: "X", message: "", context: { source: r.source, kind: r.kind, chamber: r.context.chamber } } });
+  const feed = [...mainsCh2.map(env), ...Array.from({ length: 2000 }, (_, i) => env(row(10_000 + i, "plc", "log", "shared")))];
+  const set = new Set(kinds.map((k) => `${k.source}|${k.kind}`));
+  const kept = U.trimFeed(feed, 300, U.FEED_MAIN_KEEP12, U.feedIsMain(set));
+  const plain = U.trimFeed(feed, 300, 0, U.feedIsMain(set));
+  check("ui:first-events — 다시 연 화면: 웹 첫 묶음 = 최근 사건 100 + 챔버별 기본 보기 줄(main·경고·오류) 합침, 화면 로그는 기본 보기 줄을 상세와 따로(챔버K 는 최근 300 그대로)",
+        kinds.some((k) => k.source === "process" && k.kind === "block") && !kinds.some((k) => k.source === "plc" && k.kind === "log")
+        && w.equipment === "CH12" && JSON.stringify(w.context) === JSON.stringify({ path: ["chamber"], equals: "ch2" })
+        && JSON.stringify(w.OR[0]) === JSON.stringify({ level: { in: ["warn", "error", "critical"] } }) && w.OR.length === kinds.length + 1
+        && U.FIRST_CONTEXTS.join() === "ch1,ch2,pc,tsp,shared" && U.MAIN_PER_CHAMBER === 100
+        && merged.length === 130 && ordered && merged.slice(0, 30).every((r, i) => r.msgId === `m${i}`)
+        && kept.length === 330 && kept.slice(0, 30).every((e, i) => e.id === `m${i}`) && kept.slice(30).every((e) => e.data.context.kind === "log")
+        && plain.length === 300 && plain.every((e, i) => e === feed[feed.length - 300 + i])
+        && U.feedIsMain(null)(feed[40]) && !U.feedIsMain(set)(feed[40]) && U.feedIsMain(set)({ ...feed[40], data: { ...feed[40].data, level: "warn" } }),
+        { merged: merged.length, kept: kept.length, plain: plain.length });
 }
 {
   const reasons = ["TIME_FORMAT", "LINK_DOWN", "CHANNEL_SWITCH_RUNNING", "COOLDOWN", "RUNNER_BUSY", "PC_RUNNING", "DUMP_BUSY",

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-helpers";
 import { ops2Db } from "@/lib/ops2/db";
-import { enabledDevice } from "@/lib/ops2/browser";
+import { deviceBundle, enabledDevice } from "@/lib/ops2/browser";
+import { isCh12 } from "@/lib/ops2/ch12/ids";
+import { FIRST_CONTEXTS, MAIN_PER_CHAMBER, mainKindsOf, mainWhere, mergeFirstEvents } from "@/lib/ops2/ch12/firstEvents";
 import {
   eventEnvelope, sseEnvelope, subscribeBrowser, unsubscribeBrowser, type BrowserSub, type WireEnvelope,
 } from "@/lib/ops2/hub";
@@ -20,7 +22,9 @@ function maxAgeMs(): number {
 }
 
 // GET /api/ops2/[equipment]/v1/stream — 브라우저 SSE(로컬 /api/v1/stream 과 같은 형식, id 는 envelope id).
-// 처음 묶음: hello(마지막) → 최신 state → 최근 사건 100(오래된 것부터). 그 뒤 ingest 가 커밋한 것을 바로
+// 처음 묶음: hello(마지막) → 최신 state → 최근 사건 100(오래된 것부터). 챔버12 는 여기에 챔버별 기본 보기 줄(묶음 eventKinds main·경고·오류,
+// 최근 12 시간 안 챔버마다 100 — lib/ops2/ch12/firstEvents)을 합친다(상세 줄이 몰려도 다시 연 화면에 앞선 공정 진행 줄이 보이게).
+// 그 뒤 ingest 가 커밋한 것을 바로
 // (state·event·run_start·run_end·cmd_result·config_ack·hello, 웹이 만든 사건 INSTANCE_TAKEOVER·INSTANCE_RELEASED 포함).
 // 다시 붙으면 처음 묶음부터(Last-Event-ID 로 이어 받지 않음 — 화면이 envelope id 로 거른다).
 export async function GET(req: NextRequest, { params }: { params: Promise<{ equipment: string }> }) {
@@ -88,10 +92,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ equi
 
       void (async () => {
         try {
-          const [state, events] = await Promise.all([
+          const ch12 = isCh12(equipment);
+          const kinds = ch12 ? mainKindsOf(await deviceBundle(device.webSchemaHash)) : [];
+          const now = Date.now();
+          const [state, recent, ...mains] = await Promise.all([
             ops2Db.ops2State.findUnique({ where: { equipment } }),
             ops2Db.ops2Event.findMany({ where: { equipment }, orderBy: [{ ts: "desc" }, { seq: "desc" }], take: RECENT_EVENTS }),
+            ...(ch12 ? FIRST_CONTEXTS.map((c) => ops2Db.ops2Event.findMany({
+              where: mainWhere(equipment, c, kinds, now), orderBy: [{ ts: "desc" }, { seq: "desc" }], take: MAIN_PER_CHAMBER })) : []),
           ]);
+          const events = ch12 ? mergeFirstEvents(recent, mains) : recent.reverse();       // 챔버K 는 예전 그대로
           const first: WireEnvelope[] = [];
           const h = device.lastHello;
           if (h && typeof h === "object" && !Array.isArray(h)) {
@@ -103,7 +113,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ equi
             first.push({ id: state.msgId, instance: state.instance, seq: state.seq, ts: state.ts.toISOString(),
                          type: "state", data: state.data });
           }
-          first.push(...events.reverse().map(eventEnvelope));
+          first.push(...events.map(eventEnvelope));
           if (first.length && !put(enc.encode(first.map(sseEnvelope).join("")))) return close();
           ready = true;
           for (const b of held.splice(0)) if (!put(b)) return close();

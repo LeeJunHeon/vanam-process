@@ -55,12 +55,38 @@ function newId(): string {
   return Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-/** trendCols — 추세에 쌓을 열(기본 TREND_COLS = 챔버K). 챔버12 화면은 챔버별 열을 넘긴다(값이 바뀌지 않는 상수로) */
-export function useChk2(equipment: string, mode: Chk2Mode = "web", trendCols: readonly string[] = TREND_COLS) {
+/** 로그 목록 자르기 — mainKeep 이 0 이면 최근 keep 개(챔버K, 예전 그대로). 0 보다 크면 기본 보기 줄(isMain)은 최근 mainKeep 개,
+ *  나머지(상세 줄)는 최근 keep 개를 남긴다(순서 그대로) — 연결 때 다시 온 앞선 공정 진행 줄이 상세 줄에 밀려 잘리지 않게(챔버12, 2026-11-19). */
+export function trimFeed(cur: FeedItem[], keep: number, mainKeep: number, isMain: (e: FeedItem) => boolean): FeedItem[] {
+  if (mainKeep <= 0) return cur.length > keep ? cur.slice(-keep) : cur;
+  if (cur.length <= keep) return cur;
+  const flags = cur.map(isMain);
+  let nMain = 0, nOther = 0;
+  const out: FeedItem[] = [];
+  for (let i = cur.length - 1; i >= 0; i--) {
+    if (flags[i] ? nMain++ < mainKeep : nOther++ < keep) out.push(cur[i]);
+  }
+  return out.reverse();
+}
+
+/** 묶음 eventKinds 로 기본 보기 줄 판정(run_*·cmd_result·config_ack·경고·오류·main 종류) — 묶음을 아직 못 받았으면 모두 기본 보기로(자르지 않게) */
+export function feedIsMain(mainSet: Set<string> | null): (e: FeedItem) => boolean {
+  return (e) => {
+    if (e.type !== "event") return true;
+    if (!mainSet) return true;
+    const d = e.data as { level?: unknown; context?: { source?: unknown; kind?: unknown } };
+    return d.level === "warn" || d.level === "error" || d.level === "critical" || mainSet.has(`${String(d.context?.source)}|${String(d.context?.kind)}`);
+  };
+}
+
+/** trendCols — 추세에 쌓을 열(기본 TREND_COLS = 챔버K). 챔버12 화면은 챔버별 열을 넘긴다(값이 바뀌지 않는 상수로)
+ *  mainKeep — 로그 목록에 기본 보기 줄을 따로 남길 개수(기본 0 = 챔버K 예전 그대로 최근 300). 챔버12 는 장비 허브 보관(챔버 5 × 300)만큼 */
+export function useChk2(equipment: string, mode: Chk2Mode = "web", trendCols: readonly string[] = TREND_COLS, mainKeep = 0) {
   const local = mode === "local";
   const api = useCallback((_eq: string, path: string) => (local ? `/api/v1/${path}` : webApi(_eq, path)), [local]);
   const [hello, setHello] = useState<Hello | null>(null);
   const [bundle, setBundle] = useState<Bundle | null>(null);
+  const mainSet = useRef<Set<string> | null>(null);         // 묶음 eventKinds 의 main — mainKeep 이 있을 때만 쓴다
   const [state, setState] = useState<Envelope<StateData> | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [commands, setCommands] = useState<CmdRow[]>([]);
@@ -212,7 +238,8 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web", trendCols: re
         s.addEventListener(type, (ev) => {
           const env = parse(ev);
           if (!fresh(env)) return;
-          setFeed((cur) => [...cur, env].slice(-FEED_KEEP));
+          setFeed((cur) => (mainKeep > 0 ? trimFeed([...cur, env], FEED_KEEP, mainKeep, feedIsMain(mainSet.current))
+                                          : [...cur, env].slice(-FEED_KEEP)));
           if (type === "run_start" || type === "run_end") void loadRuns();
           if (type === "cmd_result") {
             if (cmdTimer) clearTimeout(cmdTimer);
@@ -228,7 +255,15 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web", trendCols: re
       if (retry) clearTimeout(retry);
       if (cmdTimer) clearTimeout(cmdTimer);
     };
-  }, [equipment, authLost, loadHello, loadCommands, loadRuns, api, local, trendCols]);
+  }, [equipment, authLost, loadHello, loadCommands, loadRuns, api, local, trendCols, mainKeep]);
+
+  // 묶음을 받으면 기본 보기 줄 기준을 바꾸고 로그 목록을 다시 자른다(묶음 전에 온 줄은 모두 남겨 두었으므로) — mainKeep 이 있을 때만
+  useEffect(() => {
+    if (mainKeep <= 0) return;
+    const kinds = bundle?.eventKinds;
+    mainSet.current = Array.isArray(kinds) ? new Set(kinds.filter((k) => k.level === "main").map((k) => `${k.source}|${k.kind}`)) : null;
+    setFeed((cur) => trimFeed(cur, FEED_KEEP, mainKeep, feedIsMain(mainSet.current)));
+  }, [bundle, mainKeep]);
 
   /** 명령 보내기 — web: ?wait=10 으로 결과(accepted·rejected·expired)까지 / local: POST 응답 {ok, reason, detail} 이 곧 결과 */
   const send = useCallback(async (kind: string, args: Record<string, unknown>, label?: string): Promise<SendResult> => {
