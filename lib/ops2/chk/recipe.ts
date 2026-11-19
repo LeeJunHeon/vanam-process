@@ -4,6 +4,9 @@
 //   process_engine._check_rows·_check_row(행 목록 — 빈 행 건너뛰기·"{i}행: 첫 오류", 블록 행은 blocks.ts).
 //   묶음 15(챔버K rewrite/v2 d8e02e3, W-11): 골든을 그 커밋 것으로 — 히터 tc2(기본)·SP5 단계.
 //   묶음 16(챔버K rewrite/v2 2098a20, W-12): 골든 cases 는 15 와 같음 — 묶음 정의(enumLabelsBy·mfc.sp_sel_mtorr)만 바뀜.
+//   묶음 17(챔버K rewrite/v2 5-19, W-13): 압력 설정점 값 출처 SPn_SOURCE(blocks.template_blocks dev_sp·TemplateError) —
+//   장비 값 단계는 set=false·value 비움, 넣을지 비교는 장비 값(스냅샷 mfc.sp{n}_dev_mtorr → CheckEnv.devSp)으로, 모르면
+//   TemplateError(SP_DEVICE_VALUE_UNKNOWN "SP{n}: 장비에 저장된 값을 읽지 못함"). 설정이 없는 묶음 16 이하는 예전 목록.
 // 열 정의는 묶음 recipe.processColumns·heaterStepColumns·heaterGasColumns, 설정값은 묶음 params current(없으면 default).
 // igEnabled = IG_ENABLED, rfpulsePresent = RFPULSE_ENABLED(process_engine._start_row 와 같게 — 설정값으로).
 // 골든(lib/ops2/chk/golden/web_template_cases.json)을 npm run ops2:golden 이 이 파일로 확인한다.
@@ -19,7 +22,7 @@ import { blockEnvOf, checkBlocks, expandBlocks, pulseEdgeViolation, usesOf, type
 export { pyFixed, pyFloatRepr, pyG, pyNum, pyRound, pyTruthy } from "./py";
 
 /** 이 검사가 맞춘 묶음 버전(골든과 같음) — 묶음 version 이 다르면 화면이 "장비 판단만 믿을 것" 안내 */
-export const GOLDEN_EXPORT_VERSION = 16;
+export const GOLDEN_EXPORT_VERSION = 17;
 /** 챔버K recipe.DELAY_RE.pattern(IGNORECASE) — 골든 시험이 묶음 delayPattern 과 같은지 본다 */
 export const DELAY_PATTERN = String.raw`^\s*delay\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$`;
 const DELAY_RE = new RegExp(DELAY_PATTERN, "i");
@@ -39,7 +42,9 @@ export type RecipeDefs = {
 export type Row = Record<string, unknown>;
 export type Cfg = Readonly<Record<string, unknown>>;
 /** 검사 환경 — floats: 정수 값이라도 파이썬 float 로 찍을 이름(설정 키·행 열 이름) */
-export type CheckEnv = { defs: RecipeDefs; cfg: Cfg; floats: ReadonlySet<string>; blocks?: BlockEnv | null };
+/** devSp — 장비에 저장된 압력 설정점 값(mTorr, {번호: 값}, 스냅샷 mfc.sp{n}_dev_mtorr — 묶음 17). 없으면 모름 */
+export type CheckEnv = { defs: RecipeDefs; cfg: Cfg; floats: ReadonlySet<string>; blocks?: BlockEnv | null;
+                         devSp?: Record<string, number | null> | null };
 export type Block = { type: string; params: Record<string, unknown>; label: string; stage: string };
 
 // ───────────── 행 검사(recipe.py) ─────────────
@@ -234,7 +239,40 @@ export function heaterCtrlMode(cfg: Cfg): string {
   return m === "tc2" || m === "cascade" || m === "tc1" ? m : "tc2";
 }
 
-export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: boolean, rfpulsePresent: boolean): Block[] {
+/** 장비 값 출처 단계의 장비 값을 모름 — 시작 거부(장비 blocks.TemplateError 와 같은 code·detail) */
+export class TemplateError extends Error {
+  code: string;
+  detail: string;
+  constructor(code: string, detail: string) {               // node 의 타입 지우기(골든 시험)가 매개변수 속성을 받지 않는다
+    super(detail);
+    this.code = code;
+    this.detail = detail;
+  }
+}
+const SP_SOURCE_KEY: Record<number, string> = { 2: "SP2_SOURCE", 3: "SP3_SOURCE", 4: "SP4_SOURCE", 5: "SP5_SOURCE" };
+/** SPn 값 출처가 장비 값인가 — 설정이 없으면(묶음 16 이하) 프로그램 값(예전 목록 그대로) */
+export const spFromDevice = (cfg: Cfg, n: number) => String(cfg[SP_SOURCE_KEY[n]] ?? "program") === "device";
+/** 장비 값을 모를 때 문구(장비 blocks.sp_device_text 와 같은 글) */
+export const spDeviceText = (n: number) => `SP${n}: 장비에 저장된 값을 읽지 못함`;
+function templateDeviceSp(devSp: Record<string, number | null> | null | undefined, n: number): number {
+  const v = devSp?.[String(n)];
+  if (v === null || v === undefined) throw new TemplateError("SP_DEVICE_VALUE_UNKNOWN", spDeviceText(n));
+  return pyFloat(v);
+}
+
+/** 스냅샷 → 장비에 저장된 설정점 값(mfc.sp{n}_dev_mtorr, 묶음 17). 열이 없으면(옛 장비) null */
+export function devSpOf(snap: Record<string, unknown> | null | undefined): Record<string, number | null> | null {
+  if (!snap || !("mfc.sp1_dev_mtorr" in snap)) return null;
+  const out: Record<string, number | null> = {};
+  for (const n of [1, 2, 3, 4, 5]) {
+    const v = snap[`mfc.sp${n}_dev_mtorr`];
+    out[String(n)] = typeof v === "number" && Number.isFinite(v) ? v : null;
+  }
+  return out;
+}
+
+export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: boolean, rfpulsePresent: boolean,
+                               devSp?: Record<string, number | null> | null): Block[] {
   const B = (type: string, label: string, stage: string, params: Record<string, unknown>): Block => ({ type, params, label, stage });
   const fl = (v: unknown) => pyFloatOr0(v);
   let chans: number[] = [];
@@ -260,11 +298,12 @@ export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: 
     o2, o2_flow: o2 ? fl(p.o2_flow ?? defaultFlow) : null, zero: true,
   }));
   const stab = pyRound(pyFloat(cfg.GAS_STABILIZE_SEC));
-  const pressure = (sp: number, value: number | null, label: string, stage: string, wait: boolean) =>
+  const pressure = (sp: number, value: number | null, label: string, stage: string, wait: boolean, set = true) =>
     B("pressure", label, stage, {
-      sp, value, set: true, select: true, wait, tol_ratio: null, stable_sec: null, timeout_sec: null, on_timeout: null,
+      sp, value, set, select: true, wait, tol_ratio: null, stable_sec: null, timeout_sec: null, on_timeout: null,
     });
-  out.push(pressure(4, null, "SP4", "GAS_STABILIZE", false));
+  // SP4 — 값 출처 SP4_SOURCE: 장비 값(묶음 17 기본, v1 과 같게 D4 만) / 프로그램 값(SP4_MTORR 를 S4 로 쓰고 되읽은 뒤 D4)
+  out.push(pressure(4, null, "SP4", "GAS_STABILIZE", false, !spFromDevice(cfg, 4)));
   out.push(B("wait", `압력 안정화 대기(${stab}초)`, "GAS_STABILIZE", { sec: stab, watch: null }));
   const guns = [["g1", "use_g1"], ["g2", "use_g2"]].filter(([, k]) => pyTruthy(p[k])).map(([g]) => g);
   if (guns.length) out.push(B("shutter", "건 셔터 열기", "GUN_SHUTTER", { action: "open", targets: guns }));
@@ -278,17 +317,21 @@ export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: 
   }));
   // SP5(묶음 15, v1 a78b5ce·f5780ca): WP > SP5_MTORR 일 때만 — SP5 값 쓰기·선택 뒤 SP5_STABILIZE_SEC 고정 대기(압력 도달 판정 없음).
   // WP 가 정확히 SP5_MTORR 이면 넣지 않는다. 묶음 14 이하 장비는 SP5_MTORR 설정이 없다 — 그때는 예전 목록 그대로
+  // 장비 값 출처(SP5_SOURCE)면 비교도 장비에서 읽은 SP5 로, 블록은 set=false·값 비움
   if (cfg.SP5_MTORR !== undefined) {
-    const sp5 = pyFloat(cfg.SP5_MTORR);
+    const dev5 = spFromDevice(cfg, 5);
+    const sp5 = dev5 ? templateDeviceSp(devSp, 5) : pyFloat(cfg.SP5_MTORR);
     if (sp1 > sp5) {
       const hold = pyRound(pyFloat(cfg.SP5_STABILIZE_SEC));
-      out.push(pressure(5, sp5, "Stage0(SP5)", "PRESSURE_SP5", false));
+      out.push(pressure(5, dev5 ? null : sp5, "Stage0(SP5)", "PRESSURE_SP5", false, !dev5));
       out.push(B("wait", `Stage0(SP5): 압력 안정화 대기(${hold}초)`, "PRESSURE_SP5", { sec: hold, watch: null }));
     }
   }
-  const sp3 = pyFloat(cfg.SP3_MTORR), sp2 = pyFloat(cfg.SP2_MTORR);
-  for (const [n, spv, lab] of [[3, sp3, "Stage1(SP3)"], [2, sp2, "Stage2(SP2)"]] as const) {
-    if (sp1 < spv) out.push(pressure(n, spv, lab, `PRESSURE_SP${n}`, true));
+  const dev3 = spFromDevice(cfg, 3), dev2 = spFromDevice(cfg, 2);
+  const sp3 = dev3 ? templateDeviceSp(devSp, 3) : pyFloat(cfg.SP3_MTORR);
+  const sp2 = dev2 ? templateDeviceSp(devSp, 2) : pyFloat(cfg.SP2_MTORR);
+  for (const [n, spv, lab, dev] of [[3, sp3, "Stage1(SP3)", dev3], [2, sp2, "Stage2(SP2)", dev2]] as const) {
+    if (sp1 < spv) out.push(pressure(n, dev ? null : spv, lab, `PRESSURE_SP${n}`, true, !dev));
   }
   out.push(pressure(1, sp1, `Stage3(SP1=${pyFixed(sp1, 2)})`, "PRESSURE_SP1", true));
   const dcd = pyInt(cfg.DC_POWER_DELAY_SEC);
@@ -316,7 +359,7 @@ type BundleLike = {
 } | null | undefined;
 
 /** 묶음의 열 정의와 설정값(current, 없으면 default). 열 정의가 없으면 null(검사 안 함). 블록 규칙 표가 없으면 blocks null */
-export function checkEnvOf(b: unknown): CheckEnv | null {
+export function checkEnvOf(b: unknown, snap?: Record<string, unknown> | null): CheckEnv | null {
   const bundle = b as BundleLike;
   const rc = bundle?.recipe;
   if (!rc || !Array.isArray(rc.processColumns) || !Array.isArray(rc.heaterStepColumns) || !Array.isArray(rc.heaterGasColumns)) {
@@ -329,7 +372,7 @@ export function checkEnvOf(b: unknown): CheckEnv | null {
     cfg[p.key] = p.current ?? p.default ?? null;
     if (p.type === "float") floats.add(p.key);
   }
-  return { defs: rc as RecipeDefs, cfg, floats, blocks: blockEnvOf(bundle, cfg) };
+  return { defs: rc as RecipeDefs, cfg, floats, blocks: blockEnvOf(bundle, cfg), devSp: devSpOf(snap) };
 }
 
 /** 묶음 version 이 이 검사가 맞춘 것과 다른가 — 화면 안내(검사는 그대로, 막지 않음) */
@@ -409,14 +452,20 @@ export function checkProcessRecipe(rows: unknown, env: CheckEnv): RecipeCheck {
     let expanded: ExpBlock[] | null = null, uses: Uses | null = null;
     if (c.clean && c.clean.delay_s === undefined) {
       try {
-        blocks = templateBlocks(rowToParams(c.clean, env.cfg), env.cfg, ig, rfp);
+        blocks = templateBlocks(rowToParams(c.clean, env.cfg), env.cfg, ig, rfp, env.devSp);
         if (env.blocks) {
           expanded = expandBlocks(blocks, env.blocks, rfp);
           uses = usesOf(blocks);
         }
       } catch (e) {
-        if (!(e instanceof PyValueError)) throw e;
-        c.errors.push(`값 형식: ${e.message} — 장비가 처리하지 못하는 값`);
+        if (e instanceof TemplateError) {
+          // 장비 값 출처 단계의 장비 값을 모름 — 장비가 시작할 때 다시 보고 거부한다(SP_DEVICE_VALUE_UNKNOWN). 웹은 경고로만
+          // (레시피 저장·적재는 막지 않는다 — 장비 값은 장비가 붙어 있어야 안다)
+          c.warnings.push(e.detail);
+        } else {
+          if (!(e instanceof PyValueError)) throw e;
+          c.errors.push(`값 형식: ${e.message} — 장비가 처리하지 못하는 값`);
+        }
       }
     }
     if (c.errors.length) first ??= `${i}행: ${c.errors[0]}`;
