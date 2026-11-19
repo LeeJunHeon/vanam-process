@@ -250,6 +250,9 @@ export function ChamberRun(p: ChamberProps) {
     .filter((f) => snap?.[f.column] !== null && snap?.[f.column] !== undefined);
   // 공정 중 값 바꾸기 — 챔버K 화면을 이 챔버 값으로(인자에 ch, 기다림 단위도 챔버별)
   const adjList = Array.isArray(eng?.adjust) ? (eng.adjust as AdjustState[]) : null;
+  // 가스 단계 규칙 C(장비 D420) — 흐르는 중 올림의 단계 진행('O2 9.0 → 9.5 → 10 진행 중 2/3')
+  const stepping = (adjList ?? []).map((a) => (a as unknown as { stepping?: { text?: unknown } | null }).stepping?.text)
+    .filter((t): t is string => typeof t === "string" && t.length > 0);
   const adjSt = { procState: running ? "__RUN__" : "IDLE", runId: cs?.runId ?? null, adjust: adjList } as StateData;
   const adjBundle = useMemo(() => (bundle ? { ...asChk(bundle)!, states: [{ name: "__RUN__", label: "진행", kind: "active" }] } : null), [bundle]);
   const queue = eng?.queue as { index?: number; total?: number; mode?: boolean } | null | undefined;
@@ -321,6 +324,11 @@ export function ChamberRun(p: ChamberProps) {
 
       <Seq bundle={bundle} st={st} ch={ch} lock={lock} onAsk={onAsk} onEditSeq={p.onEditSeq} label={label} />
 
+      {stepping.length > 0 && (
+        <div className={`rounded-xl border border-[#B9D3F5] bg-[#EEF5FF] px-4 py-2 ${FS.body} text-[#133A7C]`} data-gas-stepping={ch}>
+          {stepping.map((t) => <p key={t}><b>가스 단계</b> · {t}</p>)}
+        </div>
+      )}
       <Chk2Adjust bundle={adjBundle} st={adjSt} skewMs={p.skewMs} canKey={(kind, k) => !lock(kind, `${k}@${ch}`)}
         onAsk={(a) => onAsk({ ...a, key: `${a.key ?? a.kind}@${ch}`, label: `${label} ${a.label}`, args: chArgs(bundle, a.kind, ch, a.args ?? {}) })} />
 

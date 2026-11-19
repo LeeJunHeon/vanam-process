@@ -348,6 +348,13 @@ const chamberProps = (ch) => ({
     const r = U.layoutTrendLabels(items, 24, h - 20, h);
     pure.push({ min: h, ok: boxesOk(r.labels.map((l) => l.y), r.height), h: r.height, labels: r.labels.map((l) => l.text) });
   }
+  for (const [up, down] of [[2, 2], [3, 1], [1, 3], [2, 1], [1, 2]]) {   // 위·아래 양쪽에 라벨 쌍(값이 축 맨 위·맨 아래) — 2026-11-19 남은 겹침
+    const items = [...Array.from({ length: up }, (_, i) => it(24, "20", `u${i >> 1}`, i % 2 === 1)),
+                   ...Array.from({ length: down }, (_, i) => it(112 - (i % 2) * 0.5, "1.5", `d${i >> 1}`, i % 2 === 1))];
+    const r = U.layoutTrendLabels(items, 24, 112, 132);
+    pure.push({ both: `${up}+${down}`, ok: boxesOk(r.labels.map((l) => l.y), r.height) && r.labels.length === up + down && r.height === 132,
+                ys: r.labels.map((l) => l.y) });
+  }
   const merged = U.layoutTrendLabels([it(30, "20", "a"), it(30, "20", "a", true), it(30, "5", "b"), it(30, "7", "b", true)], 24, 36, 56);
   const t0 = 1_760_000_000_000;
   const mk = (v) => Array.from({ length: 20 }, (_, i) => ({ t: t0 + i * 2000, v }));
@@ -358,8 +365,10 @@ const chamberProps = (ch) => ({
     ["같은 값 4(DC·RF 와 목표 모두 100)", { "dc.p": 100, "dc.set_w": 100, "rf.fwd_w": 100, "rf.set_w": 100 }],
     ["축 맨 위 4개", { "dc.p": 300, "dc.set_w": 300, "rf.fwd_w": 299, "rf.set_w": 300 }],
     ["축 맨 아래 4개", { "dc.p": 300, "dc.set_w": 1, "rf.fwd_w": 0.5, "rf.set_w": 0.8, "rfp.fwd_w": 0.2, "rfp.set_w": 0.3 }],
-  ].map(([name, v]) => {
-    const html = renderToStaticMarkup(h(U.Chk2Trend, { trend: mk(v), equipment: "CHK2", runId: null, local: true, nowMs: t0 + 40000 }));
+    ["CH1 가스 유량 위 2·아래 2(Ar 20·목표 20, O2 1.5·목표 1.5)",
+     { "ch1.mfc.ar_sccm": 20, "ch1.set.ar_sccm": 20, "ch1.mfc.o2_sccm": 1.5, "ch1.set.o2_sccm": 1.5 }, U.TREND_DEFS12.ch1],
+  ].map(([name, v, defs]) => {
+    const html = renderToStaticMarkup(h(U.Chk2Trend, { trend: mk(v), equipment: "CHK2", runId: null, local: true, nowMs: t0 + 40000, defs }));
     const labs = labelYs(html), hs = svgH(html);
     const ok = labs.length >= 2 && boxesOk(labs.map((l) => l.y), Math.max(...hs));
     return { name, ok, labs: labs.map((l) => `${l.t}@${l.y}`) };
@@ -395,6 +404,22 @@ const chamberProps = (ch) => ({
         && plain.length === 300 && plain.every((e, i) => e === feed[feed.length - 300 + i])
         && U.feedIsMain(null)(feed[40]) && !U.feedIsMain(set)(feed[40]) && U.feedIsMain(set)({ ...feed[40], data: { ...feed[40].data, level: "warn" } }),
         { merged: merged.length, kept: kept.length, plain: plain.length });
+}
+{
+  // 가스 단계 규칙 C(장비 D420) — 흐르는 중 올림의 단계 진행이 운전 탭(공정 중 값 바꾸기 위)과 로그 줄에 보임
+  const TXT = "O2 9.0 → 9.5 → 10 진행 중 2/3";
+  const ek = st.engines?.["proc.ch1"] ? "proc.ch1" : "ch1";
+  const eng = st.engines?.[ek] ?? {};
+  const adj = [...(Array.isArray(eng.adjust) ? eng.adjust : []), { device: "mfc", item: "o2_flow", value: 10, recipe: 8, scope: "live", max: null,
+                adjusted: null, stepping: { levels: [9, 9.5, 10], i: 2, n: 3, text: TXT } }];
+  const st2 = { ...st, engines: { ...st.engines, [ek]: { ...eng, adjust: adj } } };
+  const html = render(U.ChamberRun, { ...chamberProps("ch1"), st: st2 });
+  const ev = { id: "gs1", type: "event", ts: fx.state.ts, seq: 1, instance: "i",
+    data: { level: "info", code: "ADJUST", message: TXT, context: { source: "process", chamber: "ch1", kind: "adjust",
+      data: { device: "mfc", item: "o2_flow", old: 8, new: 10, result: "stepping", text: TXT, steps: [9, 9.5, 10], step: 2 } } } };
+  const ln = U.ch12LogLine(bundle, ev);
+  check("ui:gas-stepping — 가스 단계 진행 'O2 9.0 → 9.5 → 10 진행 중 2/3' 이 운전 탭(공정 중 값 바꾸기 위)·로그 평소 보기 줄에",
+        html.includes('data-gas-stepping="ch1"') && textOf(html).includes(TXT) && ln.text === TXT && ln.main === true, { text: ln.text, main: ln.main });
 }
 {
   const reasons = ["TIME_FORMAT", "LINK_DOWN", "CHANNEL_SWITCH_RUNNING", "COOLDOWN", "RUNNER_BUSY", "PC_RUNNING", "DUMP_BUSY",

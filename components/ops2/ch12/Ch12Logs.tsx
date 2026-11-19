@@ -46,6 +46,8 @@ export function ch12LogLine(b: Ch12Bundle | null, e: FeedItem): LogLine {
     } else if (c.kind === "pause" && typeof cd.on === "boolean") {
       kind = cd.on ? "일시정지" : "재개";
       text = `${s(cd.block_no)} 블록 ${cd.on ? "일시정지" : "재개"}${who}`;
+    } else if (c.kind === "adjust" && cd.result === "stepping" && typeof cd.text === "string") {
+      text = cd.text;                                             // 가스 단계 규칙 C — 'O2 9.0 → 9.5 → 10 진행 중 2/3'
     } else if (c.kind === "adjust" && cd.device) {
       text = adjustLine(asChk(b), cd);
     } else if (c.kind === "recipe_loaded") {
