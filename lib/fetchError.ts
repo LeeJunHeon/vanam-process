@@ -8,3 +8,14 @@ export function errorMessage(e: unknown, fallback: string): string {
   if (e instanceof Error && e.message) return e.message;
   return fallback;
 }
+
+// 목록 GET 을 JSON 으로 받는다. 실패 응답이면 서버가 준 error(없으면 "조회 실패 (상태)")로 throw 한다.
+// 화면은 응답 콜백(.then)에서만 state 를 바꾼다 — effect 본문에서 setState 를 바로 부르지 않기 위해.
+export async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const d = await res.json().catch(() => null);
+    throw new Error(d?.error ?? `조회 실패 (${res.status})`);
+  }
+  return (await res.json()) as T;
+}

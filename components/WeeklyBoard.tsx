@@ -6,7 +6,7 @@ import ProcessEditModal from "@/components/ProcessEditModal";
 import type { ProcessItem } from "@/components/ProcessEditModal";
 import type { CodeOption, EmployeeOption } from "@/components/OrderFormModal";
 import { STATUS_STYLE } from "@/lib/status";
-import { errorMessage } from "@/lib/fetchError";
+import { errorMessage, fetchJson } from "@/lib/fetchError";
 
 type Row = ProcessItem & {
   order: { orderNo: string; company: string | null };
@@ -40,23 +40,27 @@ export default function WeeklyBoard() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Row | null>(null);
 
-  const load = useCallback(async () => {
-    setError(null);
-    try {
-      const res = await fetch("/api/processes");
-      if (!res.ok) {
-        const d = await res.json().catch(() => null);
-        throw new Error(d?.error ?? `조회 실패 (${res.status})`);
-      }
-      setItems(await res.json());
-    } catch (e) {
-      setError(errorMessage(e, "공정을 불러오지 못했습니다."));
-    }
-  }, []);
+  // 목록 조회. state 는 응답 콜백에서만 바꾼다.
+  const fetchList = useCallback(
+    () =>
+      fetchJson<Row[]>("/api/processes")
+        .then(
+          (rows) => setItems(rows),
+          (e) => setError(errorMessage(e, "공정을 불러오지 못했습니다.")),
+        ),
+    [],
+  );
 
+  // 다시 불러오기(일정 저장 뒤) — 이전 오류를 지운 뒤 조회한다
+  const load = useCallback(() => {
+    setError(null);
+    return fetchList();
+  }, [fetchList]);
+
+  // 첫 조회(오류는 초기값 null)
   useEffect(() => {
-    load();
-  }, [load]);
+    fetchList();
+  }, [fetchList]);
 
   useEffect(() => {
     (async () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useSyncExternalStore } from "react";
 import { Upload, Camera, Image as ImageIcon, X } from "lucide-react";
 
 interface PhotoUploaderProps {
@@ -24,6 +24,13 @@ function formatSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
+// 모바일(터치) 기기 여부 — 브라우저 값이라 서버 렌더·하이드레이션 때는 false, 브라우저에서 읽는다.
+// 기기 값은 바뀌지 않으므로 구독할 것이 없다.
+const subscribeNothing = () => () => {};
+const readIsMobile = () =>
+  navigator.maxTouchPoints > 0 || /Mobi|Android/i.test(navigator.userAgent);
+const serverIsMobile = () => false;
+
 function isValidExt(f: File) {
   const ext = f.name.split(".").pop()?.toLowerCase() || "";
   return ALLOWED_EXT.has(ext);
@@ -36,18 +43,12 @@ export default function PhotoUploader({
 }: PhotoUploaderProps) {
   const [items, setItems] = useState<FileItem[]>([]);
   const [dragging, setDragging] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const isMobile = useSyncExternalStore(subscribeNothing, readIsMobile, serverIsMobile);
   const [warning, setWarning] = useState("");
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    setIsMobile(
-      navigator.maxTouchPoints > 0 || /Mobi|Android/i.test(navigator.userAgent)
-    );
-  }, []);
 
   useEffect(() => {
     const validFiles = items

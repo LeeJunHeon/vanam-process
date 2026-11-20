@@ -124,47 +124,56 @@ export default function ChkPage() {
 
   // 추적 중인 명령의 결과를 알림으로 만든다. 폴링 응답(tracked)에 실려 오므로
   // 별도 요청을 만들지 않는다. 45초가 지나도 끝나지 않으면 "응답 없음" 으로 닫는다.
-  useEffect(() => {
-    if (!tracked.length) return;
-    const rows = new Map((data?.tracked ?? []).map((c) => [c.id, c]));
-    const now = Date.now();
-    const finished: number[] = [];
-    const clearKeys: string[] = [];
-    const made: Notice[] = [];
+  // 조회 결과·추적 목록이 바뀐 렌더에서 바로 state 를 맞춘다(effect 에서 setState 하지 않는다 — React 문서: 렌더 중 state 조정).
+  const [seenPoll, setSeenPoll] = useState({ data, lastFetchMs, tracked });
+  const [refreshNo, setRefreshNo] = useState(0);
+  if (seenPoll.data !== data || seenPoll.lastFetchMs !== lastFetchMs || seenPoll.tracked !== tracked) {
+    setSeenPoll({ data, lastFetchMs, tracked });
+    if (tracked.length) {
+      const rows = new Map((data?.tracked ?? []).map((c) => [c.id, c]));
+      const now = lastFetchMs;   // 이 조회가 끝난 시각(렌더 중에는 Date.now() 를 부르지 않는다)
+      const finished: number[] = [];
+      const clearKeys: string[] = [];
+      const made: Notice[] = [];
 
-    for (const t of tracked) {
-      const row = rows.get(t.id);
-      const st = row?.status;
-      if (st === "done") {
-        finished.push(t.id);
-        made.push({ id: t.id, kind: "done", text: `${t.label} 완료`, at: now });
-      } else if (st === "failed") {
-        finished.push(t.id);
-        if (t.stateKey) clearKeys.push(t.stateKey);
-        made.push({ id: t.id, kind: "failed", text: `${t.label} 실패 — ${row?.result || "사유가 전달되지 않았습니다"}`, at: now });
-      } else if (st === "expired") {
-        finished.push(t.id);
-        if (t.stateKey) clearKeys.push(t.stateKey);
-        made.push({ id: t.id, kind: "expired", text: `${t.label} 만료 — ${row?.result || "장비가 제시간에 명령을 가져가지 않았습니다"}`, at: now });
-      } else if (now - t.at > TRACK_TTL) {
-        finished.push(t.id);
-        if (t.stateKey) clearKeys.push(t.stateKey);
-        made.push({ id: t.id, kind: "timeout", text: `${t.label} 응답 없음 — 장비 상태를 확인하세요`, at: now });
+      for (const t of tracked) {
+        const row = rows.get(t.id);
+        const st = row?.status;
+        if (st === "done") {
+          finished.push(t.id);
+          made.push({ id: t.id, kind: "done", text: `${t.label} 완료`, at: now });
+        } else if (st === "failed") {
+          finished.push(t.id);
+          if (t.stateKey) clearKeys.push(t.stateKey);
+          made.push({ id: t.id, kind: "failed", text: `${t.label} 실패 — ${row?.result || "사유가 전달되지 않았습니다"}`, at: now });
+        } else if (st === "expired") {
+          finished.push(t.id);
+          if (t.stateKey) clearKeys.push(t.stateKey);
+          made.push({ id: t.id, kind: "expired", text: `${t.label} 만료 — ${row?.result || "장비가 제시간에 명령을 가져가지 않았습니다"}`, at: now });
+        } else if (now - t.at > TRACK_TTL) {
+          finished.push(t.id);
+          if (t.stateKey) clearKeys.push(t.stateKey);
+          made.push({ id: t.id, kind: "timeout", text: `${t.label} 응답 없음 — 장비 상태를 확인하세요`, at: now });
+        }
+      }
+      if (finished.length) {
+        setTracked((s) => s.filter((t) => !finished.includes(t.id)));
+        if (clearKeys.length) {
+          setPendingStates((s) => {
+            const next = { ...s };
+            for (const k of clearKeys) delete next[k];
+            return next;
+          });
+        }
+        setNotices((prev) => [...made, ...prev.filter((n) => !finished.includes(n.id))].slice(0, 3));
+        setRefreshNo((n) => n + 1); // 조작 기록을 바로 갱신한다(아래 effect 가 다음 조회를 전체 조회로)
       }
     }
-    if (!finished.length) return;
-
-    setTracked((s) => s.filter((t) => !finished.includes(t.id)));
-    if (clearKeys.length) {
-      setPendingStates((s) => {
-        const next = { ...s };
-        for (const k of clearKeys) delete next[k];
-        return next;
-      });
-    }
-    setNotices((prev) => [...made, ...prev.filter((n) => !finished.includes(n.id))].slice(0, 3));
-    refresh(); // 조작 기록을 바로 갱신한다(다음 조회를 전체 조회로)
-  }, [data, lastFetchMs, tracked, refresh]);
+  }
+  // 끝난 명령이 생기면 조작 기록을 바로 갱신한다(외부 조회라 effect 에서 한다)
+  useEffect(() => {
+    if (refreshNo) refresh();
+  }, [refreshNo, refresh]);
 
   // 완료 알림만 5초 뒤 자동으로 사라진다
   useEffect(() => {
@@ -175,20 +184,24 @@ export default function ChkPage() {
     return () => clearTimeout(t);
   }, [notices]);
 
-  // 실제 상태가 목표에 도달했거나 시간이 지나면 "전환 중" 표시를 해제한다
-  useEffect(() => {
+  // 실제 상태가 목표에 도달했거나 시간이 지나면 "전환 중" 표시를 해제한다.
+  // 새 상태(valves·updatedAt)를 받은 렌더에서 바로 맞춘다(렌더 중 state 조정). 시각은 그 조회가 끝난 시각.
+  const [seenState, setSeenState] = useState({ valves, updatedAt });
+  if (seenState.valves !== valves || seenState.updatedAt !== updatedAt) {
+    setSeenState({ valves, updatedAt });
+    const now = lastFetchMs;
     setPendingStates((s) => {
       const next: typeof s = {};
       let changed = false;
       for (const [k, val] of Object.entries(s)) {
         const reached = Boolean(valves?.[k]) === val.want;
-        const stale = Date.now() - val.at > PENDING_TTL;
+        const stale = now - val.at > PENDING_TTL;
         if (reached || stale) changed = true;
         else next[k] = val;
       }
       return changed ? next : s;
     });
-  }, [valves, updatedAt]);
+  }
 
   const pendingFlat = Object.fromEntries(
     Object.entries(pendingStates).map(([k, val]) => [k, val.want]),

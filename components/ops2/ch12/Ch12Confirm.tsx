@@ -1,0 +1,73 @@
+"use client";
+
+// 챔버12 확인창(2026-11-20 D425) — PLC 버튼만 챔버12 모양으로 그리고, 나머지는 챔버K 확인창(kit ConfirmDialog) 그대로(챔버K 화면은 바꾸지 않음).
+// PLC 버튼(Ch12Hmi plcAsk — procLine·hazards 가 있음):
+//   맨 위 빨간 줄 'CH1 공정 중 — 지금 블록 · 공정 이름'(그 버튼의 챔버가 공정 중일 때 — 잠그지 않고 알린다, 사용자 결정 2026-11-20),
+//   무엇을·어떻게, 안내, 위험 두 갈래(사람 위험 = 빨강 · 장비 위험 = 주황 — 문구는 장비 묶음 plcHazardText),
+//   누가 기록되는지(웹 = 로그인한 이름·계정, 노트북 = '노트북'), 실행 버튼은 공정 중·위험이면 빨강. Esc 취소.
+import { useEffect, useRef } from "react";
+import { AlertOctagon } from "lucide-react";
+import { FS, Btn, ConfirmDialog, Issue, type Ask } from "../chk/kit";
+import { useChk2Mode } from "../chk/mode";
+import type { PlcAsk } from "./Ch12Hmi";
+
+export const isPlcAsk = (a: Ask | null): a is PlcAsk =>
+  !!a && a.kind === "PLC_BUTTON" && Array.isArray((a as Partial<PlcAsk>).hazards);
+
+/** 기록 안내 — 웹은 로그인한 이름·계정, 노트북은 로그인이 없어 '노트북' */
+export const recordNote = (local: boolean) =>
+  local ? "이 조작은 '노트북'에서 누른 것으로 장비 로그에 기록됩니다." : "이 조작은 로그인한 이름·계정과 함께 장비 로그에 기록됩니다.";
+
+export function PlcConfirmBody({ ask, local }: { ask: PlcAsk; local: boolean }) {
+  return (
+    <>
+      {ask.procLine && (
+        <p role="alert" data-proc-line className={`mb-3 flex items-start gap-1.5 rounded-[10px] bg-[#B42318] px-3 py-2 font-bold text-white ${FS.body}`}>
+          <AlertOctagon size={15} className="mt-0.5 shrink-0" aria-hidden />
+          <span className="min-w-0">{ask.procLine}</span>
+        </p>
+      )}
+      <p className={`font-bold text-[#1B1F24] ${FS.card}`}>조작 확인</p>
+      <p className={`mt-2 text-[#1B1F24] ${FS.body}`}>
+        <span className="font-semibold">{ask.label}</span>
+        {ask.detail && <span> {ask.detail}</span>} — 명령을 장비에 보냅니다.
+      </p>
+      {ask.note && <p className={`mt-2 rounded-[10px] bg-[#F5F6F8] p-2.5 leading-relaxed text-[#5B6470] ${FS.body}`}>{ask.note}</p>}
+      {ask.hazards.map((h, i) => (
+        <div key={i} className="mt-2" data-hazard={h.kind}><Issue level={h.kind === "person" ? "alarm" : "warn"}>{h.text}</Issue></div>
+      ))}
+      <p className={`mt-3 text-[#5B6470] ${FS.small}`}>{recordNote(local)}</p>
+    </>
+  );
+}
+
+function PlcConfirm({ ask, onOk, onCancel }: { ask: PlcAsk; onOk: () => void; onCancel: () => void }) {
+  const { local } = useChk2Mode();
+  const okRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [onCancel]);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-md rounded-[12px] bg-white p-5">
+        <PlcConfirmBody ask={ask} local={local} />
+        <div className="mt-4 flex justify-end gap-2">
+          <Btn kind="ghost" onClick={onCancel}>취소</Btn>
+          <button ref={okRef} onClick={onOk}
+            className={`h-10 rounded-[10px] px-4 font-semibold text-white ${FS.body} outline-offset-2 focus:outline-2 focus:outline-[#1D4ED8] ${
+              ask.red ? "bg-[#B42318]" : "bg-[#1D4ED8]"}`}>
+            실행
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** 챔버12 화면의 확인창 — PLC 버튼은 챔버12 모양, 그 밖은 챔버K 확인창 그대로 */
+export default function Ch12Confirm({ ask, onOk, onCancel }: { ask: Ask | null; onOk: () => void; onCancel: () => void }) {
+  if (isPlcAsk(ask)) return <PlcConfirm ask={ask} onOk={onOk} onCancel={onCancel} />;
+  return <ConfirmDialog ask={ask} onOk={onOk} onCancel={onCancel} />;
+}
