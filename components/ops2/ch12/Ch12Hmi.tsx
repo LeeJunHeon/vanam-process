@@ -4,31 +4,75 @@
 // 기호는 2D 평면: 밸브 = 나비, 펌프 = 원, 셔터 = 막대, 도어·게이트 = 사각 버튼. 켜짐·열림 = 진회색 채움, 꺼짐·닫힘 = 흰 바탕 테두리(초록·빨강 없음),
 // 배관은 그 구간을 여는 밸브·펌프가 켜진 구간만 진회색. 전환 중 = 파란 점선 + '전환 중'(10 s — 부르는 쪽 pending).
 // 노드 이름 아래 지금 상태 글. 누를 수 있으면 마우스를 올리면 테두리 강조 + 손가락 커서, 키보드 Tab·Enter·Space, 노드마다 aria-label.
-// 누르면 확인창 → PLC_BUTTON {target, on}(도어·벤트·게이트·핀은 위험 문구). 잠기면(권한·bench·끊김·결과 기다림·PLC 값 오래됨) 누르지 못하고
+// 누르면 확인창 → PLC_BUTTON {target, on}. 잠그지 않는다(사용자 결정 2026-11-20 — 공정 중에도 누를 수 있게) — 대신 확인창에(D425):
+//   그 버튼의 챔버(공유 건 셔터·Power Select 는 묶음 procChamber = CH2)가 공정 중이면 맨 위 빨간 줄 'CH1 공정 중 — 지금 블록 · 공정 이름',
+//   위험 두 갈래(묶음 hazard{on, off} — 사람: 벤트·도어·게이트·로드락 핀·척 모터 / 장비: 터보·로터리 끄기, 포어라인·러핑·메인 밸브,
+//   Power Select — DC Pulse 출력 중 SW_RF_SELECT 켜기는 RF 전용 릴레이 문구를 더), 문구는 묶음 plcHazardText(없으면 같은 글).
+//   잠기면(권한·bench·끊김·결과 기다림·PLC 값 오래됨) 누르지 못하고
 // 이유를 그림 위 한 줄에 — PLC 값이 오래되면 그림 전체를 흐리게. 노트북 화면도 같은 규칙(v2 는 노트북에서도 PLC_BUTTON 을 받는다).
 // 노드 상태 = 1초 행 plc.<코일 이름 소문자>(램프 코일이 있으면 램프). 코일 원래 이름은 '상세'에서만(마우스 올림 글).
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Lock } from "lucide-react";
 import { FS, FSPX, T, Btn, Card, Dot, StateBox, type Ask } from "../chk/kit";
 import { useChk2Mode } from "../chk/mode";
-import { plcCol, plcName, short } from "./logic";
-import type { Ch12Bundle } from "./types";
+import { blockLabel, chamberState, engineOf, isRunning, plcCol, plcName, short } from "./logic";
+import type { Ch12Bundle, Ch12State, PlcButtonDef12 } from "./types";
 
 const FONT = "Pretendard, system-ui, sans-serif";
-type PlcBtn = { target: string; label: string; name?: string; addr?: string; chamber?: string };
+type PlcBtn = PlcButtonDef12;
 type Props = {
-  bundle: Ch12Bundle | null; snapshot?: Record<string, unknown>; plcOk: boolean;
+  bundle: Ch12Bundle | null; snapshot?: Record<string, unknown>; plcOk: boolean; st?: Ch12State | null;
   lockOf: (target: string) => string | null; pending: Record<string, boolean>; onAsk: (a: Ask) => void; note: string;
 };
 
+/** 묶음에 hazard 가 없는 장비(D425 전)의 사람 위험 — 예전 규칙 그대로 */
 export const dangerTarget = (t: string) => /vent|door|g_v_|l_pin/i.test(t);
 
-/** 확인창 — PLC 버튼(켜기·열기 / 끄기·닫기), 위험 버튼은 사람 확인 문구 */
-export function plcAsk(b: PlcBtn, want: boolean): Ask {
+/** 위험 문구 — 장비 묶음 plcHazardText 가 없을 때(장비 commands.HAZARD_TEXT 와 같은 글) */
+export const HAZARD_TEXT: Record<"person" | "equipment" | "rf_select_dcp", string> = {
+  person: "사람 위험 — 벤트·도어·게이트·로드락 핀·척 모터는 사람이 다칠 수 있습니다. 장비 주변·챔버 안·로드락에 사람이 없는지 반드시 확인하세요.",
+  equipment: "장비 위험 — 터보·로터리 끄기, 포어라인·러핑·메인 밸브, Power Select 를 잘못 바꾸면 펌프·밸브·전원 장비가 손상될 수 있습니다. 지금 진공·전원 상태를 확인하세요.",
+  rf_select_dcp: "지금 DC Pulse 사용 중 — SW_RF_SELECT 는 RF 전용 릴레이라 DC Pulse 사용 중에 켜면 특히 위험합니다. DC Pulse 를 먼저 끄세요.",
+};
+
+export type PlcHazard = { kind: "person" | "equipment"; text: string };
+/** PLC 버튼 확인창 — 챔버12 확인창(Ch12Confirm)이 맨 위 빨간 줄·위험 두 갈래를 그린다 */
+export type PlcAsk = Ask & { procLine: string | null; hazards: PlcHazard[] };
+
+/** 그 버튼이 닿는 공정 챔버 — 챔버 버튼은 그 챔버, 공유 버튼은 묶음 procChamber(건 셔터·Power Select = CH2), 로드락·부저는 없음 */
+export const plcChamber = (b: PlcBtn): "ch1" | "ch2" | null =>
+  b.procChamber !== undefined ? b.procChamber ?? null : b.chamber === "ch1" || b.chamber === "ch2" ? b.chamber : null;
+
+/** 확인창 내용 — 공정 중 줄('CH1 공정 중 — 블록 · 공정 이름')·위험(켤 때/끌 때 분류 + DC Pulse 출력 중 SW_RF_SELECT 켜기) */
+export function plcContext(bundle: Ch12Bundle | null, st: Ch12State | null | undefined, snap: Record<string, unknown> | undefined,
+  b: PlcBtn, want: boolean): { procLine: string | null; hazards: PlcHazard[] } {
+  const ch = plcChamber(b);
+  let procLine: string | null = null;
+  if (ch) {
+    const cs = chamberState(st ?? null, ch);
+    if (isRunning(bundle, cs)) {
+      const step = cs?.step;
+      const block = step?.label || (step?.type ? blockLabel(bundle, step.type) : "");
+      const name = engineOf(st ?? null, ch)?.process_name ?? "";
+      procLine = `${ch.toUpperCase()} 공정 중 — ${[block, name].filter(Boolean).join(" · ") || "진행 중"}`;
+    }
+  }
+  const text = { ...HAZARD_TEXT, ...(bundle?.plcHazardText ?? {}) };
+  const kind = b.hazard ? (want ? b.hazard.on : b.hazard.off) ?? null : dangerTarget(b.target) ? "person" : null;
+  const hazards: PlcHazard[] = kind === "person" || kind === "equipment" ? [{ kind, text: text[kind] }] : [];
+  if (b.name === "SW_RF_SELECT" && want && snap?.["ch2.dcpulse.out_on"] === true) hazards.push({ kind: "equipment", text: text.rf_select_dcp });
+  return { procLine, hazards };
+}
+
+/** 확인창 — PLC 버튼(켜기·열기 / 끄기·닫기). 공정 중·위험이면 실행 버튼 빨강 */
+export function plcAsk(b: PlcBtn, want: boolean, ctx?: { procLine: string | null; hazards: PlcHazard[] }): PlcAsk {
+  const c = ctx ?? { procLine: null, hazards: dangerTarget(b.target) ? [{ kind: "person" as const, text: HAZARD_TEXT.person }] : [] };
   return {
-    kind: "PLC_BUTTON", label: plcName(b), detail: want ? "→ 켜기·열기" : "→ 끄기·닫기", args: { target: b.target, on: want },
-    danger: dangerTarget(b.target), plc: { target: b.target, want }, key: `PLC_BUTTON:${b.target}`,
-    note: "정말 하시겠습니까? PLC 출력이 바로 바뀝니다. 공정 중에도 실행되며 공정 기록에 남습니다.",
+    kind: "PLC_BUTTON", label: b.short || plcName(b), detail: want ? "→ 켜기·열기" : "→ 끄기·닫기", args: { target: b.target, on: want },
+    danger: c.hazards.some((h) => h.kind === "person"), red: c.hazards.length > 0 || !!c.procLine,
+    plc: { target: b.target, want }, key: `PLC_BUTTON:${b.target}`,
+    note: "정말 하시겠습니까? PLC 출력이 바로 바뀝니다. 공정 중에도 실행되며(잠그지 않음) 장비 로그와 그 챔버 공정 로그에 남습니다.",
+    procLine: c.procLine, hazards: c.hazards,
   };
 }
 
@@ -49,7 +93,7 @@ function useScale(vbW: number) {
 /** 계통도 그리기 도구 — 버튼 상태·잠금·확인창·글자 크기(그림 배율을 재서 14·12px 그대로) */
 function useDraw(p: Props, scale: number) {
   const { detail } = useChk2Mode();
-  const { bundle, snapshot: snap, plcOk, lockOf, pending, onAsk } = p;
+  const { bundle, snapshot: snap, plcOk, lockOf, pending, onAsk, st } = p;
   const px = (n: number) => n / scale;
   const btn = (t: string): PlcBtn | undefined => (bundle?.plcButtons ?? []).find((b) => b.target === t) as PlcBtn | undefined;
   const raw = (col: string) => snap?.[`plc.${col}`];
@@ -60,7 +104,8 @@ function useDraw(p: Props, scale: number) {
   const press = (t: string) => {
     const b = btn(t);
     if (!b || why(t)) return;
-    onAsk(plcAsk(b, !(raw(swCol(t)) === true)));
+    const want = !(raw(swCol(t)) === true);
+    onAsk(plcAsk(b, want, plcContext(bundle, st, snap, b, want)));
   };
   const keys = (t: string) => (e: KeyboardEvent) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); press(t); } };
   const word = (t: string, lamp: string, kind: "open" | "run") =>
@@ -289,7 +334,10 @@ function OtherButtons(p: Props) {
                       <StateBox on={p.plcOk ? lit : null} label={plcName(b)} />
                       {detail && <span className={`ml-1 font-mono ${FS.small} text-[#8A929D]`}>{b.name ?? b.target}</span>}
                     </span>
-                    <Btn size="sm" lock={p.lockOf(b.target)} onClick={() => p.onAsk(plcAsk(b, !(p.snapshot?.[col] === true)))}
+                    <Btn size="sm" lock={p.lockOf(b.target)} onClick={() => {
+                      const want = !(p.snapshot?.[col] === true);
+                      p.onAsk(plcAsk(b, want, plcContext(p.bundle, p.st, p.snapshot, b, want)));
+                    }}
                       className={wait ? "border-dashed border-[#1D4ED8] text-[#1D4ED8]" : ""}>
                       {wait ? "전환 중" : lit ? "끄기" : "켜기"}
                     </Btn>

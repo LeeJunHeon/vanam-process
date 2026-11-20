@@ -31,6 +31,14 @@ export type Ch12Bundle = Omit<Bundle, "blocks" | "recipe" | "commands"> & {
   recipe?: Ch12Defs["recipe"];
   chambers?: ChamberDef[];
   overriddenKeys?: string[];
+  /** 확인창 위험 문구(장비 commands.HAZARD_TEXT — 2026-11-20 D425): person(사람)·equipment(장비)·rf_select_dcp(RF 전용 릴레이) */
+  plcHazardText?: Partial<Record<"person" | "equipment" | "rf_select_dcp", string>>;
+};
+
+/** 묶음 plcButtons[] 한 항목(챔버12 — D425 에 short·procChamber·hazard 더함) */
+export type PlcButtonDef12 = {
+  target: string; label: string; name?: string; addr?: string; chamber?: string; coil?: number;
+  short?: string; procChamber?: "ch1" | "ch2" | null; hazard?: { on?: string | null; off?: string | null };
 };
 
 /** state.chambers[c] — hub.chamber_state(1초 행 <c>.proc.*) */
@@ -47,6 +55,7 @@ export type EngineState = {
   paused?: boolean; block_no?: number | null; block_count?: number | null; recipe_rev?: number | null;
   queue?: { index?: number; total?: number; mode?: string } | null; error?: string | null;
   adjust?: unknown; last_result?: unknown;
+  process_name?: string | null;                                                  // 지금 공정 이름(공정 중일 때만 — D425)
   blocks?: unknown[]; started_upto?: number; startedUpto?: number;                  // 시퀀스 편집용(있으면)
   recipe?: { name?: string; rows?: number; row?: number | null; listActive?: boolean; loaded?: boolean } | null;
   [k: string]: unknown;

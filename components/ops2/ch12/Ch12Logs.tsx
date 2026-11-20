@@ -5,6 +5,8 @@
 // 챔버12 공정 엔진 사건(공정 단계·건너뛰기·일시정지/재개·순서 고침·공정 중 값 바꾸기·레시피 적재)은 장비 data 모양이 챔버K 와 달라 여기서 글을 만든다.
 // 같은 글이 두 번 붙지 않게: 장비 문구가 코드로 시작하면(예 'STATUS on=1 …') 글에서 코드를 빼고, 상세의 원시 줄에는 글에 이미 있는 문구를 다시 붙이지 않는다.
 // 챔버 나누기는 사건 context.chamber(run_*·cmd_result 는 data.chamber·args.chamber) — logic.feedChamber.
+// PLC 버튼 사건(command/plc_button — D425)은 'PLC 버튼 · CH1 벤트 켬 · 홍길동(웹)'(공정 중이면 '(CH1 공정 중 · 블록)', 거부면 이유) —
+// 그 챔버 탭(장비 context.chamber), 계정은 상세 원시 줄에만. 챔버K 로그 줄(chk/text)은 그대로.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertOctagon, AlertTriangle, BellRing, CheckSquare, Square } from "lucide-react";
 import { FS, Btn, Card, Chip, Empty, Tabs } from "../chk/kit";
@@ -12,7 +14,7 @@ import { useChk2Mode } from "../chk/mode";
 import { adjustLine, fmtDur, logLine, type LogLine } from "../chk/text";
 import type { FeedItem } from "../chk/useChk2";
 import { fmtKst } from "@/lib/ops2/time";
-import { blockLabel, feedChamber } from "./logic";
+import { blockLabel, feedChamber, hasPlcEvent, plcButtonLine } from "./logic";
 import { asChk, type Ch12Bundle } from "./types";
 
 type Obj = Record<string, unknown>;
@@ -24,6 +26,8 @@ const RESULT: Record<string, string> = { done: "정상", ok: "정상", skipped: 
 /** 로그 한 줄(챔버12) — 챔버K logLine 위에 챔버12 공정 사건 글·같은 글 두 번 막기 */
 export function ch12LogLine(b: Ch12Bundle | null, e: FeedItem): LogLine {
   const base = logLine(asChk(b), e);
+  // PLC 버튼(D425): 장비가 plc_button 사건(누가·결과·공정 상태까지)을 내면 'PLC 버튼 — 받음' 명령 결과 줄은 상세에만(같은 일 두 줄 막기)
+  if (e.type === "cmd_result" && (e.data as Obj).kind === "PLC_BUTTON" && hasPlcEvent(b)) return { ...base, main: false };
   if (e.type !== "event") return base;
   const d = e.data as Obj;
   const c = isObj(d.context) ? d.context : {};
@@ -35,7 +39,10 @@ export function ch12LogLine(b: Ch12Bundle | null, e: FeedItem): LogLine {
     return `${name}${l && s(l) !== name && s(l) !== s(t) ? `(${s(l)})` : ""}`;
   };
   let text = base.text, kind = base.kind;
-  if (c.source === "process") {
+  if (c.source === "command" && c.kind === "plc_button") {      // 'PLC 버튼 · CH1 벤트 켬 · 홍길동(웹) (CH1 공정 중 · 메인 공정(시간))'
+    kind = "PLC 버튼";
+    text = plcButtonLine(b, cd);
+  } else if (c.source === "process") {
     if (c.kind === "block" && cd.type) {
       const no = s(cd.no), total = num(cd.total), el = num(cd.elapsed_s);
       text = cd.phase === "end"

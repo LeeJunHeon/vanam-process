@@ -136,6 +136,35 @@ export function plcStaleSec(b: Ch12Bundle | null): number {
   return typeof v === "number" && v > 0 ? v : 5;
 }
 
+// ───────────── PLC 버튼(2026-11-20 D425) ─────────────
+/** 누가 — 웹은 로그인한 이름(없으면 계정, 이메일이면 @ 앞)'(웹)', 노트북은 로그인이 없어 '노트북' */
+export function whoOf(origin: unknown, by: unknown, byName?: unknown): string {
+  if (origin === "local") return "노트북";
+  if (origin === "robot") return "로봇";
+  const b = typeof by === "string" ? by : "";
+  const n = (typeof byName === "string" ? byName.trim() : "") || (b.includes("@") ? b.split("@")[0] : b) || "알 수 없음";
+  return origin === "web" ? `${n}(웹)` : n;
+}
+
+/** PLC 버튼 사건(장비 command/plc_button data) → 화면 로그 글: 'PLC 버튼 · CH1 벤트 켬 · 홍길동(웹)', 공정 중이면
+ *  ' (CH1 공정 중 · 메인 공정(시간))', 거부·실패면 ' — 거부: 이유'(이유 = 장비 문구, 없으면 묶음 사유 이름). 계정은 상세 원시 줄에만 */
+export function plcButtonLine(b: Ch12Bundle | null, cd: Record<string, unknown>): string {
+  const who = typeof cd.who === "string" && cd.who ? cd.who : whoOf(cd.origin, cd.by, cd.by_name);
+  let t = `PLC 버튼 · ${String(cd.short || cd.target || "알 수 없는 버튼")} ${cd.on === true ? "켬" : "끔"} · ${who}`;
+  const p = (cd.process && typeof cd.process === "object" ? cd.process : null) as Record<string, unknown> | null;
+  if (p?.busy === true) t += ` (${String(p.chamber ?? "").toUpperCase()} 공정 중${p.block ? ` · ${String(p.block)}` : ""})`;
+  if (cd.result === "rejected" || cd.result === "failed") {
+    const code = typeof cd.reason === "string" ? cd.reason : "";
+    const why = (typeof cd.detail === "string" && cd.detail) || b?.reasons?.find((r) => r.code === code)?.label || code;
+    t += ` — ${cd.result === "rejected" ? "거부" : "실패"}${why ? `: ${why}` : ""}`;
+  }
+  return t;
+}
+
+/** 이 장비가 PLC 버튼 사건을 내는가(묶음 eventKinds 에 command/plc_button) — 내면 PLC_BUTTON 명령 결과 줄은 상세에만(같은 일 두 줄 막기) */
+export const hasPlcEvent = (b: Ch12Bundle | null): boolean =>
+  !!b?.eventKinds?.some((k) => k.source === "command" && k.kind === "plc_button");
+
 // ───────────── 로그 ─────────────
 /** 사건이 속한 챔버 — event context.chamber, run_start·run_end data.chamber, 나머지 shared */
 export function feedChamber(e: FeedItem): string {

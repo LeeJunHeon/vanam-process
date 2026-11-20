@@ -66,6 +66,13 @@ with tempfile.TemporaryDirectory() as tmp:
     cmd("pc_sel", "PC_SELECT_CH", {"ch": 2})
     cmd("power_select", "POWER_SELECT", {"on": True})
     rig.loop.run(3)
+    # PLC 버튼(D425) — 웹(로그인 이름)·노트북·거부, CH1 은 공정 중(TEST 20 s), CH2 는 정지 뒤. 명령 결과(cmd_result)도 받게 허브 길로
+    out["plc_busy"] = {"ch1": rig.asm.proc["ch1"].busy, "ch2": rig.asm.proc["ch2"].busy}
+    for cid, args, src, by in (("ui-plc-1", {"target": "vent_1_sw", "on": True, "by_name": "홍길동"}, Source.WEB, "hong@vanam.co.kr"),
+                               ("ui-plc-2", {"target": "door_2_open_sw", "on": True}, Source.HMI, "local"),
+                               ("ui-plc-3", {"target": "nope", "on": True}, Source.HMI, "local")):
+        rig.hub.run_command("PLC_BUTTON", args, src, cid=cid, by=by)
+    rig.loop.run(1)
     # OES 스펙트럼 — 링크와 같은 쓰로틀·거르기·솎기(drivers/oes_spectrum) 결과를 링크 이벤트 길로(ch1 공정 중)
     from v2.ch12.drivers import oes_spectrum as OS
     from v2.ch12.drivers.oes_link import OesEvent
@@ -135,7 +142,9 @@ await esbuild.build({
       export { default as Ch12Run, ChamberRun, TREND_DEFS12, TREND_COLS12 } from "./components/ops2/ch12/Ch12Run";
       export { HeaterThicknessPanel, PcPanel, TspPanel, PresputterPanel, RobotPanel, CommonOps, HeaterStatus } from "./components/ops2/ch12/Ch12Aux";
       export { StatusBand12 } from "./components/ops2/ch12/Ch12Status";
-      export { default as Ch12Hmi, drawnTargets } from "./components/ops2/ch12/Ch12Hmi";
+      export { default as Ch12Hmi, drawnTargets, plcAsk, plcContext, plcChamber, HAZARD_TEXT } from "./components/ops2/ch12/Ch12Hmi";
+      export { default as Ch12Confirm, PlcConfirmBody, recordNote, isPlcAsk } from "./components/ops2/ch12/Ch12Confirm";
+      export { withServerArgs } from "./lib/ops2/commandArgs";
       export { Ch12EventFeed, ch12LogLine } from "./components/ops2/ch12/Ch12Logs";
       export { WEB_TABS, LOCAL_TABS } from "./components/ops2/ch12/Ch12Page";
       export { Chk2ModeContext } from "./components/ops2/chk/mode";
@@ -307,6 +316,67 @@ const chamberProps = (ch) => ({
   check("ui:plc-buttons — 장비 PLC 버튼 전부(계통도 노드 + 그 밖의 버튼 목록 — Power Select·부저 정지 포함), 이름은 한국어(코일 원래 이름은 상세에서만)",
         bundle.plcButtons.length > 20 && shown.length === bundle.plcButtons.length && !/[A-Za-z0-9]+_SW/.test(t),
         bundle.plcButtons.filter((x) => !shown.includes(x)).map((x) => x.label));
+  // ── PLC 버튼 확인창·기록(2026-11-20 D425 — 잠그지 않고 알린다) ──
+  const pb = (x) => bundle.plcButtons.find((b) => b.target === x);
+  const snap0 = st.snapshot;
+  const ctx = (x, want, s2 = st, sn = snap0) => U.plcContext(bundle, s2, sn, pb(x), want);
+  const kinds = (c) => c.hazards.map((x) => x.kind).join(",");
+  const c1 = ctx("vent_1_sw", true), c2 = ctx("door_2_open_sw", true);
+  const tOff = ctx("turbo_1_sw", false), tOn = ctx("turbo_1_sw", true);
+  const rfNo = ctx("sw_rf_select", true, st, { ...snap0, "ch2.dcpulse.out_on": false });
+  const rfDcp = ctx("sw_rf_select", true, st, { ...snap0, "ch2.dcpulse.out_on": true });
+  const rfOff = ctx("sw_rf_select", false, st, { ...snap0, "ch2.dcpulse.out_on": true });
+  const st2 = { ...st, chambers: { ...st.chambers, ch2: st.chambers.ch1 }, engines: { ...st.engines, "proc.ch2": st.engines["proc.ch1"] } };
+  const g1 = ctx("shutter_1_sw", true, st2), g1idle = ctx("shutter_1_sw", true), bz = ctx("buzzer_stop_sw", true, st2);
+  const pin = ctx("l_pin_up_sw", true), ar = ctx("ar_1_gas_sw", true), mv = ctx("m_v_2_sw", false), chuck = ctx("z_m_p_1_cw_sw", true);
+  const want1 = "CH1 공정 중 — TEST MODE · T1";
+  check("ui:plc-confirm — 확인창: 그 버튼의 챔버가 공정 중이면 맨 위 'CH1 공정 중 — 블록 · 공정 이름'(공유 건 셔터·Power Select 는 CH2, 로드락·부저는 없음), " +
+        "위험 두 갈래 — 사람(벤트·도어·게이트·로드락 핀·척 모터)·장비(터보·로터리 끄기, 포어라인·러핑·메인 밸브, Power Select — DC Pulse 출력 중 SW_RF_SELECT 켜기는 RF 전용 릴레이 문구 더)",
+        fx.plc_busy.ch1 && !fx.plc_busy.ch2 && c1.procLine === want1 && kinds(c1) === "person" && c2.procLine === null && kinds(c2) === "person" &&
+        kinds(tOff) === "equipment" && kinds(tOn) === "" && kinds(rfNo) === "equipment" && kinds(rfDcp) === "equipment,equipment" &&
+        rfDcp.hazards[1].text.includes("RF 전용 릴레이") && kinds(rfOff) === "equipment" && g1.procLine === "CH2 공정 중 — TEST MODE · T1" &&
+        g1idle.procLine === null && bz.procLine === null && kinds(bz) === "" && pin.procLine === null && kinds(pin) === "person" &&
+        ar.procLine === want1 && kinds(ar) === "" && kinds(mv) === "equipment" && kinds(chuck) === "person" &&
+        c1.hazards[0].text === bundle.plcHazardText.person && tOff.hazards[0].text === bundle.plcHazardText.equipment &&
+        U.HAZARD_TEXT.person === bundle.plcHazardText.person && U.HAZARD_TEXT.equipment === bundle.plcHazardText.equipment &&
+        U.HAZARD_TEXT.rf_select_dcp === bundle.plcHazardText.rf_select_dcp,
+        { c1, c2, tOff, tOn, rfDcp: kinds(rfDcp), g1: g1.procLine, busy: fx.plc_busy });
+  const a1 = U.plcAsk(pb("vent_1_sw"), true, c1), a2 = U.plcAsk(pb("door_2_open_sw"), true, c2), a3 = U.plcAsk(pb("ar_2_gas_sw"), false, ctx("ar_2_gas_sw", false));
+  const body = (a, local) => textOf(renderToStaticMarkup(h(U.PlcConfirmBody, { ask: a, local }))).trim();
+  const hw = body(a1, false), hl = body(a2, true), hn = body(a3, false);
+  const dlgHtml = renderToStaticMarkup(h(U.Chk2ModeContext.Provider, { value: { local: false, hmiKinds: [], detail: false } },
+    h(U.Ch12Confirm, { ask: a1, onOk: noop, onCancel: noop })));
+  check("ui:plc-confirm-text — 확인창 글: 빨간 줄이 맨 위(공정 중일 때만) → 조작 확인 · 'CH1 벤트 → 켜기·열기' · 잠그지 않음 안내 · 위험 문구 · 기록 안내(웹 = 이름·계정, 노트북 = '노트북'), " +
+        "공정 중·위험이면 실행 빨강, 그 밖의 확인창은 챔버K 확인창 그대로",
+        hw.startsWith(`${want1} 조작 확인 CH1 벤트 → 켜기·열기`) && hw.includes("잠그지 않음") && hw.includes(bundle.plcHazardText.person) &&
+        hw.endsWith("이 조작은 로그인한 이름·계정과 함께 장비 로그에 기록됩니다.") &&
+        hl.startsWith("조작 확인 CH2 도어 열기 → 켜기·열기") && hl.endsWith("이 조작은 '노트북'에서 누른 것으로 장비 로그에 기록됩니다.") &&
+        !hn.includes("위험 —") && a1.red && a2.red && !a3.red && dlgHtml.includes("data-proc-line") && dlgHtml.includes("bg-[#B42318]") &&
+        U.isPlcAsk(a1) && !U.isPlcAsk({ kind: "PROCESS_STOP", label: "x" }) &&
+        textOf(renderToStaticMarkup(h(U.Ch12Confirm, { ask: { kind: "PROCESS_STOP", label: "CH1 STOP", stop: true }, onOk: noop, onCancel: noop }))).includes("실행자 계정과 함께 기록됩니다"),
+        { hw, hl, hn });
+  const plcEv = feed.filter((e) => e.type === "event" && e.data.context?.kind === "plc_button");
+  const plcRes = feed.filter((e) => e.type === "cmd_result" && e.data.kind === "PLC_BUTTON");
+  // 순서는 장비 시각 — 거부는 그 자리에서, 받은 명령은 PLC 쓰기가 끝난 뒤(결과까지 한 사건) → 버튼으로 찾는다
+  const byT = (x) => plcEv.filter((e) => e.data.context.data.target === x);
+  const ll = ["vent_1_sw", "door_2_open_sw", "nope"].map((x) => byT(x)).filter((a) => a.length === 1)
+    .map(([e]) => ({ tab: L.feedChamber(e), ...U.ch12LogLine(bundle, e) }));
+  check("ui:plc-log-line — 화면 로그: 'PLC 버튼 · CH1 벤트 켬 · 홍길동(웹) (CH1 공정 중 · TEST MODE)'·'… · 노트북'·거부면 '— 거부: 이유', 그 챔버 탭(CH1·CH2·공통), " +
+        "평소 보기 줄(계정은 상세 원시 줄에만), 'PLC 버튼 — 받음' 명령 결과 줄은 상세에만(같은 일 두 줄 막기)",
+        plcEv.length === 3 && ll.length === 3 && ll[0].text === "PLC 버튼 · CH1 벤트 켬 · 홍길동(웹) (CH1 공정 중 · TEST MODE)" && ll[0].tab === "ch1" &&
+        ll[1].text === "PLC 버튼 · CH2 도어 열기 켬 · 노트북" && ll[1].tab === "ch2" &&
+        ll[2].text.startsWith("PLC 버튼 · nope 켬 · 노트북 — 거부: target 'nope'") && ll[2].tab === "shared" && ll[2].level === "warn" &&
+        ll.every((x) => x.main && x.kind === "PLC 버튼") && !ll[0].text.includes("@") && ll[0].raw.includes("hong@vanam.co.kr") &&
+        plcRes.length === 3 && plcRes.every((e) => U.ch12LogLine(bundle, e).main === false) && L.hasPlcEvent(bundle),
+        ll.map((x) => `${x.tab} ${x.level} ${x.text} | ${x.raw}`));
+  const dWho = [L.whoOf("web", "hong@vanam.co.kr", "홍길동"), L.whoOf("web", "hong@vanam.co.kr", null), L.whoOf("local", "local"), L.whoOf("robot", "robot")];
+  const def = bundle.commands.find((c) => c.kind === "PLC_BUTTON"), kdef = { kind: "X", args: [{ name: "ch" }] };
+  const sa = U.withServerArgs(def, { target: "vent_1_sw", on: true, by_name: "꾸민 이름" }, "홍길동");
+  check("ui:plc-who — 누가: 웹은 로그인한 이름(웹 서버가 by_name 을 넣음 — 그 인자를 선언한 명령만, 브라우저 값은 덮어씀, 이름이 없으면 계정 @ 앞)·노트북은 '노트북'",
+        dWho.join("|") === "홍길동(웹)|hong(웹)|노트북|로봇" && sa.by_name === "홍길동" && sa.target === "vent_1_sw" &&
+        !("by_name" in U.withServerArgs(def, { target: "x", by_name: "y" }, null)) &&
+        JSON.stringify(U.withServerArgs(kdef, { ch: 1, by_name: "z" }, "홍길동")) === JSON.stringify({ ch: 1, by_name: "z" }),
+        { dWho, sa });
   const dt = textOf(render(U.Ch12Hmi, { bundle, snapshot: st.snapshot, plcOk: true, lockOf: noLock, pending: {}, onAsk: noop, note: "" }, { detail: true }));
   const locked = render(U.Ch12Hmi, { bundle, snapshot: st.snapshot, plcOk: false, lockOf: () => "PLC 값이 오래됨", pending: { [bundle.plcButtons[5].target]: true }, onAsk: noop, note: "PLC 응답 늦음 — 조작 잠금" });
   check("ui:hmi-map — HMI 계통도(CH1·CH2·로드락 2D — 진회색 = 켜짐·열림, 전환 중 파란 점선, 잠금 이유 aria·흐리게, 상세면 원래 이름)",

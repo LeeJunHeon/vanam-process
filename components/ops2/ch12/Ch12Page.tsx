@@ -14,7 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import { AlertTriangle, Code2, Laptop, Lock, LogIn, WifiOff } from "lucide-react";
 import Chk2Config from "../chk/Chk2Config";
 import { CommandLog, RunList } from "../chk/Chk2Logs";
-import { FS, Card, ConfirmDialog, InfoBand, Issue, Notices, SimpleConfirm, Tabs, type Ask, type Notice } from "../chk/kit";
+import { FS, Card, InfoBand, Issue, Notices, SimpleConfirm, Tabs, type Ask, type Notice } from "../chk/kit";
+import Ch12Confirm from "./Ch12Confirm";
 import { plcFresh } from "../chk/logic";
 import { Chk2ModeContext, useDetailPref } from "../chk/mode";
 import { reasonLabel, type StateData } from "../chk/types";
@@ -374,7 +375,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
           localCan={local ? localCan : undefined} />
       )}
       {curTab === "hmi" && (
-        <Ch12Hmi bundle={bundle} snapshot={snap} plcOk={plcOk} lockOf={(t) => lock("PLC_BUTTON", `PLC_BUTTON:${t}`)} pending={pending}
+        <Ch12Hmi bundle={bundle} snapshot={snap} st={st} plcOk={plcOk} lockOf={(t) => lock("PLC_BUTTON", `PLC_BUTTON:${t}`)} pending={pending}
           onAsk={setAsk} note={mimicNote} />
       )}
       {curTab === "recipe" && !local && (
@@ -409,7 +410,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
         <SimpleConfirm title="저장 안 함" ok="버리고 나가기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 탭을 바꿀까요?"
           onCancel={() => setTabTo(null)} onOk={() => { dirtyRef.current = false; const t = tabTo; setTabTo(null); goTab(t, true); }} />
       )}
-      <ConfirmDialog ask={ask} onOk={run} onCancel={cancel} />
+      <Ch12Confirm ask={ask} onOk={run} onCancel={cancel} />
     </Chk2ModeContext.Provider>
   );
 }
