@@ -46,6 +46,7 @@ export type ParamDef = {
   safety?: string; apply?: string; scope?: string; role?: string; webLocked?: boolean; desc?: string; note?: string;
   v1Key?: string | null; v1Source?: string | null; v1Default?: unknown; pendingConfirm?: boolean;
   choices?: unknown[] | null;                    // 묶음 15 — int·float 의 허용 숫자 목록(있으면 선택 목록으로 그린다)
+  enumLabels?: Record<string, string> | null;    // 묶음 17 — enum 값의 화면 이름(SPn_SOURCE "프로그램 값"·"장비 값")
 };
 /** 공정 중 수정 항목(묶음 adjust.items — blocks.ADJUST_ITEMS) */
 export type AdjustItemDef = {

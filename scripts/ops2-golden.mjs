@@ -92,9 +92,19 @@ function templateCase(rc, c, defs, diffs) {
   same(r.errors, c.checkErrors, "checkErrors", diffs);
   same(r.warnings, c.checkWarnings, "checkWarnings", diffs);
   const params = r.errors.length ? null : R.rowToParams(r.clean, c.cfg);
-  const blocks = params ? R.templateBlocks(params, c.cfg, ig, rfp) : null;
+  let blocks = null, terr = null;
+  if (params) {
+    try {
+      blocks = R.templateBlocks(params, c.cfg, ig, rfp, c.devSp ?? null);         // 묶음 17 — 장비 설정점 값(devSp)
+    } catch (e) {
+      if (!(e instanceof R.TemplateError)) throw e;
+      terr = { code: e.code, detail: e.detail };
+    }
+  }
   same(params, c.params, "params", diffs);
   same(blocks, c.blocks, "blocks", diffs);
+  if ("templateError" in c) same(terr, c.templateError, "templateError", diffs);
+  else if (terr) diffs.push(`templateError: 웹 ${JSON.stringify(terr)} / 장비 없음`);
 }
 
 function blockCase(rc, c, defs, diffs) {
