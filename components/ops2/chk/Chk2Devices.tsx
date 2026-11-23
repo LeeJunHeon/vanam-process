@@ -12,7 +12,7 @@
 // 진공·셔터는 [HMI 에서 조작] → HMI 탭(계통도). 노트북 로컬 화면은 HMI 경로에서 받는 명령만(나머지는 "웹에서만").
 import { useState, type ReactNode } from "react";
 import { Flame, Gauge, PauseCircle, Play, SkipForward, Square, Workflow } from "lucide-react";
-import { FS, BigValue, Btn, Card, Chip, Dot, FieldValue, Issue, KV, Modal, QBadge, Val, type Ask } from "./kit";
+import { FS, BigValue, Btn, Card, Chip, FieldValue, Issue, KV, Modal, QBadge, Val, type Ask } from "./kit";
 import { StateTag, wordsOf } from "./StateTag";
 import { argRange, capRange, checkInput, rangeText, type Range } from "./logic";
 import { enumLabel, fieldText } from "./text";
@@ -433,11 +433,9 @@ export function ShutterCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => vo
         })}
       </>}
       actions={<Btn onClick={onHmi}><Workflow size={14} /> HMI 에서 조작</Btn>}>
-      <div className={`flex flex-wrap gap-x-3 gap-y-1 ${FS.body} text-[#1B1F24]`}>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
         {lamps.map(([k, l]) => (
-          <span key={k} className="flex items-center gap-1.5" title={snap?.[`plc.${k}`] === true ? "감지" : "없음"}>
-            <Dot on={snap?.[`plc.${k}`] === true} dim={snap?.[`plc.${k}`] === undefined} />{fieldOf(d, k)?.label ?? l}
-          </span>
+          <StateTag key={k} on={snap?.[`plc.${k}`] as boolean | undefined} label={fieldOf(d, k)?.label ?? l} words="detect" />
         ))}
       </div>
     </DevCard>

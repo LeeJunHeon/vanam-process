@@ -49,7 +49,7 @@ function Panel({ title, icon, children, off, warn }: { title: string; icon: Reac
     return (
       <Tile className="bg-[#F5F6F8] p-3">
         <p className={`flex flex-wrap items-center gap-1.5 ${FS.body} text-[#5B6470]`}>
-          {icon}<b className="text-[#5B6470]">{title}</b><span>— {off}</span>
+          {icon}<b className="text-[#5B6470]">{title}</b><span>· {off}</span>
         </p>
       </Tile>
     );
@@ -258,7 +258,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
         </Panel>
 
         <Panel title="DC Power" icon={<Power size={14} />} off={offWhy("dc")} warn={failWhy("dc")}>
-          <div className="grid grid-cols-3 gap-x-3">
+          <div>
             <KV k="파워"><Val text={fmt(num(snap?.["dc.p"]))} unit="W" /></KV>
             <KV k="전압"><Val text={fmt(num(snap?.["dc.v"]))} unit="V" /></KV>
             <KV k="전류"><Val text={fmt(num(snap?.["dc.i"]), 3)} unit="A" /></KV>

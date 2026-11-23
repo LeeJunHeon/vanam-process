@@ -7,6 +7,7 @@ import { useMemo, useState } from "react";
 import { Info, Settings2 } from "lucide-react";
 import { FS, Card, Issue, Tag } from "./kit";
 import type { Bundle, ParamDef, StateData } from "./types";
+import { useChk2Mode } from "./mode";
 
 type LP = ParamDef & { stored?: unknown; overridden?: boolean };
 const show = (p: LP, v: unknown) => {
@@ -18,6 +19,7 @@ const show = (p: LP, v: unknown) => {
 const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 export default function Chk2LocalConfig({ bundle, st }: { bundle: Bundle | null; st: StateData | null }) {
+  const { detail } = useChk2Mode();
   const [q, setQ] = useState("");
   const [onlyChanged, setOnlyChanged] = useState(false);
   const params = useMemo(() => ((bundle?.params ?? []) as LP[]).filter((p) => p.scope !== "secret"), [bundle]);
@@ -56,11 +58,11 @@ export default function Chk2LocalConfig({ bundle, st }: { bundle: Bundle | null;
             </div>
             <div className="max-h-[calc(100vh-300px)] min-h-[240px] overflow-y-auto rounded-[10px] border border-[#E3E6EA]">
               <table className={`w-full ${FS.body}`}>
-                <thead className="sticky top-0 bg-[#F5F6F8] text-left text-[#5B6470]">
+                <thead className="sticky top-0 whitespace-nowrap bg-[#F5F6F8] text-left text-[#5B6470]">
                   <tr>
-                    <th className="px-3 py-1.5 font-medium">이름</th>
-                    <th className="px-3 py-1.5 font-medium">지금 값</th>
-                    <th className="px-3 py-1.5 font-medium">대기 값</th>
+                    <th className="w-[34%] px-3 py-1.5 font-medium">이름</th>
+                    <th className="w-[26%] px-3 py-1.5 font-medium">지금 값</th>
+                    <th className="w-[20%] px-3 py-1.5 font-medium">대기 값</th>
                     <th className="px-3 py-1.5 font-medium">기본값</th>
                   </tr>
                 </thead>
@@ -74,7 +76,7 @@ export default function Chk2LocalConfig({ bundle, st }: { bundle: Bundle | null;
                           <span className="flex items-center gap-1 font-semibold text-[#1B1F24]" title={p.desc || undefined}>
                             {p.label || p.key}{p.desc && <Info size={12} className="shrink-0 text-[#8A929D]" aria-hidden />}
                           </span>
-                          <span className={`font-mono ${FS.small} text-[#8A929D]`}>{p.key}</span>
+                          {detail && <span className={`font-mono text-[11px] text-[#8A929D]`}>{p.key}</span>}
                         </td>
                         <td className="px-3 py-1.5 tabular-nums text-[#1B1F24]">
                           {show(p, p.current)}
