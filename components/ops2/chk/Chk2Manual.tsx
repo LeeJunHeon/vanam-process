@@ -85,6 +85,9 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
   const errOf = (b: Block): string | null => {
     if (!types.has(b.type)) return "이 장비는 이 블록을 수동 조작에서 받지 않음";
     if (Object.values(b.params).some((v) => typeof v === "number" && Number.isNaN(v))) return "숫자를 넣으세요";
+    const has = (k: string) => typeof b.params[k] === "number";
+    if (b.type === "power_on" && !has("dc_power") && !has("rf_power") && !has("rfp_power")) return "목표 파워(W)를 넣으세요";
+    if (b.type === "gas_intro" && !has("ar_flow") && !has("o2_flow")) return "Ar 또는 O₂ 유량을 넣으세요";
     if (!env) return null;
     const r = checkBlocks([b], env);
     return r.errors[0] ?? null;
