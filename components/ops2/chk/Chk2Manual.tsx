@@ -81,7 +81,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
   const rfpOn = paramValue(bundle, "RFPULSE_ENABLED") !== false;
 
   // 지금 받을 수 있는가 — 장비 쪽과 같은 규칙(공정 중·블록 실행 중·정지 순서 중이면 받지 않음)
-  const stateWhy = !st ? "장비 상태를 아직 받지 못함"
+  const stateWhy = !st ? "장비 상태를 기다리는 중"
     : st.stopping || kind === "stopping" ? "정지 순서 중이라 끝난 뒤에 할 수 있음"
     : active && !man ? "공정 중에는 '공정 중 값 바꾸기'를 사용하세요"
     : man && !waiting ? "앞 조작이 진행 중이라 끝난 뒤에 할 수 있음"
@@ -136,7 +136,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
   const pOn = (p: Record<string, unknown>): Block => ({ type: "power_on", params: { ...p, wait: true } });
   const pOff = (p: Record<string, unknown>): Block => ({ type: "power_off", params: p });
   const offWhy = (dev: string) => (st?.links?.[dev]?.q === "off" ? "사용하지 않음(장비 설정에서 꺼짐)" : null);
-  const failWhy = (dev: string) => (st?.links?.[dev]?.q === "fail" ? "장비와 연결이 끊김 — 다시 연결되면 조작할 수 있음" : null);
+  const failWhy = (dev: string) => (st?.links?.[dev]?.q === "fail" ? "장비와 연결이 끊김. 다시 연결되면 조작할 수 있음" : null);
   const b = (k: string) => (snap?.[k] === undefined ? undefined : snap?.[k] === true);
   // 출력이 켜져 있나 — 버튼 이름("켜기" / "목표 적용")만 정한다. RF 는 묶음 19 rf.out_on, 옛 묶음은 순방향 5 W 이상
   const rfOn = snap?.["rf.out_on"] !== undefined ? snap?.["rf.out_on"] === true : (num(snap?.["rf.fwd_w"]) ?? 0) >= 5;

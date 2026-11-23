@@ -222,7 +222,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
           )}
           {st?.stopping && (
             <Issue level="warn">
-              정지 순서 실행 중 — {STOPPING_LABEL[st.stopping] ?? st.stopping}
+              정지 순서 실행 중: {STOPPING_LABEL[st.stopping] ?? st.stopping}
               {detail && <span className="ml-1 font-mono">{st.stopping}</span>}
             </Issue>
           )}
@@ -237,7 +237,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
             </div>
           )}
           {Object.keys(left).length > 0 && (
-            <Issue level="warn"><b>지난 공정이 남긴 출력</b> — {leftText(left)} 켜져 있음 — STOP 으로 정리</Issue>
+            <Issue level="warn"><b>지난 공정이 남긴 출력</b>: {leftText(left)} 켜져 있음. STOP 으로 정리하세요</Issue>
           )}
         </div>
       )}

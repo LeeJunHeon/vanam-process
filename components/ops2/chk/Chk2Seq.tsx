@@ -81,14 +81,14 @@ function SeqItem({ b, bundle, st, current, lock, onAsk, revision, pauseMax }: {
                     note: pauseMax > 0 ? `한도 ${fmtDur(pauseMax)}를 넘으면 정지 순서로 갑니다(5분 전 경고).` : "한도 없음(설정 PROCESS_PAUSE_MAX_SEC 0)." })}>
                   <PauseCircle size={13} /> 일시정지
                 </Btn>
-              ) : <span className={`${FS.small} text-[#5B6470]`}>일시정지 못 함 — {b.pauseText || "이 블록은 멈출 수 없음"}</span>}
+              ) : <span className={`${FS.small} text-[#5B6470]`}>일시정지할 수 없음: {b.pauseText || "이 블록은 멈출 수 없음"}</span>}
               {b.skip ? (
                 <Btn size="sm" lock={lock("PROCESS_SKIP")}
                   onClick={() => onAsk({ kind: "PROCESS_SKIP", label: "블록 건너뛰기", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
                     args: { no: b.no, revision }, lines: [`${name}: ${b.skipText ?? ""}`], red: true })}>
                   <SkipForward size={13} /> 건너뛰기
                 </Btn>
-              ) : !paused && <span className={`${FS.small} text-[#5B6470]`}>건너뛰기 못 함 — {b.skipText || "이 블록은 건너뛸 수 없음"}</span>}
+              ) : !paused && <span className={`${FS.small} text-[#5B6470]`}>건너뛸 수 없음: {b.skipText || "이 블록은 건너뛸 수 없음"}</span>}
             </div>
           )}
         </div>
@@ -132,7 +132,7 @@ function SeqEditor({ bundle, base, baseRev, revision, lockTop, runBlocks, lock, 
     <div className="space-y-3">
       {stale && (
         <Issue level="warn">
-          다른 곳에서 순서가 바뀜(지금 판 {revision}, 고치던 판 {baseRev}) — 다시 불러온 뒤 고치세요.
+          다른 곳에서 순서가 바뀜(지금 판 {revision}, 고치던 판 {baseRev}). 다시 불러온 뒤 고치세요.
           {reloadReady
             ? <button onClick={onReload} className="ml-2 inline-flex items-center gap-1 font-semibold underline"><RefreshCw size={12} /> 다시 불러오기</button>
             : <span className="ml-2">새 판 기준 목록을 받는 중…</span>}

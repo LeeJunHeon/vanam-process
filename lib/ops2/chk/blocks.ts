@@ -272,7 +272,7 @@ export function checkBlocks(blocks: unknown, env: BlockEnv): BlocksResult {
     out = blocks.map((b, i) => checkOne(env, b, String(i + 1), 0, errs, warns)).filter((x): x is CleanBlock => x !== null);
   } catch (e) {
     if (!(e instanceof UnknownRule)) throw e;
-    errs.push(`웹 검사가 모르는 규칙 조건 ${pyRepr(e.message)} — 장비 판단만 믿을 것`);
+    errs.push(`웹 검사가 모르는 규칙 조건 ${pyRepr(e.message)}(장비 판단을 따름)`);
   }
   if (!errs.length) {
     try {

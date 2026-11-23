@@ -104,11 +104,11 @@ function KeyValues({ bundle, st, blocks }: { bundle: Bundle | null; st: StateDat
       <p className={`mt-2 ${FS.small} text-[#5B6470]`}>막대: 회색 띠 = 허용 범위(장비 판정과 같은 식, 모르면 없음) · ▲ = 목표 · 세로선 = 지금</p>
       {off.length > 0 && (
         <p className={`mt-1 ${FS.small} text-[#5B6470]`}>
-          이번 공정에서 안 쓰는 장비 — {off.map((d) => {
+          이번 공정에서 쓰지 않는 장비: {off.map((d) => {
             const f = fieldOf(bundle, d.value);
             const t = f ? fieldText(f, snap?.[d.value], snap, bundle?.snapshot?.blocks) : { text: "", alt: null, warn: false };
             return `${d.label} ${t.text || t.alt || "—"}${t.text && f?.unit ? ` ${f.unit}` : ""}`;
-          }).join(" · ")} · 사용 안 함
+          }).join(" · ")}
         </p>
       )}
     </Card>
@@ -213,8 +213,8 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   const t = exp.length ? expectedTime(exp) : null;
   const steps = exp.reduce((n, b) => n + b.steps.filter((s) => !s.internal).length, 0);
   const first = full?.rows.find((r) => r && Object.keys(r).length && !("blocks" in r)) as Row | undefined;
-  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정의를 아직 받지 못함" : chk?.errors ? `검사 오류 ${chk.errors}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("RECIPE_LOAD");
-  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정의를 아직 받지 못함" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("HEATER_RECIPE_RUN");
+  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정의를 기다리는 중" : chk?.errors ? `검사 오류 ${chk.errors}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("RECIPE_LOAD");
+  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정의를 기다리는 중" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("HEATER_RECIPE_RUN");
   const loadedWeb = loaded?.name ? list.find((r) => r.kind === "process" && r.name === loaded.name) : undefined;
 
   const askStart = async () => {
@@ -290,7 +290,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
 
         <div className="flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-3">
           <span className={`${FS.body} font-semibold text-[#1B1F24]`}>히터 레시피</span>
-          {hr ? <span className={`${FS.body} text-[#5B6470]`}>실행 중 <b className="text-[#1B1F24]">{hr.name}</b> · 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"} — 히터 카드에서 조작</span> : (
+          {hr ? <span className={`${FS.body} text-[#5B6470]`}>실행 중 <b className="text-[#1B1F24]">{hr.name}</b> · 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"} · 조작은 히터 카드에서</span> : (
             <>
               <select value={hid} onChange={(e) => { setHid(e.target.value); if (!e.target.value) setHfull(null); }} aria-label="히터 레시피 고르기" className={sel}>
                 <option value="">히터 레시피 고르기…</option>

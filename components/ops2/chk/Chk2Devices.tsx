@@ -294,7 +294,7 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
           </div>
         }
         note={<>
-          {issues.length > 0 && <Issue level="alarm">{issues.join(" · ")} — 원인을 확인한 뒤 이상 리셋</Issue>}
+          {issues.length > 0 && <Issue level="alarm">{issues.join(" · ")}: 원인을 확인한 뒤 이상 리셋</Issue>}
           {(owner || (gas && gas !== "IDLE")) && (
             <p>{owner && `히터: ${HEATER_OWNER[owner] ?? owner} 소유`}{st?.heater?.handedOver && " · 공정에서 넘겨받음"}
               {gas && gas !== "IDLE" && `${owner ? " · " : ""}${GAS_STATE[gas] ?? gas}`}</p>

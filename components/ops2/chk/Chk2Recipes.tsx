@@ -101,7 +101,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
 
   const open = useCallback((item: RecipeItem) => leave(async () => {
     const r = await recipes.get(item.id);
-    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 열지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
+    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 열 수 없었음`, text: RECIPE_ERROR[r.error] ?? r.error });
     const d = fromFull(r.data.recipe);
     setReveal(true);
     setDraft(d);
@@ -158,7 +158,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
   const remove = async (item: RecipeItem) => {
     setConfirm(null);
     const r = await recipes.remove(item.id);
-    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 지우지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
+    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 지울 수 없었음`, text: RECIPE_ERROR[r.error] ?? r.error });
     notify({ tone: "ok", title: `레시피 '${item.name}' 지움` });
     if (draft?.id === item.id) setDraft(null);
   };
@@ -189,13 +189,13 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
   };
   const listLoad = async (item: RecipeItem) => {
     const r = await recipes.get(item.id);
-    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 읽지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
+    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 읽을 수 없었음`, text: RECIPE_ERROR[r.error] ?? r.error });
     askLoadFull({ name: r.data.recipe.name, rows: r.data.recipe.rows as Row[] });
   };
   const savedWhy = !draft ? null : !draft.id ? "저장한 뒤" : dirty ? "저장한 뒤(저장 안 한 변경이 있음)" : null;
-  const loadWhy = !draft || draft.kind !== "process" ? null : !env ? "장비 정의를 아직 받지 못함" : savedWhy
+  const loadWhy = !draft || draft.kind !== "process" ? null : !env ? "장비 정의를 기다리는 중" : savedWhy
     ? `${savedWhy} 적재` : errCount ? `오류 ${errCount}개를 고쳐야 적재할 수 있습니다` : lock("RECIPE_LOAD");
-  const runWhy = !draft || draft.kind !== "heater" ? null : !env ? "장비 정의를 아직 받지 못함" : savedWhy
+  const runWhy = !draft || draft.kind !== "heater" ? null : !env ? "장비 정의를 기다리는 중" : savedWhy
     ? `${savedWhy} 실행` : errCount ? `오류 ${errCount}개를 고쳐야 실행할 수 있습니다` : lock("HEATER_RECIPE_RUN");
   const rowWhy = (i: number): string | null => {
     const rc = pCheck?.rows[i];
@@ -260,7 +260,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
   if (draft) {
     const statusChip = errCount
       ? <button onClick={goFirstError} title="누르면 첫 오류로"><Chip tone="alarm">오류 {errCount}{dirty ? " · 저장되지 않음" : ""}</Chip></button>
-      : dirty ? <Chip tone="warn">저장 안 됨 · 변경 {changed}곳</Chip> : <Chip>{draft.id ? "저장됨 · 검사 통과" : "새 레시피"}</Chip>;
+      : dirty ? <Chip tone="warn">저장하지 않은 변경 {changed}곳</Chip> : <Chip>{draft.id ? "저장됨 · 검사 통과" : "새 레시피"}</Chip>;
     const why = draft.kind === "process" ? loadWhy : runWhy;
     return (
       <Card>
@@ -332,7 +332,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
         {banner}
         {loaded && (
           <p className={`${FS.body} text-[#5B6470]`}>
-            장비에 적재됨 <b className="text-[#1B1F24]">{loaded.name || "이름 없음"}</b> · {loaded.rows ?? "-"}행 — 시작·해제는 운전 탭
+            장비에 적재됨 <b className="text-[#1B1F24]">{loaded.name || "이름 없음"}</b> · {loaded.rows ?? "-"}행 · 시작·해제는 운전 탭에서
           </p>
         )}
         <Tabs small value={filter} onChange={setFilter}

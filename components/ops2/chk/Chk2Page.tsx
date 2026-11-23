@@ -42,7 +42,7 @@ const PLC_KINDS = new Set(["PLC_BUTTON", "HEATER_SV", "HEATER_ON", "HEATER_OFF",
 const SEND_ERROR: Record<string, string> = {
   device_offline: "장비 연결 끊김(마지막 연락 10 s 넘음)",
   forbidden: "권한 없음(장비 담당자·관리자만 조작)",
-  no_schema: "장비 정의를 아직 받지 못함",
+  no_schema: "장비 정의를 기다리는 중",
   unknown_kind: "웹에서 낼 수 없는 명령",
   bad_args: "인자 오류",
   config_path: "설정 변경은 설정 화면에서",
@@ -262,7 +262,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
     });
     const b = r.body;
     if (!r.ok) {
-      notify({ tone: "bad", title: `${what}: 보내지 못함`,
+      notify({ tone: "bad", title: `${what}: 보낼 수 없었음`,
                text: `${SEND_ERROR[b.error ?? ""] ?? b.error ?? `HTTP ${r.status}`}${b.detail ? ` · ${b.detail}` : ""}` });
     } else if (b.status === "accepted") {
       notify({ tone: "ok", title: `${what}: 장비가 받음` });
@@ -440,7 +440,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {d.state && !connected && (!local || d.streamUp) && (
         <Issue level="alarm">
-          <AlertTriangle size={13} className="mr-1 inline" /><b>장비 끊김 {ageSec}초</b> — 표시는 마지막 값이며 조작이 잠겼습니다.
+          <AlertTriangle size={13} className="mr-1 inline" /><b>장비 끊김 {ageSec}초</b>. 표시는 마지막 값이며 조작이 잠겼습니다.
           {webOnline && perms?.canOperate && " 웹은 장비와 이어져 있어 정지 명령은 보낼 수 있습니다."}
         </Issue>
       )}
