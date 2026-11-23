@@ -231,7 +231,7 @@ function AutoPreview({ rc, bundle, onDirect, startWhy, onStart, readOnly }: {
       </div>
       {rc?.expanded ? <div className="max-h-[32rem] overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2"><ExpandedView exp={rc.expanded} bundle={bundle} /></div>
         : <Empty>값을 채우고 오류를 고치면 장비가 할 순서가 여기에 보입니다</Empty>}
-      {t && t.open > 0 && <p className={`${FS.small} text-[#5B6470]`}>끝을 모르는 대기(압력·파워·히터 도달 등) {t.open}개 — 예상 시간은 그만큼 더 걸립니다</p>}
+      {t && t.open > 0 && <p className={`${FS.small} text-[#5B6470]`}>끝을 모르는 대기(압력·파워·히터 도달 등) {t.open}개. 예상 시간은 그만큼 더 걸립니다</p>}
       <div>
         <button onClick={() => setStop((o) => !o)} className={`flex items-center gap-1 ${FS.small} font-semibold text-[#5B6470]`}>
           {stop ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 정지 순서 보기

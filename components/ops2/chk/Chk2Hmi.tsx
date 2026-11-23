@@ -1,10 +1,10 @@
 "use client";
 
 // 챔버K v2 HMI 탭 — 계통도(W-10b 다시 정리). 그림(SVG) + 맨 오른쪽 세로 '값' 패널(HTML).
-//   그림: 왼쪽 가스 줄(Ar·O₂ MFC 상자 실제/설정 sccm → 차단밸브 → 챔버) · 가운데 챔버 · 오른쪽 Vent · 아래 배기(MV → Turbo → FV → Rotary,
-//   RV 우회). 챔버 안에는 구조만(Gun1·Gun2·셔터 S1·S2·Main 셔터·기판 히터 자리) + 짧은 상태 글. 숫자 값은 제자리에:
+//   그림: 왼쪽 가스 줄(Ar·O₂ MFC 상자 실제/설정 sccm → 차단밸브 → 챔버 왼쪽 벽) · 가운데 챔버 · 오른쪽 벽 Vent · 아래 배기(챔버 바닥 →
+//   MV → Turbo → FV → Rotary, 챔버 바닥 → RV → Rotary 앞 합류 — W-15 다시 그림, MV·RV 둘 다 챔버 바닥 안쪽). 도어는 이름·상태 글 한 곳 + 버튼 둘. 챔버 안에는 구조만(Gun1·Gun2·셔터 S1·S2·Main 셔터·기판 히터 자리) + 짧은 상태 글. 숫자 값은 제자리에:
 //   MFC 상자 = 실제/설정, 챔버 옆 작은 상자 = 챔버 압력, 챔버 벽 게이지 기호 → 이온 게이지 상자 = 이온·A·B, 기판 히터 자리 = TC1 크게·TC2·목표·제어 방식.
-//   패널: 파워(DC Power·RF Power·RF Pulse — 값·출력 상태·사용하지 않음), 유틸리티 램프, 이오나이저(켜기/끄기·구동·점등·수명 초과), MV 인터록.
+//   패널: 파워(켜짐 n W / 꺼짐 — RF 는 묶음 19 rf.out_on, 쓰지 않는 장비는 이유 한 줄), 유틸리티(감지/없음), 이오나이저(켜기/끄기·구동·점등·수명 초과), MV 인터록.
 // 그림은 탭 폭을 채우고(비율 유지), 글자는 kit 글자 체계 px 그대로(그림 배율을 재서 글자 크기를 되돌림 — 화면 폭이 달라도 14px·12px).
 // 기호는 2D 평면: 밸브 = 나비(모두 같은 크기), 펌프 = 원(같은 크기), 셔터 = 막대. 켜짐·열림 = 진회색 채움, 꺼짐·닫힘 = 흰 바탕 테두리.
 //   배관 선 굵기 하나 — 그 구간을 여닫는 밸브·펌프가 켜진 구간만 진회색. 전환 중 = 파란 점선 + '전환 중'(10 s — 부르는 쪽 pending).
@@ -15,13 +15,14 @@
 // 노드 상태 = snapshot plc.<addr>(묶음 plcButtons addr — 이오나이저만 target 과 다르다: ion_remote_on).
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { AlertTriangle, Lock } from "lucide-react";
-import { Btn, Card, Chip, Dot, FS, FSPX, StateBox, T, type Ask } from "./kit";
+import { Btn, Card, FS, FSPX, T, type Ask } from "./kit";
+import { StateTag } from "./StateTag";
 import { enumLabel, fieldText } from "./text";
 import type { Bundle, FieldDef, Link } from "./types";
 
 const DANGER = new Set(["vent", "door_up", "door_down"]);
 const FONT = "Pretendard, system-ui, sans-serif";
-const VB_W = 1100, VB_H = 560;
+const VB_W = 1100, VB_H = 600;
 
 type Props = {
   bundle: Bundle | null;
@@ -141,15 +142,12 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
       </text>
     </>)
   );
-  /** 도어 버튼 — 사각, 안에 이름 + 상태 */
+  /** 도어 버튼 — 사각 안에 이름만(켜지면 진회색 채움). 상태 글은 '도어' 이름 아래 한 곳 */
   const door = (t: string, x: number, y: number, name: string) => (
-    node(t, name, "open", <>
-      <rect className="ring" x={x - 4} y={y - 4} width={118} height={54} rx={10} fill="none" stroke={T.primary} strokeWidth={2} opacity={0} />
-      <rect x={x} y={y} width={110} height={46} rx={8} fill={fill(t)} stroke={stroke(t)} strokeWidth={2} strokeDasharray={dash(t)} />
-      <text x={x + 55} y={y + 21} textAnchor="middle" fontSize={px(FSPX.body)} fontWeight={700} fill={ink(t)} fontFamily={FONT}>{name}</text>
-      <text x={x + 55} y={y + 21 + px(16)} textAnchor="middle" fontSize={px(FSPX.small)} fill={on(t) ? "#FFFFFF" : stateFill(t)} fontFamily={FONT}>
-        {stateWord(t, "run")}
-      </text>
+    node(t, `도어 ${name}`, "run", <>
+      <rect className="ring" x={x - 4} y={y - 4} width={118} height={48} rx={10} fill="none" stroke={T.primary} strokeWidth={2} opacity={0} />
+      <rect x={x} y={y} width={110} height={40} rx={8} fill={fill(t)} stroke={stroke(t)} strokeWidth={2} strokeDasharray={dash(t)} />
+      <text x={x + 55} y={y + 20 + px(5)} textAnchor="middle" fontSize={px(FSPX.body)} fontWeight={700} fill={ink(t)} fontFamily={FONT}>{name}</text>
     </>)
   );
   const pipe = (d: string, live: boolean) => (
@@ -220,10 +218,17 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
     </g>
   );
 
-  // 그림 좌표(viewBox 1100 × 560) — 챔버 430~730 × 66~400. 상자 높이는 글자(px)에 맞춘다 — 기판 히터는 챔버 바닥에 붙임
-  const CX = 580;
-  const HY = Math.max(240, 392 - (px(20) + px(98) + px(14)));
+  // 그림 좌표(viewBox 1100 × 600, W-15 다시 그림) — 챔버 400~760 × 70~390.
+  //   배기: 챔버 바닥(x 470) → MV → Turbo(470, 520) → FV(580) → 합류점(690, 520) → Rotary(820, 520),
+  //         챔버 바닥(x 690) → RV → 합류점. MV·RV 둘 다 챔버 바닥 안쪽(간격 220). 배관은 직각, 이름·상태 글은 배관에서 떨어진 쪽.
+  //   벽에 붙는 것: 가스 줄(왼쪽 벽 y 140·230), 챔버 압력 상자(왼쪽 벽 y 330), Vent(오른쪽 벽 y 140), 이온 게이지 기호(오른쪽 벽 y 330).
+  const CX = 580, CL = 400, CR = 760, CT = 70, CB = 390;
+  const MVX = 470, RVX = 690, PY = 520;
+  const HY = Math.max(240, CB - 8 - (px(20) + px(98) + px(14)));
   const IGH = 8 + px(14) + px(74) + px(14);
+  const PBH = 8 + px(14) + px(24) + px(10);
+  const doorWord = !plcOk ? "—" : wait("door_up") || wait("door_down") ? "전환 중"
+    : on("door_up") ? "올림 출력 켜짐" : on("door_down") ? "내림 출력 켜짐" : "출력 꺼짐";
   return (
     <Card title="계통도" right={<span className={`flex items-center gap-1 ${FS.small} ${note.includes("잠금") ? "font-semibold text-[#B54708]" : "text-[#5B6470]"}`}>
       {note.includes("잠금") && <Lock size={12} />}{note}</span>}>
@@ -232,79 +237,81 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
           <div ref={wrap} className="min-w-0 flex-1 pt-2">
             <svg viewBox={`${-P} 0 ${VB_W + 2 * P} ${VB_H}`} className="block h-auto w-full select-none" role="group" aria-label="챔버K v2 계통도">
               {/* 배관(선 굵기 하나 — 열린 구간만 진회색) */}
-              {pipe(`M${220 - P},130 H430`, on("ar_valve"))}
-              {pipe(`M${220 - P},226 H430`, on("o2_valve"))}
-              {pipe(`M730,130 H${880 + P}`, on("vent"))}
-              {pipe("M520,400 V458", on("mv"))}
-              {pipe("M544,482 H626", on("turbo"))}
-              {pipe("M654,482 H740", on("fv"))}
-              {pipe("M740,400 V482", on("rv"))}
-              {pipe("M740,482 H826", on("rotary"))}
-              {pipe(`M${400 - P / 2},328 H430`, false)}
-              {pipe(`M758,330 H${800 + P / 2}`, false)}
+              {pipe(`M${220 - P},140 H${CL}`, on("ar_valve"))}
+              {pipe(`M${220 - P},230 H${CL}`, on("o2_valve"))}
+              {pipe(`M${CR},140 H${900 + P}`, on("vent"))}
+              {pipe(`M${MVX},${CB} V${PY - 24}`, on("mv"))}
+              {pipe(`M${MVX + 24},${PY} H${580 - 14}`, on("turbo"))}
+              {pipe(`M${580 + 14},${PY} H${RVX}`, on("fv"))}
+              {pipe(`M${RVX},${CB} V${PY}`, on("rv"))}
+              {pipe(`M${RVX},${PY} H${820 - 24}`, on("rotary"))}
+              {pipe(`M${CL - 10},330 H${CL}`, false)}
+              {pipe(`M${CR + 28},330 H${800 + P / 2}`, false)}
               {/* 챔버 — 구조만 */}
-              <rect x={430} y={66} width={300} height={334} rx={14} fill="#FFFFFF" stroke={T.on} strokeWidth={2} />
-              {label(CX, 66 + px(20), "Chamber")}
-              <rect x={455} y={100} width={110} height={34} rx={6} fill="#F5F6F8" stroke={T.border} />
-              {label(510, 117 + px(5), "Gun1")}
-              <rect x={595} y={100} width={110} height={34} rx={6} fill="#F5F6F8" stroke={T.border} />
-              {label(650, 117 + px(5), "Gun2")}
-              {shutter("s1", 465, 146, 90, "S1")}
-              {shutter("s2", 605, 146, 90, "S2")}
-              {shutter("ms", 475, 196, 210, "Main 셔터")}
+              <rect x={CL} y={CT} width={CR - CL} height={CB - CT} rx={14} fill="#FFFFFF" stroke={T.on} strokeWidth={2} />
+              {label(CX, CT + px(20), "Chamber")}
+              <rect x={440} y={CT + 34} width={120} height={34} rx={6} fill="#F5F6F8" stroke={T.border} />
+              {label(500, CT + 51 + px(5), "Gun1")}
+              <rect x={600} y={CT + 34} width={120} height={34} rx={6} fill="#F5F6F8" stroke={T.border} />
+              {label(660, CT + 51 + px(5), "Gun2")}
+              {shutter("s1", 455, CT + 82, 90, "S1")}
+              {shutter("s2", 615, CT + 82, 90, "S2")}
+              {shutter("ms", 470, CT + 132, 220, "Main 셔터")}
               {/* 기판 히터 자리 — TC1 · TC2 같은 크기로 나란히(목표는 각각 아래 작게 — TC2 아래는 SV2) · 편차(TC2 단독 제어) · 제어 방식 */}
-              <rect x={455} y={HY} width={250} height={392 - HY} rx={8} fill="#F5F6F8" stroke={T.border} />
-              {label(467, HY + px(20), "기판 히터", "start")}
-              {tcCell(467, HY + px(20), "TC1", tc2Only ? "기록" : "", tc1,
+              <rect x={425} y={HY} width={310} height={CB - 8 - HY} rx={8} fill="#F5F6F8" stroke={T.border} />
+              {label(437, HY + px(20), "기판 히터", "start")}
+              {tcCell(437, HY + px(20), "TC1", tc2Only ? "기록" : "", tc1,
                 hSv.unit ? `목표 ${hSv.text} ${hSv.unit}` : "")}
               {tcCell(585, HY + px(20), "TC2", "", tc2,
                 tc2Pid && cascOn && hSv2.unit ? `목표 ${hSv2.text} ${hSv2.unit}` : "")}
               {hDev !== null && (
                 <g>
-                  <text x={467} y={HY + px(20) + px(80)} fontSize={px(FSPX.body)} fill={T.muted} fontFamily={FONT}>편차(TC2)</text>
-                  <text x={693} y={HY + px(20) + px(80)} textAnchor="end" fontFamily={FONT}>
+                  <text x={437} y={HY + px(20) + px(80)} fontSize={px(FSPX.body)} fill={T.muted} fontFamily={FONT}>편차(TC2)</text>
+                  <text x={723} y={HY + px(20) + px(80)} textAnchor="end" fontFamily={FONT}>
                     <tspan fontSize={px(FSPX.body)} fontWeight={700} fill={T.value}>{`${hDev >= 0 ? "+" : "−"}${Math.abs(hDev).toFixed(1)}`}</tspan>
                     <tspan fontSize={px(FSPX.small)} fill={T.muted}> °C</tspan>
                   </text>
                 </g>
               )}
-              <text x={467} y={HY + px(20) + px(98)} fontSize={px(FSPX.body)} fill={T.muted} fontFamily={FONT}>제어</text>
-              <text x={693} y={HY + px(20) + px(98)} textAnchor="end" fontSize={px(FSPX.body)} fontWeight={600} fill={T.text} fontFamily={FONT}>{ctrl}</text>
-              {/* 챔버 압력(챔버 옆 작은 상자) */}
-              {box(240 - P / 2, 328 - (8 + px(14) + px(24) + px(10)) / 2, 160, 8 + px(14) + px(24) + px(10), "챔버 압력", (() => {
+              <text x={437} y={HY + px(20) + px(98)} fontSize={px(FSPX.body)} fill={T.muted} fontFamily={FONT}>제어</text>
+              <text x={723} y={HY + px(20) + px(98)} textAnchor="end" fontSize={px(FSPX.body)} fontWeight={600} fill={T.text} fontFamily={FONT}>{ctrl}</text>
+              {/* 챔버 압력 — 왼쪽 벽에 붙은 작은 상자 */}
+              {box(CL - 10 - 160, 330 - PBH / 2, 160, PBH, "챔버 압력", (() => {
                 const v = valTxt("mfc.pressure_mtorr");
                 return (
-                  <text x={252 - P / 2} y={328 - (8 + px(14) + px(24) + px(10)) / 2 + 8 + px(14) + px(24)} fontFamily={FONT}>
+                  <text x={CL - 10 - 148} y={330 - PBH / 2 + 8 + px(14) + px(24)} fontFamily={FONT}>
                     <tspan fontSize={px(16)} fontWeight={700} fill={v.color}>{v.text}</tspan>
                     {v.unit && <tspan fontSize={px(FSPX.small)} fill={T.muted}> {v.unit}</tspan>}
                   </text>
                 );
               })())}
-              {/* 이온 게이지 — 챔버 벽 게이지 기호 → 상자 */}
-              <circle cx={744} cy={330} r={14} fill="#FFFFFF" stroke={T.on} strokeWidth={2} />
-              <text x={744} y={330 + px(4)} textAnchor="middle" fontSize={px(FSPX.small)} fontWeight={700} fill={T.text} fontFamily={FONT}>IG</text>
+              {/* 이온 게이지 — 오른쪽 벽에 붙은 게이지 기호 → 상자 */}
+              <circle cx={CR + 14} cy={330} r={14} fill="#FFFFFF" stroke={T.on} strokeWidth={2} />
+              <text x={CR + 14} y={330 + px(4)} textAnchor="middle" fontSize={px(FSPX.small)} fontWeight={700} fill={T.text} fontFamily={FONT}>IG</text>
               {box(800 + P / 2, 330 - IGH / 2, 220, IGH, "이온 게이지", <>
                 {kv(812 + P / 2, 1008 + P / 2, 330 - IGH / 2 + 8 + px(14) + px(26), "이온", "ig.ion_torr")}
                 {kv(812 + P / 2, 1008 + P / 2, 330 - IGH / 2 + 8 + px(14) + px(50), "A", "ig.a_torr")}
                 {kv(812 + P / 2, 1008 + P / 2, 330 - IGH / 2 + 8 + px(14) + px(74), "B", "ig.b_torr")}
               </>)}
-              {/* 도어 */}
-              {door("door_up", CX - 120, 8, "도어 올림")}
-              {door("door_down", CX + 10, 8, "도어 내림")}
+              {/* 도어 — 이름·상태 글 한 곳 + 버튼 둘 */}
+              <text x={CL} y={22 + px(6)} fontSize={px(FSPX.body)} fontWeight={700} fill={T.text} fontFamily={FONT}>도어</text>
+              <text x={CL} y={22 + px(6) + px(16)} fontSize={px(FSPX.small)} fill={T.muted} fontFamily={FONT}>{doorWord}</text>
+              {door("door_up", 520, 10, "올림")}
+              {door("door_down", 650, 10, "내림")}
               {/* 가스 */}
-              {mfcBox(30 - P, 98, "Ar", "mfc.ar_sccm", "mfc.ar_set")}
-              {valve("ar_valve", 325 - P / 2, 130, "Ar 밸브")}
-              {mfcBox(30 - P, 194, "O₂", "mfc.o2_sccm", "mfc.o2_set")}
-              {valve("o2_valve", 325 - P / 2, 226, "O₂ 밸브")}
+              {mfcBox(30 - P, 108, "Ar", "mfc.ar_sccm", "mfc.ar_set")}
+              {valve("ar_valve", 310 - P / 2, 140, "Ar 밸브")}
+              {mfcBox(30 - P, 198, "O₂", "mfc.o2_sccm", "mfc.o2_set")}
+              {valve("o2_valve", 310 - P / 2, 230, "O₂ 밸브")}
               {/* Vent */}
-              {valve("vent", 805 + P / 2, 130, "Vent")}
-              {small(888 + P, 130 + px(4), "대기", "start")}
+              {valve("vent", 830 + P / 2, 140, "Vent")}
+              {small(908 + P, 140 + px(4), "대기", "start")}
               {/* 배기 */}
-              {valve("mv", 520, 428, "MV", true, "right")}
-              {pump("turbo", 520, 482, "Turbo")}
-              {valve("fv", 640, 482, "FV", false, "above")}
-              {valve("rv", 740, 428, "RV", true, "right")}
-              {pump("rotary", 850, 482, "Rotary")}
+              {valve("mv", MVX, 440, "MV", true, "right")}
+              {pump("turbo", MVX, PY, "Turbo")}
+              {valve("fv", 580, PY, "FV", false, "above")}
+              {valve("rv", RVX, 440, "RV", true, "right")}
+              {pump("rotary", 820, PY, "Rotary")}
             </svg>
           </div>
           <ValuePanel bundle={bundle} snap={snap} links={links} plcOk={plcOk} ion={{ on: on("ion"), wait: wait("ion"), lock: why("ion"), press: () => press("ion") }} />
@@ -323,25 +330,27 @@ function ValuePanel({ bundle, snap, links, plcOk, ion }: {
   const fieldOf = (col: string): FieldDef | undefined => bundle?.snapshot?.blocks?.flatMap((b) => b.fields).find((f) => f.column === col);
   const blockLabel = (n: string, l: string) => bundle?.snapshot?.blocks?.find((b) => b.name === n)?.label ?? l;
   const plc = (k: string) => (plcOk ? snap?.[`plc.${k}`] === true : null);
+  /** 파워 한 줄 — 출력이 켜져 있으면 "켜짐 n W", 꺼져 있으면 "꺼짐"(값 없이), 출력 상태를 모르면 값만. 쓰지 않는 장비는 이유 한 줄 */
   const power = (name: "dc" | "rf" | "rfp", valueCol: string, outCol: string, l: string) => {
     const off = links?.[name]?.q === "off";
     const f = fieldOf(valueCol);
     const t = f ? fieldText(f, snap?.[valueCol], snap, bundle?.snapshot?.blocks) : null;
     const out = snap?.[outCol];
+    const val = <span className="whitespace-nowrap font-semibold tabular-nums text-[#133A7C]">
+      {t?.text || "—"}{t?.text && f?.unit && <span className={`ml-1 font-normal text-[#5B6470] ${FS.small}`}>{f.unit}</span>}
+    </span>;
     return (
       <div className="flex min-h-[26px] items-baseline justify-between gap-2">
         <span className="min-w-0 truncate font-semibold text-[#1B1F24]">{blockLabel(name, l)}</span>
-        {off ? <Chip>사용하지 않음</Chip> : (
-          <span className="flex shrink-0 items-baseline gap-2">
-            <span className="whitespace-nowrap font-semibold tabular-nums text-[#133A7C]">
-              {t?.text || "—"}{t?.text && f?.unit && <span className={`ml-1 font-normal text-[#5B6470] ${FS.small}`}>{f.unit}</span>}
-            </span>
-            {out !== undefined && <span className={`${FS.small} ${out === true ? "font-semibold text-[#1B1F24]" : "text-[#5B6470]"}`}>{out === true ? "출력" : "꺼짐"}</span>}
-          </span>
-        )}
+        {off ? <span className={`${FS.small} text-[#5B6470]`}>사용하지 않음(장비 설정에서 꺼짐)</span>
+          : out === undefined ? val
+          : out === true ? <span className="flex shrink-0 items-baseline gap-1.5"><b className="text-[#1B1F24]">켜짐</b>{val}</span>
+          : <span className="text-[#5B6470]">꺼짐</span>}
       </div>
     );
   };
+  // RF 출력은 묶음 19 rf.out_on(D40 > 0 또는 순방향 ≥ 5 W), 옛 묶음은 지금처럼 DAC 출력 허용 비트
+  const rfOut = snap?.["rf.out_on"] !== undefined ? "rf.out_on" : "rf.dac_enable";
   const lamps: [string, string][] = [["air", "Air"], ["g1", "G1"], ["g2", "G2"], ["atm", "ATM"], ["water", "냉각수"]];
   const sec = (title: string, children: ReactNode) => (
     <div className="min-w-0 @[1100px]:border-t @[1100px]:border-[#E3E6EA] @[1100px]:pt-3 @[1100px]:first:border-t-0 @[1100px]:first:pt-0">
@@ -353,32 +362,26 @@ function ValuePanel({ bundle, snap, links, plcOk, ion }: {
     <aside className={`grid w-full shrink-0 gap-4 rounded-[10px] border border-[#E3E6EA] p-3 @[640px]:grid-cols-2 @[900px]:grid-cols-4 @[1100px]:w-[280px] @[1100px]:grid-cols-1 @[1100px]:gap-3 ${FS.body}`} aria-label="값">
       {sec("파워", <>
         {power("dc", "dc.p", "dc.out", "DC Power")}
-        {power("rf", "rf.fwd_w", "rf.dac_enable", "RF Power")}
+        {power("rf", "rf.fwd_w", rfOut, "RF Power")}
         {power("rfp", "rfp.fwd_w", "rfp.out_on", "RF Pulse")}
       </>)}
       {sec("유틸리티", (
-        <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-          {lamps.map(([k, l]) => (
-            <span key={k} className="flex items-center gap-1.5" title={plc(k) ? "감지" : "없음"}>
-              <Dot on={plc(k)} dim={!plcOk} />{fieldOf(`plc.${k}`)?.label ?? l}
-            </span>
-          ))}
+        <div className="grid grid-cols-1 gap-y-1.5">
+          {lamps.map(([k, l]) => <StateTag key={k} on={plc(k)} label={fieldOf(`plc.${k}`)?.label ?? l} words="detect" />)}
         </div>
       ))}
       {sec("이오나이저", <>
         <Btn size="md" lock={ion.lock} onClick={ion.press} className="mb-2 w-full">
           {ion.on ? "이오나이저 끄기" : "이오나이저 켜기"}{ion.wait && " · 전환 중"}
         </Btn>
-        <div className="grid grid-cols-2 gap-x-2 gap-y-1.5">
-          <StateBox on={plc("ion_remote_on")} label="ON" />
-          <StateBox on={plc("ion_run")} label="구동" />
-          <StateBox on={plc("ion_lamp")} label="점등" />
-          {plcOk && snap?.["plc.ion_ot"] === true
-            ? <Chip tone="warn" icon={<AlertTriangle size={12} />}>수명 초과</Chip>
-            : <StateBox on={plc("ion_ot")} label="수명 초과" />}
+        <div className="grid grid-cols-1 gap-y-1.5">
+          <StateTag on={plc("ion_remote_on")} label="켜기 출력" />
+          <StateTag on={plc("ion_run")} label="구동" />
+          <StateTag on={plc("ion_lamp")} label="점등" />
+          <StateTag on={plc("ion_ot")} label="수명 초과" alert />
         </div>
       </>)}
-      {sec("인터록", <StateBox on={plc("mv_interlock")} label={fieldOf("plc.mv_interlock")?.label ?? "MV 인터록"} />)}
+      {sec("인터록", <StateTag on={plc("mv_interlock")} label={fieldOf("plc.mv_interlock")?.label ?? "MV 인터록"} />)}
     </aside>
   );
 }

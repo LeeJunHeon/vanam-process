@@ -147,12 +147,14 @@ function VersionDetail({ v }: { v: Version }) {
   );
 }
 
-export default function Chk2Config({ equipment, bundle, st, perms, connected, reloadSchema, notify }: {
+export default function Chk2Config({ equipment, bundle, st, perms, connected, reloadSchema, notify, startOpen = false, plainHead = false }: {
   equipment: string; bundle: Bundle | null; st: StateData | null; perms: Perms | null; connected: boolean;
   reloadSchema: () => Promise<void>; notify: (n: Omit<Notice, "id" | "at">) => void;
+  startOpen?: boolean;     // W-15 챔버K — 탭을 열면 바로 펼침(기본: 접힘, 지금 동작)
+  plainHead?: boolean;     // W-15 챔버K — 맨 위 한 줄 "설정 버전 n · 바꾼 값은 관리자가 적용합니다"(기본: 없음)
 }) {
   const { detail } = useChk2Mode();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
   const [tab, setTab] = useState<"edit" | "history">("edit");
   const [ov, setOv] = useState<Overview | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -319,6 +321,11 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
           {" "}· 장비별 버전(CHK2·CHK2-SIM 따로) · 적용·되돌리기는 관리자</p>
       ) : err ? <p className={`${FS.body}`}><ErrText>{err}</ErrText></p> : !ov ? <p className={`${FS.body} text-[#5B6470]`}>읽는 중…</p> : (
         <div className="space-y-2">
+          {plainHead && (
+            <p className={`${FS.body} text-[#5B6470]`}>
+              설정 버전 <b className="text-[#1B1F24]">{ov.deviceVersion ?? st?.configVersion ?? "-"}</b> · 바꾼 값은 관리자가 적용합니다
+            </p>
+          )}
           <div className={`flex flex-wrap items-center gap-2 ${FS.small} text-[#5B6470]`}>
             <span>장비 버전 <b className="text-[#1B1F24]">v{ov.deviceVersion ?? "-"}</b>{detail && ov.currentRow && ` (${ov.currentRow.kind})`}</span>
             {ov.base && ov.base.version !== ov.deviceVersion && (

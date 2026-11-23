@@ -34,7 +34,7 @@ export type BlockDef = { name: string; label: string; worker: string; quality: s
 /** 정지 순서 단계(묶음 stopSequence·allStopSequence) */
 export type SeqStepDef = { no: number; act?: string; must?: boolean; desc?: string; label?: string; when?: string };
 /** event 메시지 (context.source, context.kind) → 화면 이름·level(main 평소 로그 / detail 상세에서만) — 묶음 v11 */
-export type EventKindDef = { source: string; kind: string; label: string; level: string };
+export type EventKindDef = { source: string; kind: string; label: string; level: string; desc?: string | null };   // desc: 묶음 19
 export type ArgDef = {
   name: string; type?: string; required?: boolean; min?: number | null; max?: number | null;
   paramMin?: string | null; paramMax?: string | null;

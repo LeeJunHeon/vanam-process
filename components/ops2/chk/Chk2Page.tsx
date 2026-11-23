@@ -19,6 +19,7 @@ import { StatusBand, StatusBar, type ConnInfo } from "./Chk2Status";
 import Chk2Run from "./Chk2Run";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
 import Chk2Config from "./Chk2Config";
+import Chk2LocalConfig from "./Chk2LocalConfig";
 import Chk2History from "./Chk2History";
 import Chk2Recipes from "./Chk2Recipes";
 import Chk2Manual from "./Chk2Manual";
@@ -41,7 +42,7 @@ const PLC_KINDS = new Set(["PLC_BUTTON", "HEATER_SV", "HEATER_ON", "HEATER_OFF",
 const SEND_ERROR: Record<string, string> = {
   device_offline: "장비 연결 끊김(마지막 연락 10 s 넘음)",
   forbidden: "권한 없음(장비 담당자·관리자만 조작)",
-  no_schema: "장비 정의를 아직 받지 못함",
+  no_schema: "장비 정의를 기다리는 중",
   unknown_kind: "웹에서 낼 수 없는 명령",
   bad_args: "인자 오류",
   config_path: "설정 변경은 설정 화면에서",
@@ -53,12 +54,13 @@ export type TabKey = "run" | "hmi" | "manual" | "recipe" | "log" | "config";
 const WEB_TABS: { key: TabKey; label: string; title: string }[] = [
   { key: "run", label: "운전", title: "공정 상태·주요 값·다음 공정·장비 카드" },
   { key: "hmi", label: "HMI", title: "장비 계통도와 PLC 버튼" },
-  { key: "manual", label: "수동 조작", title: "장비를 블록 하나씩 켜고 끄는 수동 조작(감시·안전 규칙은 공정과 같음)" },
+  { key: "manual", label: "수동 조작", title: "가스·압력·셔터·파워를 하나씩 켜고 끄는 수동 조작(감시·안전 규칙은 공정과 같음)" },
   { key: "recipe", label: "레시피", title: "공정·히터 레시피 목록과 편집" },
   { key: "log", label: "기록", title: "로그·조작 기록·공정 이력" },
   { key: "config", label: "설정", title: "장비 설정 보기와 적용" },
 ];
-const LOCAL_TABS = WEB_TABS.filter((t) => t.key === "run" || t.key === "hmi" || t.key === "manual" || t.key === "log");
+// 노트북: 설정은 보기 전용(W-15 — Chk2LocalConfig)
+const LOCAL_TABS = WEB_TABS.filter((t) => t.key !== "recipe").map((t) => (t.key === "config" ? { ...t, title: "장비 설정 보기(바꾸기는 웹에서)" } : t));
 // 노트북 조작(묶음 18, 장비 LOCAL_HMI_CONTROL) — 화면 이름. 옛 장비(값 없음)는 보기와 정지만
 const HMI_CONTROL_LABEL: Record<string, string> = { view_stop: "보기와 정지만", unlock: "잠금을 푼 뒤 조작", always: "항상 조작" };
 
@@ -260,7 +262,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
     });
     const b = r.body;
     if (!r.ok) {
-      notify({ tone: "bad", title: `${what}: 보내지 못함`,
+      notify({ tone: "bad", title: `${what}: 보낼 수 없었음`,
                text: `${SEND_ERROR[b.error ?? ""] ?? b.error ?? `HTTP ${r.status}`}${b.detail ? ` · ${b.detail}` : ""}` });
     } else if (b.status === "accepted") {
       notify({ tone: "ok", title: `${what}: 장비가 받음` });
@@ -438,7 +440,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {d.state && !connected && (!local || d.streamUp) && (
         <Issue level="alarm">
-          <AlertTriangle size={13} className="mr-1 inline" /><b>장비 끊김 {ageSec}초</b> — 표시는 마지막 값이며 조작이 잠겼습니다.
+          <AlertTriangle size={13} className="mr-1 inline" /><b>장비 끊김 {ageSec}초</b>. 표시는 마지막 값이며 조작이 잠겼습니다.
           {webOnline && perms?.canOperate && " 웹은 장비와 이어져 있어 정지 명령은 보낼 수 있습니다."}
         </Issue>
       )}
@@ -469,7 +471,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
             <Tabs small value={logTab} onChange={setLogTab}
               tabs={[{ key: "events", label: "로그" }, { key: "commands", label: "조작 기록" }, { key: "runs", label: "공정 이력" }]} />
           )}
-          {(local || logTab === "events") && <EventFeed bundle={d.bundle} feed={d.feed} />}
+          {(local || logTab === "events") && <EventFeed bundle={d.bundle} feed={d.feed} fill />}
           {!local && logTab === "commands" && <CommandLog bundle={d.bundle} commands={d.commands} />}
           {!local && logTab === "runs" && (
             <>
@@ -477,13 +479,14 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
               <Chk2History equipment={equipment} bundle={d.bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
             </>
           )}
-          {local && <p className={`${FS.small} text-[#5B6470]`}>레시피·설정·공정 기록·조작 기록은 웹 화면에서</p>}
+          {local && <p className={`${FS.small} text-[#5B6470]`}>레시피·공정 기록·조작 기록은 웹 화면에서</p>}
         </div>
       )}
       {curTab === "config" && !local && !neverConnected && (
         <Chk2Config equipment={equipment} bundle={d.bundle} st={st} perms={perms ?? null} connected={connected}
-          reloadSchema={d.loadSchema} notify={notify} />
+          reloadSchema={d.loadSchema} notify={notify} startOpen plainHead />
       )}
+      {curTab === "config" && local && <Chk2LocalConfig bundle={d.bundle} st={st} />}
 
       {tabTo && (
         <SimpleConfirm title="저장하지 않음" ok="버리고 나가기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 탭을 바꿀까요?"

@@ -22,7 +22,7 @@ import { blockEnvOf, checkBlocks, expandBlocks, pulseEdgeViolation, usesOf, type
 export { pyFixed, pyFloatRepr, pyG, pyNum, pyRound, pyTruthy } from "./py";
 
 /** 이 검사가 맞춘 묶음 버전(골든과 같음) — 묶음 version 이 다르면 화면이 "장비 판단만 믿을 것" 안내 */
-export const GOLDEN_EXPORT_VERSION = 18;
+export const GOLDEN_EXPORT_VERSION = 19;
 /** 챔버K recipe.DELAY_RE.pattern(IGNORECASE) — 골든 시험이 묶음 delayPattern 과 같은지 본다 */
 export const DELAY_PATTERN = String.raw`^\s*delay\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$`;
 const DELAY_RE = new RegExp(DELAY_PATTERN, "i");
@@ -162,7 +162,7 @@ export function checkProcessRow(row: Row, env: CheckEnv): RowResult {
     }
   } catch (e) {
     if (!(e instanceof PyValueError)) throw e;
-    errs.push(`값 형식: ${e.message} — 장비가 처리하지 못하는 값`);
+    errs.push(`값 형식: ${e.message}(장비가 처리할 수 없는 값)`);
   }
   return { clean: errs.length ? null : r, errors: errs, warnings: warns };
 }
@@ -410,7 +410,7 @@ export function checkBlockRow(row: Row, env: CheckEnv): Omit<RowCheck, "kind"> {
     return { ...none, errors: ["블록 행은 process_name(문자열)·blocks 만"], warnings: [] };
   }
   const be = env.blocks;
-  if (!be) return { ...none, errors: [], warnings: ["블록 공정 — 이 장비 정의에는 블록 규칙 표가 없어 웹 검사 없음(장비가 검사)"] };
+  if (!be) return { ...none, errors: [], warnings: ["블록 공정: 이 장비 정의에는 블록 규칙 표가 없어 웹 검사 없음(장비가 검사)"] };
   const r = checkBlocks(row.blocks, be);
   if (!r.clean) return { ...none, errors: r.errors, warnings: r.warnings };
   return {
@@ -464,7 +464,7 @@ export function checkProcessRecipe(rows: unknown, env: CheckEnv): RecipeCheck {
           c.warnings.push(e.detail);
         } else {
           if (!(e instanceof PyValueError)) throw e;
-          c.errors.push(`값 형식: ${e.message} — 장비가 처리하지 못하는 값`);
+          c.errors.push(`값 형식: ${e.message}(장비가 처리할 수 없는 값)`);
         }
       }
     }

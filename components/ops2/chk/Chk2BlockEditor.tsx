@@ -436,7 +436,7 @@ export function ExpandedView({ exp, bundle, showParams }: { exp: ExpBlock[]; bun
                 <span className="min-w-0 flex-1">
                   {s.message}
                   {s.action === "END_STOP" && isObj(s.spec) && Array.isArray(s.spec.skip) && s.spec.skip.length > 0
-                    && <span className="text-gray-400"> — 뺀 단계 {s.spec.skip.join("·")}</span>}
+                    && <span className="text-gray-400">(뺀 단계 {s.spec.skip.join("·")})</span>}
                 </span>
                 <span className="shrink-0 tabular-nums text-gray-400">{stepTime(s)}</span>
               </li>
@@ -606,7 +606,7 @@ export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, err
         </li>
         {e.kids && (e.kids.length ? rowsOf(e.kids) : (
           <li style={{ marginLeft: (p.depth + 1) * 18 }} className={`rounded-[10px] border border-dashed border-[#C7D5FB] px-2 py-1 ${FS.small} text-[#1D4ED8]`}>
-            빈 반복 — 이 반복을 고르고 &apos;반복 안에 넣기&apos;로 블록을 넣으세요
+            빈 반복입니다. 이 반복을 고르고 &apos;반복 안에 넣기&apos;로 블록을 넣으세요
           </li>
         ))}
       </Fragment>
