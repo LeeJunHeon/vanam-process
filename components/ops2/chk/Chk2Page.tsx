@@ -469,7 +469,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
             <Tabs small value={logTab} onChange={setLogTab}
               tabs={[{ key: "events", label: "로그" }, { key: "commands", label: "조작 기록" }, { key: "runs", label: "공정 이력" }]} />
           )}
-          {(local || logTab === "events") && <EventFeed bundle={d.bundle} feed={d.feed} />}
+          {(local || logTab === "events") && <EventFeed bundle={d.bundle} feed={d.feed} fill />}
           {!local && logTab === "commands" && <CommandLog bundle={d.bundle} commands={d.commands} />}
           {!local && logTab === "runs" && (
             <>

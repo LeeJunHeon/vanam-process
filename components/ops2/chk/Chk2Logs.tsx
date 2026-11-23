@@ -4,6 +4,8 @@
 // 로그 기본 보기 = 묶음 eventKinds 의 main + 경고·오류 전부 + 공정 시작·끝·명령 결과·설정 결과, '상세'를 켜면 전부와 원시 코드·문구.
 // 한 줄 = 시각 · 종류 이름(주의·오류는 아이콘 + 색) · 한글 내용(text.logLine — 상태 바뀜·블록·공정 중 수정·명령 결과는 묶음 이름으로).
 // W-10a: 명령 상태·런 결과 배지와 사유 줄도 아이콘 + 글자(kit Tag) — 색만으로 뜻을 전하지 않는다. '경고·오류만' 단추는 켜짐 표시(체크).
+// W-15(챔버K 로그 — EventFeed 는 챔버K 만 쓴다): 한 줄 = 시각 · 장비 이름 · 종류 · 내용(한 번만), 상세 보기면 끝에 코드만 작게.
+//   마우스 설명은 종류의 뜻(묶음 19 eventKinds desc)이 있을 때만. 로그 칸은 화면 높이에 맞추고(fill), 맨 아래 따라가기는 그대로.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertOctagon, AlertTriangle, CheckSquare, Hourglass, Send, Square } from "lucide-react";
 import { FS, Card, Tag, type TagKind } from "./kit";
@@ -17,7 +19,7 @@ const LEVEL_TONE: Record<string, string> = {
   error: "text-[#B42318]", critical: "text-[#B42318]", warn: "text-[#B54708]", info: "text-[#5B6470]",
 };
 
-export function EventFeed({ bundle, feed }: { bundle: Bundle | null; feed: FeedItem[] }) {
+export function EventFeed({ bundle, feed, fill = false }: { bundle: Bundle | null; feed: FeedItem[]; fill?: boolean }) {
   const [onlyIssue, setOnlyIssue] = useState(false);
   const { detail } = useChk2Mode();
   const box = useRef<HTMLDivElement | null>(null);
@@ -45,16 +47,17 @@ export function EventFeed({ bundle, feed }: { bundle: Bundle | null; feed: FeedI
       ) : (
         <div ref={box}
           onScroll={() => { const el = box.current; if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
-          className="h-64 space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 font-mono [overflow-anchor:none]">
+          className={`${fill ? "h-[calc(100vh-260px)] min-h-[320px]" : "h-64"} space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 [overflow-anchor:none]`}>
           {shown.map((r) => (
-            <p key={r.e.id} className={`flex gap-2 ${FS.small} leading-snug`} title={r.raw}>
-              <span className="shrink-0 text-[#8A929D]">{fmtKst(r.e.ts)}</span>
+            <p key={r.e.id} className={`flex gap-2 ${FS.small} leading-snug`} title={r.desc}>
+              <span className="shrink-0 font-mono tabular-nums text-[#8A929D]">{fmtKst(r.e.ts)}</span>
+              {r.source && <span className="w-24 shrink-0 truncate text-[#5B6470]">{r.source}</span>}
               <span className={`flex shrink-0 items-center gap-1 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.level === "warn" ? <AlertTriangle size={11} /> : r.level === "error" || r.level === "critical" ? <AlertOctagon size={11} /> : null}{r.kind}
               </span>
-              <span className={LEVEL_TONE[r.level] ?? LEVEL_TONE.info}>
+              <span className={`min-w-0 ${r.level === "info" ? "text-[#1B1F24]" : LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.text}
-                {detail && <span className="ml-1.5 text-[#5B6470]">{r.raw}</span>}
+                {detail && <span className="ml-1.5 font-mono text-[11px] text-[#8A929D]">{r.code ?? r.raw}</span>}
               </span>
             </p>
           ))}

@@ -122,7 +122,8 @@ export function runTitle(r: { name: string | null; recipeName: string | null; st
 // ───────────── 로그(사건) ─────────────
 export type FeedLike = { type: string; data: Obj };
 export type LogLine = { level: string; kind: string; text: string; raw: string; main: boolean; source?: string;
-  desc?: string };   // desc: 사건 종류의 뜻(묶음 19 eventKinds[].desc) — 있을 때만 마우스 설명
+  desc?: string;     // desc: 사건 종류의 뜻(묶음 19 eventKinds[].desc) — 있을 때만 마우스 설명
+  code?: string };   // code: 사건 코드·규칙 번호만(raw 에서 문구를 뺀 것 — 상세 보기 끝에 작게)
 
 const ADJ_RESULT: Record<string, string> = {
   applied: "바로 적용", scheduled: "다음 블록부터", confirmed: "장비 확인", failed: "장비 적용 실패", rejected: "거부",
@@ -208,5 +209,6 @@ export function logLine(b: Bundle | null, e: FeedLike): LogLine {
     const label = reasonLabel(b, code);
     text = [label !== code && label !== name ? label : "", s(d.message)].filter(Boolean).join(" — ");
   }
-  return { level, kind: name, text, raw, main, source: source ? sourceLabel(b, source) : undefined, ...(ek?.desc ? { desc: ek.desc } : {}) };
+  return { level, kind: name, text, raw, main, source: source ? sourceLabel(b, source) : undefined, ...(ek?.desc ? { desc: ek.desc } : {}),
+           code: `${code}${d.ruleId ? ` [${s(d.ruleId)}]` : ""}` };
 }
