@@ -1,10 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ops2Db } from "@/lib/ops2/db";
-import { checkOutdated } from "@/lib/ops2/chk/recipe";
-import {
-  RECIPE_KINDS, checkSummary, forbidden, fullItem, isUniqueViolation, listItem, readRecipeBody, recipeContext, type RecipeKind,
-} from "@/lib/ops2/recipes";
+import { checkSummary, forbidden, fullItem, isUniqueViolation, listItem, readRecipeBody, recipeContext } from "@/lib/ops2/recipes";
 import type { Prisma } from "@/app/generated/prisma/client";
 
 export const runtime = "nodejs";
@@ -12,20 +9,21 @@ export const dynamic = "force-dynamic";
 
 // GET /api/ops2/[equipment]/recipes?kind=process|heater — 그 기준 장비(CHK2-SIM → CHK2)의 레시피 목록(누구나).
 // 줄마다 지금 묶음으로 낸 웹 검사 결과 수(check). canEdit = 저장할 수 있는가, outdated = 묶음 version ≠ 웹 검사 기준.
+// 챔버12(CH12·CH12-SIM): kind 는 ch1·ch2(챔버별 블록 레시피 — lib/ops2/ch12/recipes.ts 로 검사), outdated = 블록 정의 판 ≠ 웹.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ equipment: string }> }) {
   const { equipment } = await params;
   const ctx = await recipeContext(equipment);
   if (!ctx.ok) return ctx.response;
   const kind = req.nextUrl.searchParams.get("kind");
-  if (kind !== null && !RECIPE_KINDS.includes(kind as RecipeKind)) {
-    return NextResponse.json({ error: "bad_kind", detail: "kind 는 process 또는 heater" }, { status: 400 });
+  if (kind !== null && !ctx.kinds.includes(kind)) {
+    return NextResponse.json({ error: "bad_kind", detail: `kind 는 ${ctx.kinds.join(" 또는 ")}` }, { status: 400 });
   }
   const rows = await ops2Db.ops2Recipe.findMany({
     where: { baseEquipment: ctx.base, ...(kind ? { kind } : {}) },
     orderBy: [{ kind: "asc" }, { name: "asc" }],
   });
   return NextResponse.json({
-    base: ctx.base, canEdit: ctx.canEdit, bundleVersion: ctx.bundleVersion, outdated: checkOutdated(ctx.bundle),
+    base: ctx.base, canEdit: ctx.canEdit, bundleVersion: ctx.bundleVersion, outdated: ctx.outdated,
     recipes: rows.map((r) => listItem(r, ctx.env)),
   });
 }
@@ -37,9 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
   const ctx = await recipeContext(equipment);
   if (!ctx.ok) return ctx.response;
   if (!ctx.canEdit) return forbidden();
-  const b = await readRecipeBody(req, true);
+  const b = await readRecipeBody(req, true, ctx.kinds);
   if (!b.ok) return b.response;
-  const kind = b.kind as RecipeKind;
+  const kind = b.kind as string;
   const now = new Date();
   try {
     const r = await ops2Db.ops2Recipe.create({

@@ -10,7 +10,7 @@ import SubstrateFormModal from "@/components/SubstrateFormModal";
 import OrderFormModal from "@/components/OrderFormModal";
 import type { CodeOption, EmployeeOption } from "@/components/OrderFormModal";
 import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE } from "@/lib/status";
-import { errorMessage } from "@/lib/fetchError";
+import { errorMessage, fetchJson } from "@/lib/fetchError";
 import { dueProgress, PROGRESS_BAR, PROGRESS_TEXT } from "@/lib/progress";
 
 type Row = ProcessItem & {
@@ -56,26 +56,36 @@ export default function ProcessesPage() {
   const [recording, setRecording] = useState<Row | null>(null);
   const [creating, setCreating] = useState(false);
 
-  const load = useCallback(async () => {
+  // 목록 조회. state 는 응답 콜백에서만 바꾼다.
+  const fetchList = useCallback(
+    () =>
+      fetchJson<Row[]>(`/api/processes?q=${encodeURIComponent(q)}`)
+        .then(
+          (rows) => setItems(rows),
+          (e) => setError(errorMessage(e, "공정 목록을 불러오지 못했습니다.")),
+        )
+        .finally(() => setLoading(false)),
+    [q],
+  );
+
+  // 검색어를 바꾸면 바로 로딩 표시를 켜고 이전 오류를 지운다(조회는 아래 effect 가 한다)
+  const changeQ = (v: string) => {
+    setQ(v);
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/processes?q=${encodeURIComponent(q)}`);
-      if (!res.ok) {
-        const d = await res.json().catch(() => null);
-        throw new Error(d?.error ?? `조회 실패 (${res.status})`);
-      }
-      setItems(await res.json());
-    } catch (e) {
-      setError(errorMessage(e, "공정 목록을 불러오지 못했습니다."));
-    } finally {
-      setLoading(false);
-    }
-  }, [q]);
+  };
 
+  // 다시 불러오기(저장·삭제 뒤, 다시 시도) — 로딩 표시를 켜고 이전 오류를 지운 뒤 조회한다
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return fetchList();
+  }, [fetchList]);
+
+  // 첫 조회·검색어 변경. 이때의 로딩 표시·오류 지움은 초기값과 changeQ 가 맡는다
   useEffect(() => {
-    load();
-  }, [load]);
+    fetchList();
+  }, [fetchList]);
 
   useEffect(() => {
     (async () => {
@@ -146,7 +156,7 @@ export default function ProcessesPage() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => changeQ(e.target.value)}
             placeholder="발주번호·고객사·작업명·공정상세 검색"
             className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-400"
           />

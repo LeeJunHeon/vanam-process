@@ -30,7 +30,56 @@ function spread(want: number[], gap: number, lo: number, hi: number): number[] {
   for (const o of idx) { const y = Math.max(o.y, prev + gap, lo); out[o.i] = y; prev = y; }
   const over = prev - hi;
   if (over > 0) for (let i = 0; i < out.length; i++) out[i] = Math.max(lo, out[i] - over);
+  // 아래 끝을 넘어 전체를 끌어올릴 때 맨 위가 lo 에 걸리면 그 아래 라벨만 올라와 간격이 무너진다(위·아래 양쪽에 라벨 쌍 — 2026-11-19).
+  // 그럴 때만: 위→아래로 간격을 벌린 값에서 아래→위로 한 번 더 맞춘다(뒤에서부터 y[i] = min(y[i], y[i+1] − 간격), 맨 아래는 hi).
+  // 띠에 다 들어가는 한(layoutTrendLabels 가 먼저 확인) 모든 간격이 지켜지고 맨 위도 lo 아래로 가지 않는다. 겹침이 없던 결과는 그대로(챔버K HTML 같음).
+  if (idx.every((o, k) => k === 0 || out[o.i] - out[idx[k - 1].i] >= gap - 1e-9)) return out;
+  const ys: number[] = [];
+  prev = -Infinity;
+  for (const o of idx) { prev = Math.max(o.y, prev + gap, lo); ys.push(prev); }
+  for (let k = ys.length - 1; k >= 0; k--) ys[k] = Math.min(ys[k], k === ys.length - 1 ? hi : ys[k + 1] - gap);
+  idx.forEach((o, k) => { out[o.i] = Math.max(lo, ys[k]); });
   return out;
+}
+// 오른쪽 라벨 — 글자 줄 높이(FSPX.small 의 1.25 배)에 여유 1 px 를 더한 간격으로 띄운다(예전 14 px 는 12 px 글자의 줄 높이 15 px 보다 좁아
+// 지금 값과 목표가 같으면 '20' 과 '20 목표' 가 겹쳤다 — 2026-11-19). 원래 이 간격 이상 떨어져 있던 라벨은 자리가 그대로다.
+// 띠(그림 위 TOP+2 ~ 그림 아래 TOP+ph) 안에 다 못 들어가면 ① 같은 선의 지금 값·목표가 같은 글이면 한 줄로 합치고('20 · 목표 20')
+// ② 그래도 모자라면 띠를 그림 아래(시간 눈금 줄 높이까지 — 오른쪽 띠라 눈금 글자와 겹치지 않음)로, ③ 그래도 모자라면 그림 높이를 늘린다.
+export const LABEL_LINE = Math.ceil(FSPX.small * 1.25);
+export const LABEL_GAP = LABEL_LINE + 1;
+export type TrendLabelIn = { y: number; text: string; group: string; dashed: boolean };
+export type TrendLabel = { y: number; text: string; dashed: boolean; members: number[] };
+export function layoutTrendLabels(items: (TrendLabelIn | null)[], lo: number, hi: number, height: number): { labels: TrendLabel[]; height: number } {
+  let labs: TrendLabel[] = [];
+  items.forEach((it, i) => { if (it) labs.push({ y: it.y, text: it.dashed ? `${it.text} 목표` : it.text, dashed: it.dashed, members: [i] }); });
+  const fits = (n: number, a: number, b: number) => n <= 1 || (n - 1) * LABEL_GAP <= b - a;
+  if (!fits(labs.length, lo, hi)) {                       // ① 같은 선의 지금 값·목표가 같은 글이면 한 줄로
+    const merged: TrendLabel[] = [];
+    for (const l of labs) {
+      const it = items[l.members[0]]!;
+      const pair = merged.find((m) => {
+        const a = items[m.members[0]]!;
+        return m.members.length === 1 && a.group === it.group && a.dashed !== it.dashed && a.text === it.text;
+      });
+      if (pair) {
+        pair.members.push(l.members[0]);
+        pair.text = `${it.text} · 목표 ${it.text}`;
+        pair.dashed = false;
+        pair.y = Math.min(pair.y, l.y);
+      } else merged.push({ ...l, members: [...l.members] });
+    }
+    labs = merged;
+  }
+  const top = lo;
+  let bottom = hi, h = height;
+  if (!fits(labs.length, top, bottom)) bottom = Math.max(bottom, height - Math.ceil(LABEL_LINE / 2));   // ② 띠를 아래로
+  if (!fits(labs.length, top, bottom)) {                  // ③ 그림 높이를 늘린다
+    const need = (labs.length - 1) * LABEL_GAP - (bottom - top);
+    bottom += need;
+    h = height + need;
+  }
+  const ys = spread(labs.map((l) => l.y), LABEL_GAP, top, bottom);
+  return { labels: labs.map((l, i) => ({ ...l, y: ys[i] })), height: h };
 }
 const fmt = (v: number) => String(Number(v.toPrecision(4)));
 
@@ -62,14 +111,17 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
     return d;
   };
   const lastPts = lines.map((l) => [...l.pts].reverse().find((p) => p.v !== null && p.t >= t0 && p.t <= t1) ?? null);
-  const labY = spread(lastPts.map((p) => (p ? y(p.v as number) : TOP + ph / 2)), 14, TOP + 2, TOP + ph);
+  const lay = layoutTrendLabels(lastPts.map((p, k) => (p ? { y: y(p.v as number), text: fmt(p.v as number), group: lines[k].color, dashed: !!lines[k].dashed } : null)),
+    TOP + 2, TOP + ph, H);
+  const labOf = new Map<number, TrendLabel>();
+  for (const l of lay.labels) for (const m of l.members) labOf.set(m, l);
   const near = (l: Line, t: number) => {
     let best: { t: number; v: number | null } | null = null;
     for (const p of l.pts) if (p.t <= t && (!best || p.t > best.t)) best = p;
     return best && t - best.t < 120_000 ? best.v : null;
   };
   return (
-    <svg width={width} height={H} role="img" aria-label={`${title} 추세(${unit})`}
+    <svg width={width} height={lay.height} role="img" aria-label={`${title} 추세(${unit})`}
       onPointerLeave={() => setHover(null)}
       onPointerMove={(e) => {
         const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect();
@@ -104,15 +156,22 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
         <path key={l.key} d={path(l)} fill="none" stroke={l.color} strokeWidth={l.dashed ? 1.5 : 2} strokeLinejoin="round" strokeLinecap="round"
           strokeDasharray={l.dashed ? "4 3" : undefined} opacity={l.dashed ? 0.85 : 1} />
       ))}
-      {lastPts.map((p, k) => p && (
-        <g key={lines[k].key}>
-          <polyline fill="none" stroke="#C9CED6" strokeWidth={1}
-            points={`${x(p.t) + 3},${y(p.v as number)} ${LEFT + pw + 8},${y(p.v as number)} ${LEFT + pw + 16},${labY[k]}`} />
-          <text x={LEFT + pw + 20} y={labY[k] + 3.5} fontSize={FSPX.small} fill={lines[k].dashed ? "#5B6470" : "#133A7C"} fontWeight={lines[k].dashed ? 400 : 700}>
-            {fmt(p.v as number)}{lines[k].dashed ? " 목표" : ""}
-          </text>
-        </g>
-      ))}
+      {lastPts.map((p, k) => {
+        const lab = labOf.get(k);
+        if (!p || !lab) return null;
+        const first = lab.members[0] === k;                // 합친 라벨은 글 하나 + 선마다 지시선
+        return (
+          <g key={lines[k].key}>
+            <polyline fill="none" stroke="#C9CED6" strokeWidth={1}
+              points={`${x(p.t) + 3},${y(p.v as number)} ${LEFT + pw + 8},${y(p.v as number)} ${LEFT + pw + 16},${lab.y}`} />
+            {first && (
+              <text x={LEFT + pw + 20} y={lab.y + 3.5} fontSize={FSPX.small} fill={lab.dashed ? "#5B6470" : "#133A7C"} fontWeight={lab.dashed ? 400 : 700}>
+                {lab.members.length > 1 ? lab.text : <>{fmt(p.v as number)}{lines[k].dashed ? " 목표" : ""}</>}
+              </text>
+            )}
+          </g>
+        );
+      })}
       {hover !== null && (
         <g>
           <line x1={x(hover)} x2={x(hover)} y1={TOP} y2={TOP + ph} stroke="#5B6470" strokeDasharray="2 2" />
@@ -124,7 +183,8 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
   );
 }
 
-type TrendDef = { title: string; unit: string; lines: [string, string, string | null][] };
+/** 그래프 하나 — 제목·단위·선([값 열, 이름, 목표 열]). 챔버12 화면은 자기 열로 만든 목록을 defs 로 넘긴다 */
+export type TrendDef = { title: string; unit: string; lines: [string, string, string | null][] };
 const trendDefs = (pressureTarget: string): TrendDef[] => [
   // 압력 목표선 = pressureTarget(묶음 16 은 선택된 설정점의 값 mfc.sp_sel_mtorr, 옛 장비는 mfc.sp_mtorr)
   { title: "압력", unit: "mTorr", lines: [["mfc.pressure_mtorr", "챔버 압력", pressureTarget]] },
@@ -134,10 +194,12 @@ const trendDefs = (pressureTarget: string): TrendDef[] => [
   { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", "heater.sv2"]] },
 ];
 
-export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr" }: {
+export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세" }: {
   trend: TrendPt[]; equipment: string; runId: string | null; local: boolean; nowMs: number; pressureTarget?: string;
+  defs?: TrendDef[];          // 없으면 챔버K 그래프(압력·밸브 위치·파워·히터) — 챔버12 는 챔버별 열(값이 바뀌지 않게 메모해서)
+  title?: string;
 }) {
-  const TREND_DEFS = useMemo(() => trendDefs(pressureTarget), [pressureTarget]);
+  const TREND_DEFS = useMemo(() => defs ?? trendDefs(pressureTarget), [defs, pressureTarget]);
   const [range, setRange] = useState<Range>("15m");
   const [rows, setRows] = useState<SummaryRow[] | null>(null);
   const box = useRef<HTMLDivElement | null>(null);
@@ -196,7 +258,7 @@ export default function Chk2Trend({ trend, equipment, runId, local, nowMs, press
   const tabs: { key: Range; label: string }[] = [{ key: "15m", label: "15분" }, { key: "1h", label: "1시간" },
     ...(!local && runId ? [{ key: "run" as Range, label: "공정 전체" }] : [])];
   return (
-    <Card title="추세" right={<div className="w-56"><Tabs small tabs={tabs} value={range} onChange={setRange} /></div>}>
+    <Card title={title} right={<div className="w-56"><Tabs small tabs={tabs} value={range} onChange={setRange} /></div>}>
       <div ref={box} className="min-w-0">
         {range !== "run" && <p className={`mb-1 ${FS.small} text-[#5B6470]`}>이 화면을 연 뒤부터 쌓은 값입니다(2초 간격).</p>}
         {range === "run" && rows === null ? <Empty>1분 요약을 읽는 중…</Empty>

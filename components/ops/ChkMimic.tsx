@@ -21,6 +21,53 @@ const GRAY_D = "#a1a1aa";
 const PIPE = "#d4d4d8";
 const PIPE_ON = "#86efac";
 
+/** 노드가 쓰는 화면 상태·조작(ChkMimic 이 매 렌더 넘긴다) */
+type NodeCtl = {
+  canOperate: boolean;
+  isOn: (btn: string) => boolean;
+  isPending: (btn: string) => boolean;
+  click: (btn: string) => void;
+};
+
+// 노드·고정 칸·배관은 렌더 밖에 둔다(매 렌더마다 새 컴포넌트가 되어 SVG 가 다시 만들어지지 않게)
+function Node({
+  ctl, x, y, w, h, label, btn, fs = 12,
+}: { ctl: NodeCtl; x: number; y: number; w: number; h: number; label: string; btn: string; fs?: number }) {
+  const on = ctl.isOn(btn);
+  const wait = ctl.isPending(btn);
+  return (
+    <g onClick={() => ctl.click(btn)} style={{ cursor: ctl.canOperate ? "pointer" : "default" }}
+      className={wait ? "animate-pulse" : undefined}>
+      <rect
+        x={x} y={y} width={w} height={h} rx={7}
+        fill={on ? GREEN : "#ffffff"}
+        stroke={wait ? "#3b82f6" : on ? GREEN_D : GRAY_D}
+        strokeWidth={wait || on ? 2 : 1.25}
+        strokeDasharray={wait ? "5 3" : undefined}
+      />
+      <text x={x + w / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="central"
+        fontSize={fs} fontWeight={700} fill={on ? "#052e16" : "#52525b"}>{label}</text>
+    </g>
+  );
+}
+
+function Static({ x, y, w, h, label }: { x: number; y: number; w: number; h: number; label: string }) {
+  return (
+    <g>
+      <rect x={x} y={y} width={w} height={h} rx={7} fill="#fafafa" stroke="#e4e4e7" strokeWidth={1.25} />
+      <text x={x + w / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="central"
+        fontSize={12} fontWeight={600} fill="#71717a">{label}</text>
+    </g>
+  );
+}
+
+function Pipe({ d, on }: { d: string; on: boolean }) {
+  return (
+    <path d={d} fill="none" stroke={on ? PIPE_ON : PIPE} strokeWidth={6}
+      strokeLinecap="round" strokeLinejoin="round" />
+  );
+}
+
 export default function ChkMimic({
   valves, indicators, online, pendingStates, onRequest, plcLink = true,
 }: Props) {
@@ -51,40 +98,7 @@ export default function ChkMimic({
       args: { on: !cur },
     });
   };
-
-  const Node = ({
-    x, y, w, h, label, btn, fs = 12,
-  }: { x: number; y: number; w: number; h: number; label: string; btn: string; fs?: number }) => {
-    const on = isOn(btn);
-    const wait = isPending(btn);
-    return (
-      <g onClick={() => click(btn)} style={{ cursor: canOperate ? "pointer" : "default" }}
-        className={wait ? "animate-pulse" : undefined}>
-        <rect
-          x={x} y={y} width={w} height={h} rx={7}
-          fill={on ? GREEN : "#ffffff"}
-          stroke={wait ? "#3b82f6" : on ? GREEN_D : GRAY_D}
-          strokeWidth={wait || on ? 2 : 1.25}
-          strokeDasharray={wait ? "5 3" : undefined}
-        />
-        <text x={x + w / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="central"
-          fontSize={fs} fontWeight={700} fill={on ? "#052e16" : "#52525b"}>{label}</text>
-      </g>
-    );
-  };
-
-  const Static = ({ x, y, w, h, label }: { x: number; y: number; w: number; h: number; label: string }) => (
-    <g>
-      <rect x={x} y={y} width={w} height={h} rx={7} fill="#fafafa" stroke="#e4e4e7" strokeWidth={1.25} />
-      <text x={x + w / 2} y={y + h / 2} textAnchor="middle" dominantBaseline="central"
-        fontSize={12} fontWeight={600} fill="#71717a">{label}</text>
-    </g>
-  );
-
-  const Pipe = ({ d, on }: { d: string; on: boolean }) => (
-    <path d={d} fill="none" stroke={on ? PIPE_ON : PIPE} strokeWidth={6}
-      strokeLinecap="round" strokeLinejoin="round" />
-  );
+  const ctl: NodeCtl = { canOperate, isOn, isPending, click };
 
   const lamps = [
     { key: "Air", label: "Air" }, { key: "G1", label: "G1" }, { key: "G2", label: "G2" },
@@ -148,19 +162,19 @@ export default function ChkMimic({
         {/* 3층: 노드 */}
         <g>
           <Static x={16} y={54} w={76} h={44} label="MFC" />
-          <Node x={118} y={54} w={72} h={44} label="Ar" btn="Ar_Button" fs={13} />
+          <Node ctl={ctl} x={118} y={54} w={72} h={44} label="Ar" btn="Ar_Button" fs={13} />
           <Static x={16} y={118} w={76} h={44} label="MFC" />
-          <Node x={118} y={118} w={72} h={44} label="O₂" btn="O2_Button" fs={13} />
-          <Node x={262} y={2} w={116} h={38} label="Door" btn="Door_Button" fs={13} />
-          <Node x={448} y={54} w={96} h={44} label="Vent" btn="Vent_button" fs={13} />
-          <Node x={242} y={84} w={76} h={30} label="S1" btn="S1_button" fs={12} />
-          <Node x={322} y={84} w={76} h={30} label="S2" btn="S2_button" fs={12} />
-          <Node x={252} y={128} w={136} h={30} label="M.S." btn="MS_button" fs={12} />
-          <Node x={238} y={204} w={104} h={46} label="M.V." btn="MV_button" fs={13} />
-          <Node x={232} y={268} w={120} h={44} label="Turbo" btn="Turbo_button" fs={13} />
-          <Node x={400} y={268} w={92} h={44} label="F.V." btn="FV_button" fs={13} />
-          <Node x={528} y={268} w={96} h={44} label="Rotary" btn="Rotary_button" fs={13} />
-          <Node x={524} y={204} w={104} h={46} label="R.V." btn="RV_button" fs={13} />
+          <Node ctl={ctl} x={118} y={118} w={72} h={44} label="O₂" btn="O2_Button" fs={13} />
+          <Node ctl={ctl} x={262} y={2} w={116} h={38} label="Door" btn="Door_Button" fs={13} />
+          <Node ctl={ctl} x={448} y={54} w={96} h={44} label="Vent" btn="Vent_button" fs={13} />
+          <Node ctl={ctl} x={242} y={84} w={76} h={30} label="S1" btn="S1_button" fs={12} />
+          <Node ctl={ctl} x={322} y={84} w={76} h={30} label="S2" btn="S2_button" fs={12} />
+          <Node ctl={ctl} x={252} y={128} w={136} h={30} label="M.S." btn="MS_button" fs={12} />
+          <Node ctl={ctl} x={238} y={204} w={104} h={46} label="M.V." btn="MV_button" fs={13} />
+          <Node ctl={ctl} x={232} y={268} w={120} h={44} label="Turbo" btn="Turbo_button" fs={13} />
+          <Node ctl={ctl} x={400} y={268} w={92} h={44} label="F.V." btn="FV_button" fs={13} />
+          <Node ctl={ctl} x={528} y={268} w={96} h={44} label="Rotary" btn="Rotary_button" fs={13} />
+          <Node ctl={ctl} x={524} y={204} w={104} h={46} label="R.V." btn="RV_button" fs={13} />
         </g>
       </svg>
 

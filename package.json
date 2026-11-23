@@ -8,6 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "ops2:golden": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-golden.mjs",
+    "ops2:chat-ch12": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-chat-ch12.mjs",
+    "ops2:ch12-ui": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-ch12-ui-check.mjs",
     "hmi:build": "node scripts/hmi-build.mjs",
     "hmi:copy": "node scripts/hmi-copy.mjs",
     "postinstall": "prisma generate"
@@ -17,12 +19,12 @@
     "@prisma/client": "^7.8.0",
     "google-auth-library": "^11.0.2",
     "lucide-react": "^1.31.0",
-    "next": "16.4.2",
+    "next": "16.4.6",
     "next-auth": "5.0.0-beta.32",
     "nodemailer": "^10.1.7",
     "pg": "^8.23.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
     "sharp": "^0.35.5"
   },
   "devDependencies": {
@@ -33,7 +35,7 @@
     "@types/react-dom": "^19",
     "esbuild": "0.28.2",
     "eslint": "^9",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.6",
     "prisma": "^7.8.0",
     "tailwindcss": "^4",
     "typescript": "^5"

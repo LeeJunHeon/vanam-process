@@ -1,5 +1,7 @@
 // 노트북 로컬 화면 넣기(W-7) — hmi:build 결과를 챔버K v2 저장소의 v2\hmi 로.
 // 사용법: npm run hmi:copy -- "<챔버K v2 폴더>" [--from <빌드 폴더, 기본 dist-hmi>]
+//         npm run hmi:copy -- --target ch12 "<Chamber.Total_program 폴더>" [--from <빌드 폴더, 기본 dist-hmi/ch12>]
+// 대상(--target): chk(기본 — 인자 없으면 예전과 똑같이) · ch12(챔버12 — <폴더>\v2\ch12\local_server.py 확인, 빌드의 build.json target 이 ch12 여야 함).
 // v2\hmi 를 비우고(.gitkeep 은 남김) 결과 파일과 build.json 을 넣은 뒤 sha256 을 다시 맞춰 본다.
 // 챔버K 폴더 확인: <폴더>\v2\chk\local_server.py 와 <폴더>\v2\hmi 가 있어야 한다(엉뚱한 폴더를 비우지 않게).
 import { createHash } from "node:crypto";
@@ -9,19 +11,35 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
+const TARGETS = {
+  chk: { from: "dist-hmi", pkg: "chk", name: "챔버K v2" },
+  ch12: { from: "dist-hmi/ch12", pkg: "ch12", name: "Chamber.Total_program(챔버12 v2)" },
+};
+const tAt = args.indexOf("--target");
+const tName = tAt >= 0 && args[tAt + 1] ? args[tAt + 1] : "chk";
+const T = TARGETS[tName];
+if (!T) {
+  console.error(`모르는 대상 --target ${tName} (${Object.keys(TARGETS).join("·")})`);
+  process.exit(1);
+}
 const fromAt = args.indexOf("--from");
-const from = resolve(root, fromAt >= 0 && args[fromAt + 1] ? args[fromAt + 1] : "dist-hmi");
-const repo = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--from");
+const from = resolve(root, fromAt >= 0 && args[fromAt + 1] ? args[fromAt + 1] : T.from);
+const repo = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--from" && args[i - 1] !== "--target");
 if (!repo) {
-  console.error('사용법: npm run hmi:copy -- "<챔버K v2 폴더>" [--from dist-hmi]');
+  console.error(tName === "chk" ? '사용법: npm run hmi:copy -- "<챔버K v2 폴더>" [--from dist-hmi]'
+    : `사용법: npm run hmi:copy -- --target ${tName} "<${T.name} 폴더>" [--from ${T.from}]`);
   process.exit(1);
 }
 const target = join(resolve(repo), "v2", "hmi");
-if (!existsSync(join(resolve(repo), "v2", "chk", "local_server.py")) || !existsSync(target)) {
-  console.error(`챔버K v2 폴더가 아님(v2\\chk\\local_server.py·v2\\hmi 없음): ${repo}`);
+if (!existsSync(join(resolve(repo), "v2", T.pkg, "local_server.py")) || !existsSync(target)) {
+  console.error(`${T.name} 폴더가 아님(v2\\${T.pkg}\\local_server.py·v2\\hmi 없음): ${repo}`);
   process.exit(1);
 }
 const info = JSON.parse(readFileSync(join(from, "build.json"), "utf8"));
+if ((info.target ?? "chk") !== tName) {
+  console.error(`빌드 대상이 다름 — ${from}\\build.json target ${info.target ?? "chk"}, 넣을 곳 ${tName}`);
+  process.exit(1);
+}
 
 // 비우기 — 점으로 시작하는 파일(.gitkeep)은 남긴다
 for (const n of readdirSync(target)) if (!n.startsWith(".")) rmSync(join(target, n), { recursive: true, force: true });

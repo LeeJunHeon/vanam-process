@@ -4,6 +4,7 @@ import { ops2Db } from "@/lib/ops2/db";
 import { requireSession } from "@/lib/auth-helpers";
 import { readLimited } from "@/lib/ops2/body";
 import { COMMAND_TTL_MS, CONFIG_KINDS, expireDue, isOnline, missingArgs, webCommandDef } from "@/lib/ops2/commands";
+import { withServerArgs } from "@/lib/ops2/commandArgs";
 import { stripNul } from "@/lib/ops2/ingest";
 import { canRunCommand, operatorEquipments } from "@/lib/ops2/perm";
 import { kick } from "@/lib/ops2/hub";
@@ -111,7 +112,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
     await ops2Db.ops2Command.create({
       data: {
         id, equipment, targetInstance: device.holderInstance, origin: "web", kind,
-        args: args as Prisma.InputJsonValue, label,
+        args: withServerArgs(def, args as Record<string, unknown>, user?.name) as Prisma.InputJsonValue, label,
         requestedBy: user?.email ?? user?.name ?? "unknown", requestedAt: now,
         expiresAtServer, expiresAt: new Date(expiresAtServer.getTime() + (device.clockSkewMs ?? 0)),   // 장비 시계 기준(계약)
         status: "pending",

@@ -15,6 +15,7 @@ import EquipmentStubPage from "@/components/EquipmentStubPage";
 import ChkPage from "@/components/ChkPage";
 import Ops2AdminPage from "@/components/ops2/Ops2AdminPage";
 import Chk2Page from "@/components/ops2/chk/Chk2Page";
+import Ch12v2Page from "@/components/ops2/ch12/Ch12Page";
 import {
   PAGE_TITLE, WS_HOME, isAdminOnlyPage, isPage, workspaceOf, type Page, type Workspace,
 } from "@/lib/navMenu";
@@ -34,7 +35,10 @@ export default function AppShell() {
   // 로드 시 열린 상태(애니메이션 없음), 모바일이면 닫기.
   // 화면은 주소의 ?page= (포털 런처 딥링크)가 우선이고, 없으면 마지막 워크스페이스를 복원한다.
   // 딥링크로 정해진 워크스페이스는 저장하지 않는다(사용자가 직접 바꾼 것만 저장).
+  // 업무 관리(운영 중) 첫 화면 동작을 main 과 똑같이 둔다 — 대시보드를 먼저 그린 뒤 이 effect 에서 복원(2026-11-20 합치기 전 비교:
+  // 렌더 중 조정으로 바꾸면 딥링크·저장된 워크스페이스로 열 때 /api/dashboard 요청이 빠져 요청이 달라진다). 그래서 effect 안 setState 를 그대로 둔다.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 위 이유(main 과 같은 동작)
     if (window.innerWidth < 1024) setSidebarOpen(false);
     let ws: Workspace = "business";
     let pg: Page = WS_HOME.business;
@@ -95,6 +99,7 @@ export default function AppShell() {
   // 비관리자가 활동 이력에 머무르지 않도록 기본 화면으로 되돌린다
   useEffect(() => {
     if (isAdminOnlyPage(page) && session && !isAdmin)
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- main 과 같은 동작(위 첫 화면 복원과 같은 이유)
       setPage("dashboard");
   }, [page, session, isAdmin]);
 
@@ -121,6 +126,7 @@ export default function AppShell() {
           {page === "activity" && <ActivityPage />}
           {page === "opsDashboard" && <OpsDashboardPage onNavigate={navigate} />}
           {page === "equipCh12" && <Ch12Page />}
+          {page === "equipCh12v2" && <Ch12v2Page />}
           {page === "equipChk" && <ChkPage />}
           {page === "equipChk2" && <Chk2Page />}
           {page === "equipRayvac" && <EquipmentStubPage equip="rayvac" />}

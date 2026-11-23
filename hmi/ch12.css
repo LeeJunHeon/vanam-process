@@ -1,0 +1,12 @@
+/* 노트북 로컬 화면 CSS(챔버12) — Tailwind(@tailwindcss/postcss)로 장비 화면 컴포넌트에서 쓰는 클래스만. 챔버12 화면은 챔버K 부품을
+   가져다 쓰므로 두 폴더를 다 본다. 외부 글꼴 없이 시스템 글꼴(챔버K hmi/index.css 와 같게) */
+@import "tailwindcss" source(none);
+@source "../components/ops2/chk";
+@source "../components/ops2/ch12";
+@source "./ch12.tsx";
+
+body {
+  background: #f9fafb;
+  color: #171717;
+  font-family: "Malgun Gothic", "맑은 고딕", "Apple SD Gothic Neo", system-ui, sans-serif;
+}

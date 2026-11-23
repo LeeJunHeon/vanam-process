@@ -11,7 +11,7 @@ import ProcessEditModal from "@/components/ProcessEditModal";
 import type { ProcessItem } from "@/components/ProcessEditModal";
 import ReceiptListModal from "@/components/ReceiptListModal";
 import ProcessRowsEditor, { emptyProcessRow, toProcessPayload } from "@/components/ProcessRowsEditor";
-import { errorMessage } from "@/lib/fetchError";
+import { errorMessage, fetchJson } from "@/lib/fetchError";
 import { PROCESS_STATUSES, STATUS_STYLE, ROW_STYLE, SYNC_STYLE, ORDER_KINDS, KIND_STYLE } from "@/lib/status";
 import { dueProgress, PROGRESS_BAR, PROGRESS_TEXT } from "@/lib/progress";
 
@@ -49,26 +49,36 @@ export default function OrdersPage() {
   const [addingTo, setAddingTo] = useState<Order | null>(null);
   const [viewingProc, setViewingProc] = useState<{ id: number; label: string } | null>(null);
 
-  const load = useCallback(async () => {
+  // 목록 조회. state 는 응답 콜백에서만 바꾼다.
+  const fetchList = useCallback(
+    () =>
+      fetchJson<Order[]>(`/api/orders?q=${encodeURIComponent(q)}`)
+        .then(
+          (rows) => setItems(rows),
+          (e) => setError(errorMessage(e, "목록을 불러오지 못했습니다.")),
+        )
+        .finally(() => setLoading(false)),
+    [q],
+  );
+
+  // 검색어를 바꾸면 바로 로딩 표시를 켜고 이전 오류를 지운다(조회는 아래 effect 가 한다)
+  const changeQ = (v: string) => {
+    setQ(v);
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(`/api/orders?q=${encodeURIComponent(q)}`);
-      if (!res.ok) {
-        const d = await res.json().catch(() => null);
-        throw new Error(d?.error ?? `조회 실패 (${res.status})`);
-      }
-      setItems(await res.json());
-    } catch (e) {
-      setError(errorMessage(e, "목록을 불러오지 못했습니다."));
-    } finally {
-      setLoading(false);
-    }
-  }, [q]);
+  };
 
+  // 다시 불러오기(저장·삭제 뒤, 다시 시도) — 로딩 표시를 켜고 이전 오류를 지운 뒤 조회한다
+  const load = useCallback(() => {
+    setLoading(true);
+    setError(null);
+    return fetchList();
+  }, [fetchList]);
+
+  // 첫 조회·검색어 변경. 이때의 로딩 표시·오류 지움은 초기값과 changeQ 가 맡는다
   useEffect(() => {
-    load();
-  }, [load]);
+    fetchList();
+  }, [fetchList]);
 
   useEffect(() => {
     (async () => {
@@ -167,7 +177,7 @@ export default function OrdersPage() {
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <input
             value={q}
-            onChange={(e) => setQ(e.target.value)}
+            onChange={(e) => changeQ(e.target.value)}
             placeholder="발주번호·고객사·고객명·작업명 검색"
             className="w-full rounded-xl border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none focus:border-blue-400"
           />
