@@ -1,7 +1,7 @@
 "use client";
 
 // 챔버K v2 상태 띠(W-10 — 모든 탭 위에 늘 보임). 왼쪽: 장비 이름·id·연결 칩(연결됨·n초 전 / 늦음 / 끊김 — 끊김만 빨강)·
-// 모드 칩(실제 운전 / 읽기 전용(bench) 어두운 칩 + 자물쇠 / SIM — 모의 장비). 가운데: 공정 상태(크게)·레시피·행,
+// 모드 칩(실제 운전 / 읽기 전용(bench) 어두운 칩 + 자물쇠 / SIM(모의 장비)). 가운데: 공정 상태(크게)·레시피·행,
 // 지금 블록 글(블록 이름 + 목표 + 장비가 주는 진행 — v1 행 템플릿 블록은 공정 상태 이름), 진행 막대·시작·경과·남은 시간·
 // 예상 끝(정해진 시간만, 끝을 모르는 블록이 남으면 '이상'). 일시정지 중이면 '일시정지 m:ss / 한도'(주의색).
 // 히터 레시피·정지 순서·알람·지난 공정이 남긴 출력 줄. 오른쪽: 부저 정지·공정 STOP(빨간 테두리)·ALL STOP(빨간 채움).
@@ -54,7 +54,7 @@ export function StopButtons({ lock, onAsk, small }: { lock: LockFn; onAsk: (a: A
       </Btn>
       <Btn size={size} kind="dangerSolid" lock={lock("ALL_STOP")}
         onClick={() => onAsk({ kind: "ALL_STOP", label: "ALL STOP", stop: true,
-                               note: "공정과 출력을 모두 끕니다(공정 여부와 무관 — 펌프·밸브 코일, 히터, 파워, 가스)." })}>
+                               note: "공정과 출력을 모두 끕니다(공정 여부와 상관없이 펌프·밸브 코일, 히터, 파워, 가스)." })}>
         <OctagonX size={14} /> ALL STOP
       </Btn>
     </div>
@@ -77,6 +77,7 @@ export function StatusBar({ bundle, st, connected, lock, onAsk }: {
         {st ? (st.procState === "IDLE" ? "대기 중" : stateLabel(bundle, st.procState)) : "상태 없음"}
       </b>
       {st?.paused && <Chip tone="warn" icon={<PauseCircle size={11} />}>일시정지</Chip>}
+      {st?.run?.manual && <Chip tone="dark">{st.run.manual.label || "수동 조작 중"}</Chip>}
       {step && <span className={`${FS.small} text-[#5B6470]`}>블록 {step.no}/{step.total}</span>}
       {typeof r === "number" && r >= 0 && <span className={`${FS.card} font-bold tabular-nums text-[#133A7C]`}>남은 {fmtClock(r)}</span>}
       <span className="ml-auto"><StopButtons lock={lock} onAsk={onAsk} small /></span>
@@ -129,7 +130,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
         {label && <span className={`font-mono ${FS.small} text-[#5B6470]`}>{equipment}</span>}
         <Chip tone={conn.tone}>{conn.label}</Chip>
         {mode === "bench" && <Chip tone="dark" icon={<Lock size={11} />}>읽기 전용(bench)</Chip>}
-        {mode === "sim" && <Chip tone="info">SIM — 모의 장비</Chip>}
+        {mode === "sim" && <Chip tone="info">SIM(모의 장비)</Chip>}
         {mode === "run" && <Chip>실제 운전</Chip>}
         {extra && <span className="ml-auto flex items-center gap-2">{extra}</span>}
       </div>
@@ -138,6 +139,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
         <div className="min-w-0 flex-1">
           <p className={`truncate ${FS.title} font-bold tracking-tight ${connected ? "text-[#1B1F24]" : "text-[#8A929D]"}`}>
             {!st ? "상태 없음" : st.procState === "IDLE" ? "대기 중" : stateLabel(bundle, st.procState)}
+            {st?.run?.manual && <Chip tone="dark" className="ml-2 align-middle">{st.run.manual.label || "수동 조작 중"}</Chip>}
             {detail && st?.procState && <span className={`ml-2 align-middle font-mono ${FS.small} font-normal text-[#8A929D]`}>{st.procState}</span>}
           </p>
           {!st && <p className={`mt-1 ${FS.body} text-[#5B6470]`}>장비 프로그램이 웹에 연결되면 실시간 상태가 표시됩니다</p>}
@@ -190,7 +192,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
           {st?.paused && (
             <Issue level="warn">
               <b>일시정지 {fmtClock(paused?.pausedS ?? 0)}</b>{pauseMax > 0 ? ` / 한도 ${fmtClock(pauseMax)}` : " · 한도 없음"}
-              {paused?.by && ` · ${paused.by}`}{pauseMax > 0 && " — 한도를 넘으면 정지 순서"}
+              {paused?.by && ` · ${paused.by}`}{pauseMax > 0 && " · 한도를 넘으면 정지 순서"}
             </Issue>
           )}
           {hr && (

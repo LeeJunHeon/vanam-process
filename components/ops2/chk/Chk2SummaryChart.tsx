@@ -106,7 +106,7 @@ function Panel({ rows, fields, colors, width, t0, t1, hover, setHover }: {
   const lastPts = data.map((d) => [...d].reverse().find((p) => p.v !== null) ?? null);
   const legend = fields.reduce<{ x: number; text: string }[]>((acc, f) => {
     const empty = !data[acc.length].some((p) => p.v !== null);
-    const text = `${f.label}${f.summary && f.summary !== "mean" ? `(${f.summary})` : ""}${empty ? " — 값 없음" : ""}`;
+    const text = `${f.label}${f.summary && f.summary !== "mean" ? `(${f.summary})` : ""}${empty ? "(값 없음)" : ""}`;
     const prev = acc[acc.length - 1];
     return [...acc, { x: prev ? prev.x + 26 + textWidth(prev.text) : LEFT, text }];
   }, []);

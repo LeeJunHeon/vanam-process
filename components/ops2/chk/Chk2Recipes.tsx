@@ -101,7 +101,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
 
   const open = useCallback((item: RecipeItem) => leave(async () => {
     const r = await recipes.get(item.id);
-    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}' — 열지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
+    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 열지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
     const d = fromFull(r.data.recipe);
     setReveal(true);
     setDraft(d);
@@ -134,7 +134,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
     const r = await recipes.save(body, asName !== undefined ? null : draft.id, draft.updatedAt);
     setBusy(false);
     if (!r.ok) {
-      return notify({ tone: "bad", title: `레시피 '${name}' — 저장 못 함`,
+      return notify({ tone: "bad", title: `레시피 '${name}'을 저장할 수 없음`,
                       text: `${RECIPE_ERROR[r.error] ?? r.error}${r.detail && !RECIPE_ERROR[r.error] ? ` · ${r.detail}` : ""}` });
     }
     const c = r.data.check;
@@ -142,7 +142,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
     const next = fromFull(r.data.recipe);
     setDraft(next);
     setSel(at >= 0 ? next.rows[at]?.uid ?? null : next.rows[0]?.uid ?? null);
-    notify({ tone: c?.errors ? "warn" : "ok", title: `레시피 '${name}' — 저장함`,
+    notify({ tone: c?.errors ? "warn" : "ok", title: `레시피 '${name}' 저장함`,
              text: c ? `서버 검사: 오류 ${c.errors} · 경고 ${c.warnings}${c.first ? ` — ${c.first}` : ""}${c.errors ? " · 오류를 고쳐야 적재할 수 있습니다" : ""}`
                : "서버 검사 없음(장비 정의에 레시피 열이 없음)" });
   };
@@ -158,38 +158,38 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
   const remove = async (item: RecipeItem) => {
     setConfirm(null);
     const r = await recipes.remove(item.id);
-    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}' — 지우지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
-    notify({ tone: "ok", title: `레시피 '${item.name}' — 지움` });
+    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 지우지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
+    notify({ tone: "ok", title: `레시피 '${item.name}' 지움` });
     if (draft?.id === item.id) setDraft(null);
   };
   const duplicate = async (item: RecipeItem) => {
     const r = await recipes.get(item.id);
-    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}' — 복제 못 함`, text: RECIPE_ERROR[r.error] ?? r.error });
+    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 복제할 수 없음`, text: RECIPE_ERROR[r.error] ?? r.error });
     const names = new Set((recipes.list ?? []).map((x) => x.name));
     let name = `${item.name} 복사`;
     for (let n = 2; names.has(name); n++) name = `${item.name} 복사 ${n}`;
     const s = await recipes.save({ kind: item.kind, name, rows: r.data.recipe.rows, gas: r.data.recipe.gas }, null, null);
-    notify(s.ok ? { tone: "ok", title: `레시피 '${name}' — 복제함` } : { tone: "bad", title: "복제 못 함", text: RECIPE_ERROR[s.error] ?? s.error });
+    notify(s.ok ? { tone: "ok", title: `레시피 '${name}' 복제함` } : { tone: "bad", title: "복제할 수 없음", text: RECIPE_ERROR[s.error] ?? s.error });
   };
   const rename = async (item: RecipeItem, name: string) => {
     const r = await recipes.get(item.id);
-    if (!r.ok) return notify({ tone: "bad", title: "이름 바꾸기 못 함", text: RECIPE_ERROR[r.error] ?? r.error });
+    if (!r.ok) return notify({ tone: "bad", title: "이름을 바꿀 수 없음", text: RECIPE_ERROR[r.error] ?? r.error });
     const f = r.data.recipe;
     const s = await recipes.save({ kind: f.kind, name, rows: f.rows, gas: f.gas }, f.id, f.updatedAt);
-    notify(s.ok ? { tone: "ok", title: `이름 바꿈 — '${name}'` } : { tone: "bad", title: "이름 바꾸기 못 함", text: RECIPE_ERROR[s.error] ?? s.error });
+    notify(s.ok ? { tone: "ok", title: `이름을 '${name}'(으)로 바꿈` } : { tone: "bad", title: "이름을 바꿀 수 없음", text: RECIPE_ERROR[s.error] ?? s.error });
   };
 
   // ── 장비 조작 ──
   const loaded = st?.recipe ?? null;
   const askLoadFull = (f: { name: string; rows: Row[] }) => {
     const chk = env ? checkProcessRecipe(f.rows, env) : null;
-    if (chk?.errors) return notify({ tone: "bad", title: `레시피 '${f.name}' — 적재 못 함`, text: `검사 오류 ${chk.errors}개 — 고친 뒤 적재하세요` });
+    if (chk?.errors) return notify({ tone: "bad", title: `레시피 '${f.name}'을 적재할 수 없음`, text: `검사 오류 ${chk.errors}개를 고친 뒤 적재하세요` });
     onAsk({ kind: "RECIPE_LOAD", label: "공정 레시피 적재", detail: `'${f.name}'`, args: { name: f.name, rows: f.rows },
             lines: processLines(f.name, f.rows, chk), note: "장비에 행 목록을 올립니다(검사 뒤 적재). 시작은 운전 탭 '적재 시작'." });
   };
   const listLoad = async (item: RecipeItem) => {
     const r = await recipes.get(item.id);
-    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}' — 읽지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
+    if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 읽지 못함`, text: RECIPE_ERROR[r.error] ?? r.error });
     askLoadFull({ name: r.data.recipe.name, rows: r.data.recipe.rows as Row[] });
   };
   const savedWhy = !draft ? null : !draft.id ? "저장한 뒤" : dirty ? "저장한 뒤(저장 안 한 변경이 있음)" : null;
@@ -203,13 +203,13 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
     if (rc.kind === "delay") return "대기 행은 바로 시작할 수 없음";
     if (savedWhy) return `${savedWhy} 시작`;
     if (rc.kind === "blocks") {
-      if (rc.errors.length) return `검사 오류 ${rc.errors.length}개 — 고친 뒤`;
+      if (rc.errors.length) return `검사 오류 ${rc.errors.length}개를 고친 뒤 시작할 수 있음`;
     } else {
       if (rc.kind !== "row") return "내용 없는 행";
       const m = checkProcessRecipe([manualRow(draft?.rows[i]?.data ?? {})], env);
-      if (m.errors) return `검사 오류 ${m.errors}개 — 고친 뒤`;
+      if (m.errors) return `검사 오류 ${m.errors}개를 고친 뒤 시작할 수 있음`;
     }
-    if (loaded) return "장비에 레시피가 적재돼 있음 — 해제한 뒤";
+    if (loaded) return "장비에 레시피가 적재돼 있어 해제한 뒤 시작할 수 있음";
     return lock("PROCESS_START");
   };
   const askStartRow = (i: number) => {
@@ -219,14 +219,14 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
       const name = typeof data.process_name === "string" && data.process_name ? data.process_name : `${draft?.name || "블록 공정"} ${i + 1}행`;
       onAsk({ kind: "PROCESS_START", label: "블록 공정 바로 시작", detail: `${i + 1}행 '${name}'`, args: { blocks: data.blocks, name },
               red: true, lines: [`레시피 '${draft?.name}' ${i + 1}행`, ...blockRowLines(data, pCheck?.rows[i] ?? null)],
-              note: "공정을 시작합니다 — 가스·파워·셔터가 움직입니다(블록 순서 그대로)." });
+              note: "공정을 시작합니다. 가스·파워·셔터가 움직입니다(블록 순서 그대로)." });
       return;
     }
     const row = manualRow(data);
     onAsk({ kind: "PROCESS_START", label: "한 행 바로 시작", detail: `${i + 1}행 '${v(row.process_name)}'`, args: { row }, red: true,
             lines: [`레시피 '${draft?.name}' ${i + 1}행`, rowLine(row),
-                    data.use_heater === true ? "수동 시작은 히터 열을 쓰지 않음(장비 규칙) — 히터 목표는 보내지 않음" : "히터 안 씀"],
-            note: "공정을 시작합니다 — 가스·파워·셔터가 움직입니다." });
+                    data.use_heater === true ? "수동 시작은 히터 열을 쓰지 않아(장비 규칙) 히터 목표를 보내지 않음" : "히터를 쓰지 않음"],
+            note: "공정을 시작합니다. 가스·파워·셔터가 움직입니다." });
   };
   const askHeaterRun = () => {
     if (!draft) return;
@@ -248,18 +248,18 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
       {outdated && (
         <Issue level="warn">
           {(bundle?.version ?? 0) > GOLDEN_EXPORT_VERSION
-            ? `웹 검사 기준이 장비보다 옛것 — 장비 판단만 믿을 것(웹 검사 v${GOLDEN_EXPORT_VERSION}, 장비 정의 v${bundle?.version})`
-            : `장비 정의가 웹 검사 기준보다 옛것 — 장비 판단만 믿을 것(장비 정의 v${bundle?.version}, 웹 검사 v${GOLDEN_EXPORT_VERSION})`}
+            ? `웹 검사 기준이 장비보다 옛것이라 장비 판단만 믿을 것(웹 검사 v${GOLDEN_EXPORT_VERSION}, 장비 정의 v${bundle?.version})`
+            : `장비 정의가 웹 검사 기준보다 옛것이라 장비 판단만 믿을 것(장비 정의 v${bundle?.version}, 웹 검사 v${GOLDEN_EXPORT_VERSION})`}
         </Issue>
       )}
-      {!env && bundle && <p className={`${FS.small} text-[#5B6470]`}>장비 정의에 레시피 열이 없어 웹 검사를 하지 않습니다 — 장비 판단만.</p>}
+      {!env && bundle && <p className={`${FS.small} text-[#5B6470]`}>장비 정의에 레시피 열이 없어 웹 검사를 하지 않고 장비 판단만 씁니다.</p>}
       {recipes.error && <Issue level="alarm">{recipes.error}</Issue>}
     </>
   );
 
   if (draft) {
     const statusChip = errCount
-      ? <button onClick={goFirstError} title="누르면 첫 오류로"><Chip tone="alarm">오류 {errCount}{dirty ? " · 저장 안 됨" : ""}</Chip></button>
+      ? <button onClick={goFirstError} title="누르면 첫 오류로"><Chip tone="alarm">오류 {errCount}{dirty ? " · 저장되지 않음" : ""}</Chip></button>
       : dirty ? <Chip tone="warn">저장 안 됨 · 변경 {changed}곳</Chip> : <Chip>{draft.id ? "저장됨 · 검사 통과" : "새 레시피"}</Chip>;
     const why = draft.kind === "process" ? loadWhy : runWhy;
     return (
@@ -304,7 +304,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
           )}
         </div>
         {confirm?.what === "leave" && (
-          <SimpleConfirm title="저장 안 됨" ok="버리고 나가기" danger text="저장하지 않은 변경이 있습니다. 버리고 나갈까요?"
+          <SimpleConfirm title="저장되지 않음" ok="버리고 나가기" danger text="저장하지 않은 변경이 있습니다. 버리고 나갈까요?"
             onCancel={() => setConfirm(null)} onOk={() => { const t = confirm.then; setConfirm(null); t(); }} />
         )}
         {nameModal?.mode === "saveAs" && (
@@ -384,7 +384,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
                 );
               })}
               {recipes.list !== null && !list.length && (
-                <tr><td colSpan={7}><Empty>저장된 레시피가 없습니다{!readOnly && " — '새 공정 레시피'로 만드세요"}</Empty></td></tr>
+                <tr><td colSpan={7}><Empty>저장된 레시피가 없습니다{!readOnly && ". '새 공정 레시피'로 만드세요"}</Empty></td></tr>
               )}
               {recipes.list === null && <tr><td colSpan={7}><Empty>읽는 중…</Empty></td></tr>}
             </tbody>

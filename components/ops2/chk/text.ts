@@ -181,9 +181,15 @@ export function logLine(b: Bundle | null, e: FeedLike): LogLine {
     if (cd.phase === "end") {
       const res = ({ ok: "정상", done: "정상", aborted: "중단", error: "오류", failed: "실패" } as Record<string, string>)[s(cd.result)] ?? s(cd.result);
       const el = num(cd.elapsed_s);
-      text = `${s(cd.index ?? cd.no)} ${bn} 끝 — ${res}${el !== null ? `, ${fmtDur(el)}` : ""}`
+      text = `${s(cd.index ?? cd.no)} ${bn} 끝: ${res}${el !== null ? `, ${fmtDur(el)}` : ""}`
         + `${cd.reason ? ` (${reasonLabel(b, s(cd.reason))})` : ""}`;
     } else text = `${s(cd.index ?? cd.no)}/${s(cd.total)} ${bn} 시작`;
+  } else if (source === "process" && kind === "manual") {
+    // 묶음 18 — 수동 조작 블록 기록(context.data: by·source·no·type·label·result) · 끝내기(MANUAL_END)
+    const bn = cd.type ? `${blockName(b, s(cd.type))}${cd.label ? `(${s(cd.label)})` : ""}` : "";
+    const who = `${cd.source === "local" ? "노트북" : cd.source === "web" ? "웹" : s(cd.source)}${cd.by ? ` · ${s(cd.by)}` : ""}`;
+    const res = ({ done: "끝남", skipped: "건너뜀", aborted: "중단" } as Record<string, string>)[s(cd.result)] ?? s(cd.result);
+    text = code === "MANUAL_END" ? `수동 조작 끝내기 · ${who}` : `수동 조작 ${s(cd.no)} ${bn}: ${res} · ${who}`;
   } else if (source === "process" && ["skip", "pause", "resume", "edit", "pause_long"].includes(kind)) {
     // 묶음 13 — 건너뛰기·일시정지·재개·순서 고치기(context.data: by·no·type·label·remainS·pausedSec·summary·revision)
     const bn = cd.type === "delay" ? "딜레이 행" : cd.type ? `${blockName(b, s(cd.type))}${cd.label ? `(${s(cd.label)})` : ""}` : "";
@@ -193,7 +199,7 @@ export function logLine(b: Bundle | null, e: FeedLike): LogLine {
       : kind === "pause" ? `${s(cd.no)} ${bn} 일시정지${rs !== null ? ` · 남은 ${fmtDur(rs)}` : ""}${who}`
       : kind === "resume" ? `${s(cd.no)} ${bn} 재개${ps !== null ? ` · 멈춘 시간 ${fmtDur(ps)}` : ""}${who}`
       : kind === "edit" ? `판 ${s(cd.revision)} · ${s(cd.summary) || "순서 고침"}${who}`
-      : `일시정지 ${ps !== null ? fmtDur(ps) : ""} — 한도 ${num(cd.maxSec) !== null ? fmtDur(num(cd.maxSec) as number) : "-"}, 곧 정지 순서`;
+      : `일시정지 ${ps !== null ? fmtDur(ps) : ""} 째, 한도 ${num(cd.maxSec) !== null ? fmtDur(num(cd.maxSec) as number) : "-"}, 곧 정지 순서`;
   } else {
     const label = reasonLabel(b, code);
     text = [label !== code && label !== name ? label : "", s(d.message)].filter(Boolean).join(" — ");

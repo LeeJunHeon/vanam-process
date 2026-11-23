@@ -83,7 +83,7 @@ export function ColField({ col, cols, value, onChange, error, bundle, readOnly, 
       <label className={`inline-flex h-9 items-center gap-2 ${FS.body}`}>
         <input type="checkbox" checked={value === true} disabled={ro} aria-label={colLabel(col)}
           onChange={(e) => onChange(e.target.checked ? true : undefined)} className="h-4 w-4" />
-        {value === true ? "사용" : "안 씀"}
+        {value === true ? "사용" : "사용하지 않음"}
       </label>
     );
   } else if (col.unit === "min" && (value === undefined || typeof value === "number")) {
@@ -152,7 +152,7 @@ function RowList<T extends { uid: string }>({ items, sel, onSel, onMove, readOnl
             )}
           </li>
         ))}
-        {!items.length && <li className={`rounded-[10px] border border-dashed border-[#D9DDE3] p-3 text-center ${FS.small} text-[#5B6470]`}>비어 있습니다 — 아래에서 추가하세요</li>}
+        {!items.length && <li className={`rounded-[10px] border border-dashed border-[#D9DDE3] p-3 text-center ${FS.small} text-[#5B6470]`}>비어 있습니다. 아래에서 추가하세요</li>}
       </ol>
       {!readOnly && addMenu}
     </div>
@@ -481,7 +481,7 @@ export function HeaterEditor({ stepCols, gasCols, steps, gas, errors, warnings, 
         ) : <Empty>왼쪽에서 스텝을 고르세요</Empty>}
       </div>
       <div className="min-w-0 space-y-2 lg:col-span-2 2xl:col-span-1">
-        <p className={`${FS.card} font-bold text-[#1B1F24]`}>가스(선택 — 비우면 가스 없이 승온)</p>
+        <p className={`${FS.card} font-bold text-[#1B1F24]`}>가스(선택, 비우면 가스 없이 승온)</p>
         <Tile className="px-3 py-2">
           <div className="divide-y divide-[#F0F2F4]">
             {gasCols.filter((c) => !c.required?.startsWith("if:") || gas[c.required.slice(3)] === true || gas[c.name] !== undefined).map((c) => (

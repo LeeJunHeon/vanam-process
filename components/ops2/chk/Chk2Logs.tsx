@@ -41,7 +41,7 @@ export function EventFeed({ bundle, feed }: { bundle: Bundle | null; feed: FeedI
       </button>
     }>
       {!shown.length ? (
-        <p className={`py-6 text-center ${FS.body} text-[#8A929D]`}>{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다 — 장비가 연결되면 쌓입니다"}</p>
+        <p className={`py-6 text-center ${FS.body} text-[#8A929D]`}>{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다. 장비가 연결되면 쌓입니다"}</p>
       ) : (
         <div ref={box}
           onScroll={() => { const el = box.current; if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}

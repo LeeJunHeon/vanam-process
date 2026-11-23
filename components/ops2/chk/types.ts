@@ -13,6 +13,9 @@ export type Hello = {
   equipment?: string; instance?: string; program?: string; version?: string; runMode?: string;
   configVersion?: number; webSchemaHash?: string | null; writesAllowed?: boolean; deviceUtc?: string;
   commandKinds?: string[];                       // 노트북 로컬 화면(HMI 경로)에서 받는 명령 — local 모드 권한
+  // 묶음 18(5-20 ②) — 노트북 조작 설정(view_stop 보기와 정지만 · unlock 잠금을 푼 뒤 조작 · always 항상 조작)·다시 잠그기까지(분).
+  // 옛 장비(없음)는 지금처럼 보기와 정지만
+  hmiControl?: string | null; hmiRelockMin?: number | null;
   web?: {
     online: boolean; lastSeenAt: string | null; holderInstance: string | null; sse: boolean;
     clockSkewMs: number | null; serverNow: string; label: string | null; hasSchema: boolean; perms: Perms;
@@ -39,6 +42,7 @@ export type ArgDef = {
 export type CommandDef = {
   kind: string; label: string; role?: string; sources?: string[]; args?: ArgDef[]; desc?: string;
   benchOk?: boolean;                             // 묶음 12 — bench(장비 쓰기 금지)에서도 받는 명령
+  hmi?: string | null;                           // 묶음 18 — 노트북 경로: always(늘) · operate(노트북 조작을 열었을 때) · null(받지 않음)
 };
 export type ParamDef = {
   key: string; label?: string; unit?: string; type?: string; current?: unknown; default?: unknown; pending?: unknown;
@@ -77,6 +81,8 @@ export type Bundle = {
   events?: { kind: string; label: string }[];
   crossRules?: { id: string; keys: string[]; desc: string }[];
   adjust?: { command?: string; items?: AdjustItemDef[]; settleParam?: string };
+  // 묶음 18(5-20 ③) — 수동 조작(블록을 하나씩 실행하는 공정). 없으면(옛 묶음) 수동 조작 탭을 숨긴다
+  manual?: { commands?: string[]; blockTypes?: string[]; waitState?: string; label?: string; desc?: string };
 };
 
 export type Link = { q?: string | null; age?: number | null };
@@ -104,6 +110,13 @@ export type RunState = {
   revision: number; current: string | null; paused: PauseInfo | null; blocksVersion?: number;
   blocks?: RunBlock[]; delay?: { sec?: number; remainS?: number | null };
   editBase?: { revision: number; blocks: unknown[] };   // 묶음 14 — 순서 고치기 기준(장비가 실행하는 정리 목록), 판이 바뀔 때·10 초마다만
+  manual?: ManualState;                          // 묶음 18 — 수동 조작 중일 때만
+};
+/** state.run.manual(묶음 18) — 수동 조작 중. outputs = 지금 켜져 있는 출력, executed = 실행한 블록(run_end summary.executed 와 같은 모양) */
+export type ManualState = {
+  label?: string; waiting?: boolean; by?: string | null; source?: string | null;
+  executed?: { no: string; type: string; label?: string; start?: number; end?: number; result: string }[];
+  outputs?: { key: string; label: string; value?: number | null; unit?: string }[];
 };
 /** run_end summary(묶음 13) — 실행된 순서·마지막 판·건너뛴/멈춘 횟수 */
 export type RunSummary = {
@@ -159,7 +172,7 @@ export function adjustText(b: Bundle | null, code: unknown, context: unknown): s
   if (!d) return null;
   const v = (x: unknown) => (x === null || x === undefined ? "—" : String(x));
   const r = String(d.result ?? "");
-  return `공정 중 수정 — ${v(d.by)} · ${v(d.device)}.${v(d.item)} ${v(d.old)} → ${v(d.new)} · ${ADJ_RESULT[r] ?? r}`
+  return `공정 중 수정: ${v(d.by)} · ${v(d.device)}.${v(d.item)} ${v(d.old)} → ${v(d.new)} · ${ADJ_RESULT[r] ?? r}`
     + `${d.reason ? ` (${reasonLabel(b, String(d.reason))})` : ""}${d.block ? ` · 블록 ${v(d.block)}` : ""}`;
 }
 

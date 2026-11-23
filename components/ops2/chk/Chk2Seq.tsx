@@ -7,7 +7,7 @@
 //   처음 목록 = 장비가 준 지금 판의 기준 목록(state.run.editBase, 묶음 14 — 장비가 실제로 실행하는 정리 목록. v1 행·장비 앞면 시작·
 //   한 행 바로 시작도). 웹이 템플릿을 다시 만들지 않는다. 아직 없으면(옛 묶음·받는 중) 버튼을 막고 이유를 보인다.
 //   웹 검사 = 장비와 같은 계산(blocks.ts checkBlocks) + '시작한 블록 그대로'(둘 다 정리 모양으로 비교 — 장비와 같게).
-//   그사이 판이 바뀌면 "다른 곳에서 순서가 바뀜 — 다시 불러오기".
+//   그사이 판이 바뀌면 "다른 곳에서 순서가 바뀌어 다시 불러와야 함".
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, ListOrdered, PauseCircle, Play, RefreshCw, SkipForward } from "lucide-react";
 import { checkBlocks, type BlockEnv } from "@/lib/ops2/chk/blocks";
@@ -18,6 +18,7 @@ import { blockName, blockSummary, fmtClock, fmtDur } from "./text";
 import { DONE_STATUS, OPEN_TYPES, blockTarget, topOf } from "./runview";
 import { paramValue } from "./logic";
 import type { LockFn } from "./Chk2Status";
+import { useChk2Mode } from "./mode";
 import type { EditBase, RunBlocks } from "./useChk2";
 import type { Bundle, RunBlock, StateData } from "./types";
 
@@ -151,7 +152,7 @@ function SeqEditor({ bundle, base, baseRev, revision, lockTop, runBlocks, lock, 
         {errors.length ? <Chip tone="alarm">검사 오류 {errors.length}</Chip> : <Chip>검사 통과</Chip>}
         <span className="ml-auto flex gap-2">
           <Btn kind="ghost" onClick={onClose}>취소</Btn>
-          <Btn kind="primary" size="lg" lock={stale ? "다른 곳에서 순서가 바뀜 — 다시 불러오기" : errors.length ? "검사 오류를 고친 뒤" : !changes.length ? "바뀐 것이 없음" : lock("PROCESS_EDIT")}
+          <Btn kind="primary" size="lg" lock={stale ? "다른 곳에서 순서가 바뀌어 다시 불러와야 함" : errors.length ? "검사 오류를 고친 뒤" : !changes.length ? "바뀐 것이 없음" : lock("PROCESS_EDIT")}
             onClick={() => onAsk({ kind: "PROCESS_EDIT", label: "순서 고치기", detail: `판 ${baseRev} → ${baseRev + 1}`,
               args: { revision: baseRev, blocks: json }, red: true,
               lines: [`맨 위 블록 ${base.length}개 → ${json.length}개`, ...changes.slice(0, 8), ...(changes.length > 8 ? [`외 ${changes.length - 8}개`] : [])],
@@ -198,10 +199,13 @@ export default function Chk2Seq({ bundle, st, runBlocks, editBase, lock, onAsk, 
     setBase({ blocks: JSON.parse(JSON.stringify(eb.blocks)) as unknown[], revision: eb.revision, key: Date.now() });
   };
 
-  const editLock = local ? "순서 고치기는 웹에서만" : !blocks ? "블록 목록을 받는 중" : curNo === "delay" ? "딜레이 행은 고칠 블록이 없음"
+  // 노트북은 노트북 조작을 열었을 때만(묶음 18 — hello.commandKinds 에 PROCESS_EDIT), 수동 조작은 블록을 하나씩이라 순서가 없다
+  const { webOnly } = useChk2Mode();
+  const editLock = local && webOnly("PROCESS_EDIT") ? "순서 고치기는 웹에서만 할 수 있음" : st?.run?.manual ? "수동 조작에는 고칠 순서가 없음"
+    : !blocks ? "블록 목록을 받는 중" : curNo === "delay" ? "딜레이 행은 고칠 블록이 없음"
     : st?.stopping ? "정지 순서 중"
-    : oldBundle ? `장비 정의 v${bundle?.version} 은 순서 고치기 기준 목록을 주지 않음 — 장비 프로그램을 올린 뒤(묶음 ${EDIT_BASE_VERSION}부터)`
-    : !eb ? "장비의 기준 목록을 받는 중 — 판이 바뀔 때·10초마다 보냅니다" : lock("PROCESS_EDIT");
+    : oldBundle ? `장비 정의 v${bundle?.version} 은 순서 고치기 기준 목록을 주지 않아 장비 프로그램을 올린 뒤 할 수 있음(묶음 ${EDIT_BASE_VERSION}부터)`
+    : !eb ? "장비의 기준 목록을 받는 중(판이 바뀔 때·10초마다 보냄)" : lock("PROCESS_EDIT");
 
   return (
     <Card title={<><ListOrdered size={15} /> 공정 순서</>}
@@ -216,7 +220,7 @@ export default function Chk2Seq({ bundle, st, runBlocks, editBase, lock, onAsk, 
             onClose={() => setEditing(false)} onReload={loadBase} reloadReady={!!eb} />
         ) : (
           <div className="space-y-2">
-            <Issue level="warn">장비의 기준 목록이 아직 없습니다 — 판이 바뀔 때·10초마다 보냅니다. 잠시 뒤 다시 여세요.</Issue>
+            <Issue level="warn">장비의 기준 목록이 아직 없습니다. 판이 바뀔 때·10초마다 보냅니다. 잠시 뒤 다시 여세요.</Issue>
             <Btn onClick={() => setEditing(false)}>닫기</Btn>
           </div>
         )

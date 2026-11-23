@@ -29,7 +29,7 @@ import { reasonLabel, type Bundle, type ParamDef, type Perms, type StateData } f
 import { useChk2Mode } from "./mode";
 
 const SAFETY_TEXT: Record<string, string> = { H: "높음", M: "중간", L: "낮음" };
-const TYPE_TEXT: Record<string, string> = { float: "숫자", int: "정수", str: "글", bool: "켬·끔", enum: "선택" };
+const TYPE_TEXT: Record<string, string> = { float: "숫자", int: "정수", str: "글", bool: "켜짐·꺼짐", enum: "선택" };
 
 type Version = {
   version: number; kind: string; createdBy: string; createdAt: string; note: string | null; cmdId: string | null;
@@ -268,27 +268,27 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
     setLastResult(b);
     const what = { apply: "적용", rollback: "되돌리기", resync: "기준 다시 읽기" }[String(body.action)] ?? "";
     if (!r || !r.ok) {
-      notify({ tone: "bad", title: `설정 ${what} — 보내지 못함`, text: `${b.error ?? `HTTP ${r?.status}`}${b.detail ? ` · ${b.detail}` : ""}` });
+      notify({ tone: "bad", title: `설정 ${what}: 보내지 못함`, text: `${b.error ?? `HTTP ${r?.status}`}${b.detail ? ` · ${b.detail}` : ""}` });
       return;
     }
     if (body.action === "resync") {
-      notify(b.ack ? { tone: "ok", title: `설정 기준 v${b.ack.version} — 장비 저장 값으로 다시 읽음`, text: "다음 적용은 이 값 위에 만듭니다(장비에는 보내지 않음)" }
-        : { tone: "warn", title: "설정 기준 다시 읽기 — 장비 정의를 기다리는 중", text: "장비가 다음에 연락하면 만들어집니다(1분 안)" });
+      notify(b.ack ? { tone: "ok", title: `설정 기준 v${b.ack.version}: 장비 저장 값으로 다시 읽음`, text: "다음 적용은 이 값 위에 만듭니다(장비에는 보내지 않음)" }
+        : { tone: "warn", title: "설정 기준 다시 읽기: 장비 정의를 기다리는 중", text: "장비가 다음에 연락하면 만들어집니다(1분 안)" });
       await load();
       return;
     }
     const a = b.ack, c = b.command;
     const reason = a?.reasonCode ?? c?.reasonCode ?? null;
     if (a?.ackStatus && a.ackStatus !== "rejected") {
-      notify({ tone: a.ackStatus === "applied" ? "ok" : "warn", title: `설정 버전 ${a.version} — ${STATUS_TEXT[a.ackStatus] ?? a.ackStatus}`,
+      notify({ tone: a.ackStatus === "applied" ? "ok" : "warn", title: `설정 버전 ${a.version}: ${STATUS_TEXT[a.ackStatus] ?? a.ackStatus}`,
                text: [arr(a.appliedKeys).length && `바로 적용 ${arr(a.appliedKeys).length}`, arr(a.pendingKeys).length && `대기 ${arr(a.pendingKeys).join(", ")}`,
                       arr(a.overriddenKeys).length && `노트북 덮어쓰기가 이김 ${arr(a.overriddenKeys).join(", ")}`].filter(Boolean).join(" · ") || undefined });
       setEdits({});
     } else if (a?.ackStatus === "rejected" || c?.status === "rejected") {
-      notify({ tone: "bad", title: `설정 버전 ${b.version ?? "-"} — 거부`,
+      notify({ tone: "bad", title: `설정 버전 ${b.version ?? "-"}: 거부`,
                text: `${reason ? CONFIG_REASON[reason] ?? reasonLabel(bundle, reason) : ""}${reason ? ` (${reason})` : ""}${arr(a?.errors).length ? ` — ${arr(a?.errors).slice(0, 3).join(" / ")}` : c?.detail ? ` — ${c.detail}` : ""}` });
     } else {
-      notify({ tone: "warn", title: `설정 버전 ${b.version ?? "-"} — 결과를 기다리는 중`, text: `명령 ${c?.status ?? "-"} — 이력에서 확인하세요` });
+      notify({ tone: "warn", title: `설정 버전 ${b.version ?? "-"}: 결과를 기다리는 중`, text: `명령 ${c?.status ?? "-"}. 이력에서 확인하세요` });
     }
     await load();
     await reloadSchema();
@@ -322,7 +322,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
           <div className={`flex flex-wrap items-center gap-2 ${FS.small} text-[#5B6470]`}>
             <span>장비 버전 <b className="text-[#1B1F24]">v{ov.deviceVersion ?? "-"}</b>{detail && ov.currentRow && ` (${ov.currentRow.kind})`}</span>
             {ov.base && ov.base.version !== ov.deviceVersion && (
-              <Tag kind="info" title="장비에 보내지 않은 기준 — 다음 적용이 이 값 위에 만들어진다">
+              <Tag kind="info" title="장비에 보내지 않은 기준이며 다음 적용이 이 값 위에 만들어진다">
                 기준 v{ov.base.version}(장비 저장 값{detail ? ` · ${ov.base.kind}` : ""})
               </Tag>
             )}
@@ -331,7 +331,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
             {(Object.keys(idleP).length > 0 || Object.keys(restartP).length > 0) && (
               <Tag kind="wait">장비 대기 키 — 공정 끝나면 {Object.keys(idleP).length} · 재시작 때 {Object.keys(restartP).length}</Tag>
             )}
-            {!ov.canApply && <Tag kind="lock">보기만 — 적용은 관리자</Tag>}
+            {!ov.canApply && <Tag kind="lock">보기만 가능(적용은 관리자)</Tag>}
             {Object.keys(ov.overridden ?? {}).length > 0 && (
               <Tag kind="info" title={Object.keys(ov.overridden).join(", ")}>
                 노트북 설정 파일이 정한 값 {Object.keys(ov.overridden).length}개
@@ -373,7 +373,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                 </select>
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="키·라벨 찾기" className="w-40 rounded-md border border-[#D9DDE3] px-1.5 py-0.5" />
                 <label className="flex items-center gap-1"><input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} /> 바꾼 것만({changed.length})</label>
-                {busyNow && <Tag kind="warn">공정·히터 운전 중 — 등급 높음 값은 장비가 거부, 멈춰 있을 때 적용하는 값은 끝난 뒤 적용</Tag>}
+                {busyNow && <Tag kind="warn">공정·히터 운전 중이라 등급 높음 값은 장비가 거부하고, 멈춰 있을 때 적용하는 값은 끝난 뒤 적용</Tag>}
                 <span className="ml-auto flex items-center gap-1.5">
                   {changed.length > 0 && <button onClick={() => setEdits({})} className="px-1 text-[#5B6470] underline">되돌림</button>}
                   {ov.canApply && (
@@ -416,12 +416,12 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                             <span className="flex flex-wrap gap-0.5">
                               {p.webLocked && <Tag kind="lock">노트북 설정 파일로만</Tag>}
                               {overridden.has(p.key) && (
-                                <Tag kind="info" title="노트북 local_override.json 이 정한 키 — 웹 적용 값은 저장 값 기준, 실행은 덮어쓰기 값">
+                                <Tag kind="info" title="노트북 local_override.json 이 정한 키라 웹 적용 값은 저장 값 기준이고 실행은 덮어쓰기 값">
                                   노트북 덮어쓰기 — 지금 실행 값 {ov.overridden && p.key in ov.overridden && ov.overridden[p.key] !== null ? show(ov.overridden[p.key]) : "?"}
                                 </Tag>
                               )}
                               {rejected.has(p.key) && <Tag kind="alarmSolid">거부됨</Tag>}
-                              {listErrors[p.key] && <Tag kind="alarm" title="지금 값이 허용값 목록에 없다 — 다른 값을 골라야 적용할 수 있다">목록 밖</Tag>}
+                              {listErrors[p.key] && <Tag kind="alarm" title="지금 값이 허용값 목록에 없어 다른 값을 골라야 적용할 수 있다">목록 밖</Tag>}
                               {!rejected.has(p.key) && changed.includes(p.key) && <Tag kind="info" icon={PencilLine}>바꿈</Tag>}
                               {p.key in idleP && <Tag kind="wait" title={`대기 값 ${show(idleP[p.key])}`}>대기(공정 끝나면) → {show(idleP[p.key])}</Tag>}
                               {p.key in restartP && <Tag kind="wait" title={`대기 값 ${show(restartP[p.key])}`}>대기(재시작) → {show(restartP[p.key])}</Tag>}
@@ -462,7 +462,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
               </div>
               {rules.length > 0 && (
                 <div className={`rounded-lg bg-[#F5F6F8] p-2 ${FS.small} text-[#5B6470]`}>
-                  <p className="font-semibold">바꾼 키가 걸린 키 사이 규칙(판단은 장비 — 어기면 CONFIG_INVALID)</p>
+                  <p className="font-semibold">바꾼 키가 걸린 키 사이 규칙(판단은 장비가 하며 어기면 CONFIG_INVALID)</p>
                   <ul className="list-disc pl-4">{rules.map((r) => <li key={r.id}><span className="font-mono">{r.id}</span> {r.desc} <span className="text-[#5B6470]">({r.keys.join(", ")})</span></li>)}</ul>
                 </div>
               )}
@@ -564,7 +564,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
               })}</tbody>
             </table>
             {busyNow && changed.some((k) => params.find((x) => x.key === k)?.safety === "H") && (
-              <div className="mt-2"><Issue level="alarm">공정·히터 운전 중 — H 등급 키가 있어 장비가 거부합니다(CONFIG_H_IN_PROCESS).</Issue></div>
+              <div className="mt-2"><Issue level="alarm">공정·히터 운전 중이고 H 등급 키가 있어 장비가 거부합니다(CONFIG_H_IN_PROCESS).</Issue></div>
             )}
             <label className={`mt-2 block ${FS.small} text-[#5B6470]`}>메모(선택)
               <input value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} className={`mt-0.5 w-full rounded-md border border-[#D9DDE3] px-2 py-1 ${FS.body}`} />
