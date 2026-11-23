@@ -6,8 +6,10 @@
 // 장비 상태 켜짐 = 진회색 #3A424D 채운 네모, 꺼짐 = 회색 #8A929D 테두리 네모(초록·빨강을 쓰지 않는다) ·
 // 이상만 색: 주의 #B54708 / #FFFAEB, 알람·오류 #B42318 / #FEE4E2 — 늘 아이콘 + 글자 · 정보 띠 #EEF3FF / #C7D5FB / #1D4ED8.
 // 잠긴 버튼은 자물쇠 + 마우스를 올리면 이유(권한·bench·끊김·PLC 오래됨 — 이유 문구만 다름).
+// 도움말(W-14): 조각들은 지금처럼 title(·data-tip)을 달고, 화면 하나에 TipLayer 를 두면 마우스를 올리거나 키보드로 고를 때
+//   같은 모양의 도움말 상자로 보인다(대상을 가리지 않게 아래·위, 긴 글은 줄바꿈). 브라우저 기본 title 말풍선은 그동안 숨긴다.
 // 이 파일만 토큰을 안다 — CHK v2 화면 전체가 같은 조각을 쓴다(전역 CSS 는 건드리지 않는다).
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertOctagon, AlertTriangle, CheckCircle2, Clock, HelpCircle, Info, Lock, MinusCircle, PlayCircle, X, type LucideIcon,
 } from "lucide-react";
@@ -214,13 +216,13 @@ export function Empty({ children }: { children: ReactNode }) {
 
 /** 탭 — 선택은 #1D4ED8 밑줄·#E8EEFC 배경 */
 export function Tabs<K extends string>({ tabs, value, onChange, right, small }: {
-  tabs: { key: K; label: ReactNode; badge?: ReactNode }[]; value: K; onChange: (k: K) => void; right?: ReactNode; small?: boolean;
+  tabs: { key: K; label: ReactNode; badge?: ReactNode; title?: string }[]; value: K; onChange: (k: K) => void; right?: ReactNode; small?: boolean;
 }) {
   return (
     <div className="flex min-w-0 items-end gap-1 border-b border-[#D9DDE3]">
       <div className="flex min-w-0 items-end gap-1 overflow-x-auto overflow-y-hidden" role="tablist">
       {tabs.map((t) => (
-        <button key={t.key} role="tab" aria-selected={value === t.key} onClick={() => onChange(t.key)}
+        <button key={t.key} role="tab" aria-selected={value === t.key} onClick={() => onChange(t.key)} title={t.title}
           className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-[10px] border-b-2 font-semibold ${
             small ? `h-9 px-3 ${FS.body}` : `h-11 px-4 ${FS.card}`} ${
             value === t.key ? "border-[#1D4ED8] bg-[#E8EEFC] text-[#1D4ED8]" : "border-transparent text-[#5B6470] hover:text-[#1B1F24]"}`}>
@@ -442,6 +444,73 @@ export function Notices({ list, onClose }: { list: Notice[]; onClose: (id: strin
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** 도움말 층(W-14) — 화면에 하나. title·data-tip 이 있는 요소에 마우스를 올리거나(hover) 키보드로 고르면(focus) 도움말 상자.
+ *  상자는 대상 아래(아래 자리가 모자라면 위)에 붙고 대상을 가리지 않는다. 긴 글은 줄바꿈(최대 너비 340px).
+ *  보이는 동안은 요소의 title 을 data-tip 으로 옮겨 브라우저 기본 말풍선이 겹치지 않게 하고, 떠나면 되돌린다(서버 HTML·검사는 그대로).
+ *  잠긴(disabled) 버튼은 마우스 사건이 오지 않는 브라우저가 있어, 마우스 위치로 가장 안쪽 요소를 찾아 쓴다. */
+export function TipLayer() {
+  const [tip, setTip] = useState<{ text: string; left: number; top: number; above: boolean } | null>(null);
+  useEffect(() => {
+    let cur: HTMLElement | null = null;
+    const restore = () => {
+      if (cur && cur.dataset.tipFromTitle === "1") {
+        cur.setAttribute("title", cur.dataset.tip ?? "");
+        delete cur.dataset.tip;
+        delete cur.dataset.tipFromTitle;
+      }
+    };
+    const find = (el: Element | null): HTMLElement | null => {
+      const x = el?.closest?.("[data-tip],[title]") as HTMLElement | null;
+      if (!x || x.tagName === "svg" || x.closest("svg title")) return null;
+      return x;
+    };
+    const show = (el: HTMLElement | null) => {
+      if (el === cur) return;
+      restore();
+      cur = el;
+      if (!el) { setTip(null); return; }
+      if (el.hasAttribute("title")) {
+        el.dataset.tip = el.getAttribute("title") ?? "";
+        el.dataset.tipFromTitle = "1";
+        el.removeAttribute("title");
+      }
+      const text = (el.dataset.tip ?? "").trim();
+      if (!text) { setTip(null); return; }
+      const r = el.getBoundingClientRect();
+      const vw = window.innerWidth, vh = window.innerHeight;
+      const above = r.bottom + 90 > vh && r.top > 90;
+      setTip({ text, left: Math.max(8, Math.min(r.left, vw - 348)), top: above ? r.top - 6 : r.bottom + 6, above });
+    };
+    const over = (e: MouseEvent) => {
+      const el = document.elementFromPoint(e.clientX, e.clientY);
+      show(find(el ?? (e.target as Element)));
+    };
+    const focus = (e: FocusEvent) => show(find(e.target as Element));
+    const hide = () => show(null);
+    document.addEventListener("mousemove", over, { passive: true });
+    document.addEventListener("focusin", focus);
+    document.addEventListener("focusout", hide);
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("blur", hide);
+    return () => {
+      restore();
+      document.removeEventListener("mousemove", over);
+      document.removeEventListener("focusin", focus);
+      document.removeEventListener("focusout", hide);
+      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("blur", hide);
+    };
+  }, []);
+  if (!tip) return null;
+  return (
+    <div role="tooltip" style={{ left: tip.left, top: tip.top, transform: tip.above ? "translateY(-100%)" : undefined }}
+      className={`pointer-events-none fixed z-[90] max-w-[340px] whitespace-pre-line break-words rounded-[8px] bg-[#1B1F24] px-2.5 py-1.5
+        leading-[18px] text-white shadow-lg ${FS.small}`}>
+      {tip.text}
     </div>
   );
 }

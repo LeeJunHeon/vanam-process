@@ -31,10 +31,10 @@ const LABEL: Record<string, string> = {
 const nameOf = (it: AdjustItemDef) => it.label || LABEL[it.key] || it.key;
 
 const SCOPE: Record<AdjustState["scope"], { text: string; tone: string; send: boolean }> = {
-  live: { text: "지금 쓰는 중 — 바로 적용", tone: "bg-[#F5F6F8] text-[#5B6470]", send: true },
-  future: { text: "앞으로 — 그 블록부터", tone: "bg-[#FFFAEB] text-[#B54708]", send: true },
-  done: { text: "이미 지남 — 남은 블록이 안 씀", tone: "bg-[#EEF0F3] text-[#5B6470]", send: false },
-  unused: { text: "안 씀 — 이번 공정에서 안 씀", tone: "bg-[#EEF0F3] text-[#5B6470]", send: false },
+  live: { text: "지금 쓰는 중이라 바로 적용", tone: "bg-[#F5F6F8] text-[#5B6470]", send: true },
+  future: { text: "앞으로 올 블록부터 적용", tone: "bg-[#FFFAEB] text-[#B54708]", send: true },
+  done: { text: "이미 지나 남은 블록이 사용하지 않음", tone: "bg-[#EEF0F3] text-[#5B6470]", send: false },
+  unused: { text: "이번 공정에서 사용하지 않음", tone: "bg-[#EEF0F3] text-[#5B6470]", send: false },
 };
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -71,7 +71,7 @@ function deviceTime(t: number | null | undefined, skewMs: number): string {
 /** 화면에 보일 쓰는 곳 — 장비 값이 없으면(5-12 이전 장비) 모름, 보내기는 장비가 판단 */
 function whereOf(a: AdjustState | undefined): { text: string; tone: string; send: boolean } {
   if (!a) return { text: "장비가 지금 값을 보내지 않음", tone: "bg-[#F5F6F8] text-[#5B6470]", send: true };
-  if (a.busy) return { text: "RF Pulse 시작 중 — 끝난 뒤", tone: "bg-[#EEF3FF] text-[#1D4ED8]", send: false };
+  if (a.busy) return { text: "RF Pulse 가 시작하는 중이라 끝난 뒤에 할 수 있음", tone: "bg-[#EEF3FF] text-[#1D4ED8]", send: false };
   return SCOPE[a.scope] ?? { text: a.scope, tone: "bg-[#F5F6F8] text-[#5B6470]", send: true };
 }
 
@@ -167,7 +167,7 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk }: {
                     kind: "PROCESS_ADJUST", key, label: `공정 중 수정 · ${nameOf(it)}`,
                     detail: typeof v === "boolean" ? "" : `${fmt(now)} → ${fmt(v)} ${it.param.unit ?? ""}`,
                     args: { device: it.device, item: it.item, value: v }, red: true,
-                    lines: [`이번 공정${detail && runId ? `(run ${runId})` : ""}의 값만 바뀝니다 — 레시피·설정은 그대로`, whereOf(a).text,
+                    lines: [`이번 공정${detail && runId ? `(run ${runId})` : ""}의 값만 바뀝니다. 레시피·설정은 그대로입니다`, whereOf(a).text,
                             ...(it.help ? [it.help] : []), ...(detail && it.whenLive ? [`바로 적용 조건: ${it.whenLive}`] : [])],
                     note: detail && it.apply ? `장비 동작: ${it.apply}` : undefined,
                   })} />
@@ -191,7 +191,7 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk }: {
             <p className={`rounded-lg bg-[#FFFAEB] px-2 py-1 ${FS.small} text-[#B54708]`}>딜레이 행 중에는 수정할 수 없습니다.</p>
           )}
           {!list && (
-            <p className={`rounded-lg bg-[#F5F6F8] px-2 py-1 ${FS.small} text-[#5B6470]`}>장비가 지금 값을 보내지 않습니다 — 받을지는 장비가 판단합니다.</p>
+            <p className={`rounded-lg bg-[#F5F6F8] px-2 py-1 ${FS.small} text-[#5B6470]`}>장비가 지금 값을 보내지 않습니다. 받을지는 장비가 판단합니다.</p>
           )}
           {using.length ? table(using) : <p className={`${FS.small} text-[#5B6470]`}>지금 바꿀 수 있는 항목이 없습니다</p>}
           {unused.length > 0 && (

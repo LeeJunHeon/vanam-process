@@ -13,7 +13,7 @@ export function rowLine(r: Row): string {
   const time = `공정 ${v(r.process_time)}분${pyTruthy(r.shutter_delay) ? ` · 셔터 딜레이 ${v(r.shutter_delay)}분` : ""}`;
   return `${gas} · ${pw} · 압력 ${v(r.working_pressure)} mTorr · ${time}`;
 }
-export const heaterLine = (r: Row) => (r.use_heater === true ? `히터 목표 ${v(r.heater_temp)} °C` : "히터 안 씀");
+export const heaterLine = (r: Row) => (r.use_heater === true ? `히터 목표 ${v(r.heater_temp)} °C` : "히터를 쓰지 않음");
 
 /** 레시피 시작 확인창 요약 — 이름·행 수(v1·블록·딜레이)·첫 공정 행(v1 행은 가스·파워·시간·히터, 블록 행은 블록 수·장비·시간) */
 export function processLines(name: string, rows: Row[], check: RecipeCheck | null): string[] {

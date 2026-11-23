@@ -104,7 +104,7 @@ function defaultText(p: BParamDef, cfg: Record<string, unknown>, unit: string, d
   const u = unit ? ` ${unit}` : "";
   if (typeof d === "string" && d.startsWith("cfg:")) return `기본 ${toText(cfg[d.slice(4)])}${u}${detail ? `(설정 ${d.slice(4)})` : "(설정값)"}`;
   if (d === null || d === undefined) return p.required ? "필수" : "비움";
-  if (typeof d === "boolean") return d ? "기본(켬)" : "기본(끔)";
+  if (typeof d === "boolean") return d ? "기본(켜짐)" : "기본(꺼짐)";
   const el = p.enumLabels?.[String(d)];
   return `기본 ${el ?? toText(d)}${el ? "" : u}`;
 }
@@ -151,7 +151,7 @@ function Choice({ value, options, placeholder, error, readOnly, onChange, label 
   );
 }
 
-const BOOL_OPTS = [{ v: "true", label: "켬" }, { v: "false", label: "끔" }];
+const BOOL_OPTS = [{ v: "true", label: "켜짐" }, { v: "false", label: "꺼짐" }];
 const ENUM_LABEL: Record<string, string> = {   // 묶음 enumLabels 가 없을 때(옛 장비)
   open: "열기", close: "닫기", hold: "지금 위치에서 멈춤", continue: "경고 남기고 다음으로", abort: "공정 중단",
 };
@@ -206,7 +206,7 @@ function ParamField({ p, d, params, env, bundle, error, readOnly, set }: {
           {steps.map((s) => {
             const keep = env.mustKeep.includes(s.no);
             return (
-              <label key={s.no} title={`${s.desc ?? ""}${keep ? " — 파워 끄기 단계는 뺄 수 없음" : ""}`}
+              <label key={s.no} title={`${s.desc ?? ""}${keep ? "(파워 끄기 단계는 뺄 수 없음)" : ""}`}
                 className={`flex items-center gap-1 ${FS.body} ${keep ? "text-gray-300" : "text-gray-700"}`}>
                 <input type="checkbox" disabled={readOnly || (keep && !cur.includes(s.no))} checked={cur.includes(s.no)}
                   onChange={(ev) => {
@@ -229,7 +229,7 @@ function ParamField({ p, d, params, env, bundle, error, readOnly, set }: {
             <label key={w.item} className={`flex items-center justify-between gap-1 ${FS.body} text-gray-600`} title={detail ? w.rule : undefined}>
               {w.label}
               <Choice value={typeof cur[w.item] === "boolean" ? String(cur[w.item]) : cur[w.item]} options={BOOL_OPTS}
-                placeholder={base[w.item] ? "기본(켬)" : "기본(끔)"} readOnly={readOnly} label={w.label}
+                placeholder={base[w.item] ? "기본(켜짐)" : "기본(꺼짐)"} readOnly={readOnly} label={w.label}
                 onChange={(v) => {
                   const next = { ...cur };
                   if (v === undefined) delete next[w.item];
@@ -582,7 +582,7 @@ export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, err
             sel === e.uid ? "border-[#1D4ED8] bg-[#E8EEFC] ring-1 ring-[#1D4ED8]" : over === e.uid ? "border-dashed border-[#1D4ED8]"
             : locked ? "border-[#E3E6EA] bg-[#F5F6F8]" : "border-[#E3E6EA] bg-white hover:border-[#C9CED6]"}
             ${drag === e.uid ? "opacity-40" : ""}`}>
-          {locked ? <Lock size={12} className="shrink-0 text-[#8A929D]" aria-label="시작한 블록 — 잠김" />
+          {locked ? <Lock size={12} className="shrink-0 text-[#8A929D]" aria-label="시작한 블록이라 잠김" />
             : !readOnly && <GripVertical size={13} className="shrink-0 cursor-grab text-[#8A929D]" />}
           <span className={`shrink-0 font-mono ${FS.small} text-[#5B6470]`}>{p.path}</span>
           <span className={`h-2 w-2 shrink-0 rounded-full ${errs ? "bg-[#B42318]" : warns ? "bg-[#B54708]" : "bg-transparent"}`}
@@ -617,13 +617,13 @@ export function BlockTree({ tree, onTree, sel, onSel, env, bundle, readOnly, err
     <div className="space-y-2">
       <ol className="space-y-1">
         {rowsOf(tree)}
-        {!tree.length && <li className={`rounded-[10px] border border-dashed border-[#D9DDE3] p-3 text-center ${FS.small} text-[#5B6470]`}>블록이 없습니다 — 아래에서 블록을 넣으세요</li>}
+        {!tree.length && <li className={`rounded-[10px] border border-dashed border-[#D9DDE3] p-3 text-center ${FS.small} text-[#5B6470]`}>블록이 없습니다. 아래에서 블록을 넣으세요</li>}
       </ol>
       {!readOnly && (
         <div className="rounded-[10px] border border-[#E3E6EA] bg-[#F5F6F8] p-2">
           <div className={`mb-1 flex flex-wrap items-center gap-2 ${FS.small} font-semibold text-[#1B1F24]`}>
             블록 추가
-            <span className="font-normal text-[#5B6470]">{selPlace && !lockedOf(selPlace) ? `— ${selPlace.path} 뒤에` : lockTop ? "— 시작한 블록 뒤에" : "— 끝에"}</span>
+            <span className="font-normal text-[#5B6470]">{selPlace && !lockedOf(selPlace) ? `(${selPlace.path} 뒤에)` : lockTop ? "(시작한 블록 뒤에)" : "(끝에)"}</span>
             {canInto && (
               <label className="flex items-center gap-1 font-normal text-[#1D4ED8]">
                 <input type="checkbox" checked={into} onChange={(e) => setInto(e.target.checked)} /> 반복 안에 넣기
@@ -673,7 +673,7 @@ export function BlockPane({ tree, sel, env, bundle, readOnly, errors, warnings, 
   const update = (id: string, data: unknown) => onTree(mapTree(tree, id, (l, i) => l.map((x, j) => (j === i ? { ...x, data } : x))));
   return (
     <div className="space-y-2">
-      {locked && <p className={`flex items-center gap-1 ${FS.small} text-[#5B6470]`}><Lock size={12} /> 시작했거나 끝난 블록 — 고칠 수 없습니다</p>}
+      {locked && <p className={`flex items-center gap-1 ${FS.small} text-[#5B6470]`}><Lock size={12} /> 시작했거나 끝난 블록이라 고칠 수 없습니다</p>}
       <BlockForm key={p.e.uid} place={p} env={env} bundle={bundle} readOnly={readOnly || locked}
         errors={errors} warnings={warnings} names={names} update={update} />
     </div>

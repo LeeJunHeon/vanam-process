@@ -6,7 +6,7 @@
 // 이름·라벨·단위는 묶음 그대로. 인터록 비트(히터·RF Pulse)는 켜짐/꺼짐 표시만 — 이상 판단은 장비 알람·이상 비트로만.
 // 장비 상태는 진회색 채운 네모(켜짐·열림) / 회색 테두리 네모(꺼짐·닫힘) — 색은 이상할 때만(아이콘 + 글자).
 // 값 입력이 필요한 조작(히터 켜기·목표 바꾸기)은 버튼 → 작은 창에서 입력(범위는 묶음 인자) → 확인창. 버튼 색은 중립, 위험 동작만 빨간 테두리.
-// 설정에서 꺼진 장비(블록 품질 off — RF Pulse 등)는 접지 않고 값 '—'·칩 '사용 안 함 · 장비 설정'·한 줄 안내.
+// 설정에서 꺼진 장비(블록 품질 off — RF Pulse 등)는 접지 않고 값 '—'·칩 '사용하지 않음 · 장비 설정'·한 줄 안내.
 // 히터 출력은 퍼센트 없이 DAC·추정 전류(v1 결정), 2단 제어 상태 이름은 묶음 enumLabels, r1·SV2·ff·b_int 는 '상세'에서.
 // 진공·셔터는 [HMI 에서 조작] → HMI 탭(계통도). 노트북 로컬 화면은 HMI 경로에서 받는 명령만(나머지는 "웹에서만").
 import { useState, type ReactNode } from "react";
@@ -35,7 +35,7 @@ function DevCard({ title, sub, chip, big, summary, children, states, actions, no
     <Card className="flex h-full flex-col !p-4">
       <div className="flex items-start justify-between gap-2">
         <h3 className={`min-w-0 truncate font-bold text-[#1B1F24] ${FS.card}`}>{title}</h3>
-        <span className="flex shrink-0 flex-wrap justify-end gap-1">{off ? <Chip>사용 안 함 · 장비 설정</Chip> : chip}</span>
+        <span className="flex shrink-0 flex-wrap justify-end gap-1">{off ? <Chip>사용하지 않음 · 장비 설정</Chip> : chip}</span>
       </div>
       <p className={`truncate text-[#5B6470] ${FS.small}`}>{sub || "\u00A0"}</p>
       {big && <div className="mt-2">{big}</div>}
@@ -114,7 +114,12 @@ export function VacuumCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => voi
 }
 
 // ───────────── 가스·압력 ─────────────
-const VALVE_STALE = "명령 중이라 읽기 미룸";
+// 밸브 위치를 이번 초에 읽지 않은 까닭(묶음 18 mfc.valve_read — 읽기 계획). 옛 장비는 명령 처리로 미룬 것만 있었다
+const VALVE_WHY: Record<string, string> = {
+  alternate: "번갈아 읽는 중(2초마다)", yielded: "명령을 처리하느라 이번 읽기를 건너뜀", no_reply: "응답이 없거나 형식이 다름",
+};
+const VALVE_STALE = "명령을 처리하느라 이번 읽기를 건너뜀";
+const ALT_NOTE = "번갈아 읽는 중(2초마다)";
 export function GasCard({ bundle, snap, st }: Ctx) {
   const d = blockOf(bundle, "mfc");
   const off = st?.links?.mfc?.q === "off";
@@ -133,7 +138,13 @@ export function GasCard({ bundle, snap, st }: Ctx) {
         </KV>
       )}
       {/* 밸브 위치(묶음 15) — 기록용 읽기라 설정 명령 중에는 장비가 읽기를 미룬다(품질 열 stale → 앞 값을 흐리게) */}
-      <Row f={fieldOf(d, "valve_pct")} snap={snap} bundle={bundle} off={off} staleNote={VALVE_STALE} />
+      <Row f={fieldOf(d, "valve_pct")} snap={snap} bundle={bundle} off={off}
+        staleNote={VALVE_WHY[String(snap?.["mfc.valve_read"] ?? "")] ?? VALVE_STALE} />
+      {!off && snap?.["mfc.read_plan"] === "alternate" && (
+        <p className={`${FS.small} text-[#5B6470]`} title="읽기가 느려 장비가 유량·밸브 위치를 2초마다 번갈아 읽습니다. 빨라지면 매초 읽기로 돌아옵니다">
+          유량·밸브 위치는 {ALT_NOTE}
+        </p>
+      )}
       <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
         <StateBox on={snap?.["plc.ar_valve"] as boolean | undefined} label="Ar 차단밸브" />
         <StateBox on={snap?.["plc.o2_valve"] as boolean | undefined} label="O₂ 차단밸브" />
@@ -321,7 +332,7 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk }: Ctx) {
         </>}>
         <Row f={fieldOf(d, "sv")} snap={snap} bundle={bundle} off={off} />
         {tc2Only && (
-          <KV k="목표와의 편차(TC2)" title="TC2 − TC2 목표(SV2) — TC2 단독 제어에서 PID 가 따라가는 쪽">
+          <KV k="목표와의 편차(TC2)" title="TC2 − TC2 목표(SV2). TC2 단독 제어에서 PID 가 따라가는 쪽">
             <Val text={off || dev2 === null ? "" : `${dev2 >= 0 ? "+" : "−"}${Math.abs(dev2).toFixed(1)}`} unit="°C" />
           </KV>
         )}
@@ -384,6 +395,11 @@ export function PowerCard({ name, bundle, snap, st }: Ctx & { name: "dc" | "rf" 
       big={<Big f={fieldOf(d, bigName)} snap={snap} bundle={bundle} off={off} />}
       note={off ? "장비 설정에서 꺼져 있어 값을 읽지 않습니다" : undefined}>
       {rows.map((n) => <Row key={n} f={fieldOf(d, n)} snap={snap} bundle={bundle} off={off} />)}
+      {name === "rfp" && !off && snap?.["rfp.read_plan"] === "alternate" && (
+        <p className={`${FS.small} text-[#5B6470]`} title="읽기가 느려 장비가 순방향·상태를 2초마다 번갈아 읽습니다. 빨라지면 매초 읽기로 돌아옵니다">
+          순방향·상태는 {ALT_NOTE}
+        </p>
+      )}
       {name === "rfp" && fieldOf(d, "itl_open") && (
         <div className="mt-1 grid grid-cols-2 gap-x-3 gap-y-1">
           <StateBox on={off ? null : snap?.["rfp.itl_open"] === true} label={fieldOf(d, "itl_open")?.label ?? "인터록 열림"} />

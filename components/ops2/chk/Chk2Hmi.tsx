@@ -4,7 +4,7 @@
 //   그림: 왼쪽 가스 줄(Ar·O₂ MFC 상자 실제/설정 sccm → 차단밸브 → 챔버) · 가운데 챔버 · 오른쪽 Vent · 아래 배기(MV → Turbo → FV → Rotary,
 //   RV 우회). 챔버 안에는 구조만(Gun1·Gun2·셔터 S1·S2·Main 셔터·기판 히터 자리) + 짧은 상태 글. 숫자 값은 제자리에:
 //   MFC 상자 = 실제/설정, 챔버 옆 작은 상자 = 챔버 압력, 챔버 벽 게이지 기호 → 이온 게이지 상자 = 이온·A·B, 기판 히터 자리 = TC1 크게·TC2·목표·제어 방식.
-//   패널: 파워(DC Power·RF Power·RF Pulse — 값·출력 상태·사용 안 함), 유틸리티 램프, 이오나이저(켜기/끄기·구동·점등·수명 초과), MV 인터록.
+//   패널: 파워(DC Power·RF Power·RF Pulse — 값·출력 상태·사용하지 않음), 유틸리티 램프, 이오나이저(켜기/끄기·구동·점등·수명 초과), MV 인터록.
 // 그림은 탭 폭을 채우고(비율 유지), 글자는 kit 글자 체계 px 그대로(그림 배율을 재서 글자 크기를 되돌림 — 화면 폭이 달라도 14px·12px).
 // 기호는 2D 평면: 밸브 = 나비(모두 같은 크기), 펌프 = 원(같은 크기), 셔터 = 막대. 켜짐·열림 = 진회색 채움, 꺼짐·닫힘 = 흰 바탕 테두리.
 //   배관 선 굵기 하나 — 그 구간을 여닫는 밸브·펌프가 켜진 구간만 진회색. 전환 중 = 파란 점선 + '전환 중'(10 s — 부르는 쪽 pending).
@@ -26,7 +26,7 @@ const VB_W = 1100, VB_H = 560;
 type Props = {
   bundle: Bundle | null;
   snapshot?: Record<string, unknown>;
-  links?: Record<string, Link>;            // 장비 블록 품질(파워 '사용 안 함')
+  links?: Record<string, Link>;            // 장비 블록 품질(파워 '사용하지 않음')
   plcOk: boolean;                          // PLC 값을 믿을 수 있음(나이 기준)
   lockOf: (target: string) => string | null;   // PLC 버튼 잠금 이유(권한·bench·끊김·결과 기다림·PLC 오래됨)
   pending: Record<string, boolean>;        // target → 바라는 값(전환 중)
@@ -67,7 +67,7 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
   const raw = (t: string) => snap?.[`plc.${btn(t)?.addr ?? t}`];
   const on = (t: string) => plcOk && raw(t) === true;
   const wait = (t: string) => plcOk && pending[t] !== undefined && pending[t] !== (raw(t) === true);
-  const why = (t: string) => (viewOnly ? "보기만 — PLC 버튼은 웹에서만" : !btn(t) ? "장비 정의에 없는 버튼" : lockOf(t));
+  const why = (t: string) => (viewOnly ? "보기만 가능(PLC 버튼은 웹에서)" : !btn(t) ? "장비 정의에 없는 버튼" : lockOf(t));
   const press = (t: string) => {
     const b = btn(t);
     if (!b || why(t)) return;
@@ -86,7 +86,7 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
     const w = why(t);
     const state = stateWord(t, kind);
     return (
-      <g role="button" tabIndex={w ? -1 : 0} aria-disabled={!!w} aria-label={`${label} — ${state}${w ? ` (잠김: ${w})` : " — 눌러서 바꾸기"}`}
+      <g role="button" tabIndex={w ? -1 : 0} aria-disabled={!!w} aria-label={`${label} — ${state}${w ? ` (잠김: ${w})` : " · 눌러서 바꾸기"}`}
         onClick={() => press(t)} onKeyDown={keys(t)} style={{ cursor: w ? "default" : "pointer", outline: "none" }}
         className={w ? "" : "[&:focus-visible>.ring]:opacity-100 [&:hover>.ring]:opacity-100"}>
         <title>{`${btn(t)?.label ?? label} · ${state}${w ? ` · 잠김: ${w}` : ""}`}</title>
@@ -331,7 +331,7 @@ function ValuePanel({ bundle, snap, links, plcOk, ion }: {
     return (
       <div className="flex min-h-[26px] items-baseline justify-between gap-2">
         <span className="min-w-0 truncate font-semibold text-[#1B1F24]">{blockLabel(name, l)}</span>
-        {off ? <Chip>사용 안 함</Chip> : (
+        {off ? <Chip>사용하지 않음</Chip> : (
           <span className="flex shrink-0 items-baseline gap-2">
             <span className="whitespace-nowrap font-semibold tabular-nums text-[#133A7C]">
               {t?.text || "—"}{t?.text && f?.unit && <span className={`ml-1 font-normal text-[#5B6470] ${FS.small}`}>{f.unit}</span>}

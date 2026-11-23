@@ -17,6 +17,7 @@ import { DeviceGrid } from "./Chk2Devices";
 import Chk2Seq from "./Chk2Seq";
 import Chk2Trend from "./Chk2Trend";
 import Chk2Adjust from "./Chk2Adjust";
+import Chk2LocalNext from "./Chk2LocalNext";
 import { ExpandedView, fmtSec } from "./Chk2BlockEditor";
 import { argRange, paramValue } from "./logic";
 import { enumLabel, fieldText, logLine } from "./text";
@@ -79,7 +80,7 @@ function KeyTile({ d: d0, bundle, snap }: { d: KeyDef; bundle: Bundle | null; sn
       <div className="mt-1"><Val text={txt.text} unit={unit} size="big" alt={txt.alt} altWarn={txt.warn} /></div>
       {d.key !== "ig" && <div className="mt-1"><RangeBar value={v} target={t} band={band} max={max} label={`${d.label} 막대`} /></div>}
       <p className={`mt-0.5 flex justify-between ${FS.small} tabular-nums text-[#8A929D]`}>
-        {d.key !== "ig" ? <><span>0</span><span>{fmtN(max)} {unit}</span></> : <span>로그 값 — 막대 없음</span>}
+        {d.key !== "ig" ? <><span>0</span><span>{fmtN(max)} {unit}</span></> : <span>로그 값이라 막대 없음</span>}
       </p>
       {extra && <p className={`mt-1 truncate ${FS.small} text-[#5B6470]`}>{extra}</p>}
     </Tile>
@@ -161,7 +162,7 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
         <ul className="absolute inset-0 space-y-1.5 overflow-y-auto pr-1">
           {lines.map((r) => (
             <li key={r.e.id} className={`${FS.body} leading-snug`} title={r.raw}>
-              <span className={`mr-1.5 tabular-nums text-[#5B6470] ${FS.small}`}>{fmtKst(r.e.ts).slice(-8)}</span>
+              <span className={`mr-1.5 tabular-nums text-[#5B6470] ${FS.small}`}>{whenText(r.e.ts)}</span>
               {r.level === "warn" ? <Chip tone="warn">{r.kind}</Chip> : r.level === "error" || r.level === "critical"
                 ? <Chip tone="alarm">{r.kind}</Chip> : <b className="text-[#1B1F24]">{r.kind}</b>}
               <span className={`ml-1 ${r.level === "warn" ? "text-[#B54708]" : r.level === "error" || r.level === "critical" ? "text-[#B42318]" : "text-[#5B6470]"}`}>{r.text}</span>
@@ -172,6 +173,12 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
       ) : <Empty>최근 사건이 없습니다</Empty>}
     </Card>
   );
+}
+
+/** 알림 시각 — 오늘(한국 시각) 것은 시각만, 아니면 날짜까지(W-14) */
+function whenText(iso: string): string {
+  const full = fmtKst(iso), today = fmtKst(new Date().toISOString());
+  return full.slice(0, 5) === today.slice(0, 5) ? full.slice(-8) : full;
 }
 
 // ───────────── 다음 공정(대기) ─────────────
@@ -211,8 +218,8 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   const t = exp.length ? expectedTime(exp) : null;
   const steps = exp.reduce((n, b) => n + b.steps.filter((s) => !s.internal).length, 0);
   const first = full?.rows.find((r) => r && Object.keys(r).length && !("blocks" in r)) as Row | undefined;
-  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정의를 아직 받지 못함" : chk?.errors ? `검사 오류 ${chk.errors}개 — 레시피 탭에서 고친 뒤` : lock("RECIPE_LOAD");
-  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정의를 아직 받지 못함" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개 — 레시피 탭에서 고친 뒤` : lock("HEATER_RECIPE_RUN");
+  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정의를 아직 받지 못함" : chk?.errors ? `검사 오류 ${chk.errors}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("RECIPE_LOAD");
+  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정의를 아직 받지 못함" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("HEATER_RECIPE_RUN");
   const loadedWeb = loaded?.name ? list.find((r) => r.kind === "process" && r.name === loaded.name) : undefined;
 
   const askStart = async () => {
@@ -222,11 +229,11 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
       if (r.ok) {
         const rows = r.data.recipe.rows as Row[];
         lines = [...processLines(loadedWeb.name, rows, env ? checkProcessRecipe(rows, env) : null),
-                 `웹 레시피 마지막 수정 ${fmtKst(loadedWeb.updatedAt)} — 적재 뒤 고쳤다면 장비 것과 다를 수 있음`];
+                 `웹 레시피 마지막 수정 ${fmtKst(loadedWeb.updatedAt)} (적재 뒤 고쳤다면 장비 것과 다를 수 있음)`];
       }
     }
     onAsk({ kind: "RECIPE_START", label: "적재 레시피 시작", detail: `'${loaded?.name ?? ""}'`, red: true, lines,
-            note: "공정을 시작합니다 — 가스·파워·셔터가 움직입니다." });
+            note: "공정을 시작합니다. 가스·파워·셔터가 움직입니다." });
   };
   const sel = `h-10 min-w-0 flex-1 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body}`;
   return (
@@ -248,7 +255,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
                 </Btn>
               </span>
             </>
-          ) : <span className="text-[#5B6470]">장비에 적재된 공정 레시피 없음 — 아래에서 골라 적재하세요</span>}
+          ) : <span className="text-[#5B6470]">장비에 적재된 공정 레시피 없음. 아래에서 골라 적재하세요</span>}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -341,9 +348,10 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
     <div className="space-y-3">
       <div className="grid gap-3 lg:grid-cols-3">
         {recipes && onEditRecipe ? <NextProcess bundle={bundle} st={st} recipes={recipes} lock={lock} onAsk={onAsk} onEdit={onEditRecipe} />
+          : local ? <Chk2LocalNext bundle={bundle} st={st} lock={lock} onAsk={onAsk} />
           : <Card title="다음 공정" className="lg:col-span-2">
               <KV k="장비에 적재됨"><b className={`${FS.body}`}>{st?.recipe?.name || "없음"}</b></KV>
-              <p className={`mt-2 ${FS.small} text-[#5B6470]`}>레시피 고르기·적재는 웹 화면에서</p>
+              <p className={`mt-2 ${FS.small} text-[#5B6470]`}>레시피 고르기·적재는 웹 화면에서 합니다</p>
             </Card>}
         <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} />
       </div>

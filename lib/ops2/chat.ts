@@ -216,8 +216,11 @@ export async function enqueueChat(equipment: string, envs: Env[], now: Date): Pr
         ["시작 시각", kstOf(r?.startedAt ?? e.ts)], ["시작한 사람", str(d.by) ?? "—"],
         ...startFields(params, blocks),
       ];
+      // 수동 조작(묶음 18 — run_start data.manual): 블록을 하나씩 실행하는 공정이라 '수동 조작 시작'으로 구분
+      const head = d.manual === true ? "수동 조작 시작" : "공정 시작";
+      if (d.manual === true) fields.splice(2, 0, ["구분", `수동 조작(${d.source === "local" ? "노트북" : "웹"})`]);
       items.push({ kind: "run_start", msgId: e.id, at: e.ts.getTime(), skip: late ? "늦게 받음" : null,
-                   payload: { title: `공정 시작 · ${name(r)}`, body: card("notify-card", "공정 시작", `${L.base} · ${name(r)}`, "INFO", fields) } });
+                   payload: { title: `${head} · ${name(r)}`, body: card("notify-card", head, `${L.base} · ${name(r)}`, "INFO", fields) } });
     } else if (e.type === "run_end") {
       const r = runs.get(str(d.runId) ?? "");
       const result = str(d.result) ?? "";
@@ -234,9 +237,10 @@ export async function enqueueChat(equipment: string, envs: Env[], now: Date): Pr
       if (!ok && !userStop) fields.push(["원인", code ? ` • ${L.reason(code)} (${code})` : "알 수 없음"]);
       else if (code) fields.push(["사유", `${L.reason(code)} (${code})`]);
       if (lateNote) fields.push(["⚠ 늦게 받음", lateNote]);
+      const endHead = d.manual === true ? "수동 조작 끝" : "공정 종료";
       items.push({ kind: "run_end", msgId: e.id, at: e.ts.getTime(),
-                   payload: { title: `공정 종료 · ${name(r)} · ${subtitle}${late ? " · 늦게 받음" : ""}`, late,
-                              body: card("notify-card", "공정 종료", subtitle, ok ? "SUCCESS" : "FAIL", fields) } });
+                   payload: { title: `${endHead} · ${name(r)} · ${subtitle}${late ? " · 늦게 받음" : ""}`, late,
+                              body: card("notify-card", endHead, subtitle, ok ? "SUCCESS" : "FAIL", fields) } });
       // v1: 실패 && STOP 아님이면 카드 뒤 일반 글로 원인 한 줄
       if (!ok && !userStop) {
         const text = `❌ ${L.base} 공정 실패 이유: ${name(r)} | ${code ? `${L.reason(code)} (${code})` : "오류"}`;

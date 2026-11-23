@@ -262,7 +262,7 @@ export default function Chk2Trend({ trend, equipment, runId, local, nowMs, press
       <div ref={box} className="min-w-0">
         {range !== "run" && <p className={`mb-1 ${FS.small} text-[#5B6470]`}>이 화면을 연 뒤부터 쌓은 값입니다(2초 간격).</p>}
         {range === "run" && rows === null ? <Empty>1분 요약을 읽는 중…</Empty>
-          : !panels.length ? <Empty>그릴 값이 없습니다 — 이번 공정이 쓰는 압력·파워·히터 값이 들어오면 그립니다</Empty>
+          : !panels.length ? <Empty>그릴 값이 없습니다. 이번 공정이 쓰는 압력·파워·히터 값이 들어오면 그립니다</Empty>
           : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} />)}
       </div>
     </Card>

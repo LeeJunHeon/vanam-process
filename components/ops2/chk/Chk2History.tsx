@@ -159,7 +159,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
       <section>
         <div className="mb-1 flex flex-wrap items-center gap-2">
           <h4 className={`${FS.body} font-bold text-[#1B1F24]`}>1분 요약 그래프</h4>
-          <span className={`${FS.small} text-[#5B6470]`}>1분 요약 그래프(평균·최대) — 회색 배경·점선 구간은 값 품질이 낮을 때</span>
+          <span className={`${FS.small} text-[#5B6470]`}>1분 요약 그래프(평균·최대). 회색 배경·점선 구간은 값 품질이 낮을 때</span>
           {cols && <button onClick={() => setCols(null)} className={`ml-auto px-1.5 ${FS.small} text-[#5B6470] underline`}>기본으로</button>}
         </div>
         <div className="mb-1.5 flex flex-wrap items-start gap-1.5">
@@ -201,7 +201,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
         <section>
           <h4 className={`mb-1 ${FS.body} font-bold text-[#1B1F24]`}>레시피 값</h4>
           {pText.length ? <p className={`${FS.small} leading-relaxed text-[#1B1F24]`}>{pText.join(" · ")}</p>
-            : <p className={`${FS.small} text-[#5B6470]`}>{exp.length ? "블록 행 — 아래 블록 기록" : "없음"}</p>}
+            : <p className={`${FS.small} text-[#5B6470]`}>{exp.length ? "블록 행(아래 블록 기록)" : "없음"}</p>}
           {detail && params.length > 0 && (
             <p className={`mt-1 ${FS.small} leading-relaxed text-[#5B6470]`}>
               {params.map(([k, v]) => <span key={k} className="mr-2 inline-block font-mono">{k} {typeof v === "object" ? JSON.stringify(v) : String(v)}</span>)}

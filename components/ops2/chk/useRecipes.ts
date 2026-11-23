@@ -71,9 +71,9 @@ export function useRecipes(equipment: string, enabled = true) {
 }
 
 export const RECIPE_ERROR: Record<string, string> = {
-  forbidden: "권한 없음 — 레시피 저장은 장비 담당자·관리자만",
+  forbidden: "권한 없음(레시피 저장은 장비 담당자·관리자만)",
   name_taken: "같은 이름의 레시피가 있습니다",
-  stale: "다른 사람이 먼저 고쳤습니다 — 다시 열어 확인하세요",
+  stale: "다른 사람이 먼저 고쳤습니다. 다시 열어 확인하세요",
   bad_name: "이름은 1~80자",
   too_large: "레시피가 너무 큽니다(256 KB)",
   not_found: "레시피가 없습니다(지워졌을 수 있음)",
