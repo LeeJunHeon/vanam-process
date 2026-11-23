@@ -79,7 +79,7 @@ export function StatusBar({ bundle, st, connected, lock, onAsk }: {
       {st?.paused && <Chip tone="warn" icon={<PauseCircle size={11} />}>일시정지</Chip>}
       {st?.run?.manual && <Chip tone="dark">{st.run.manual.label || "수동 조작 중"}</Chip>}
       {step && <span className={`${FS.small} text-[#5B6470]`}>블록 {step.no}/{step.total}</span>}
-      {typeof r === "number" && r >= 0 && <span className={`${FS.card} font-bold tabular-nums text-[#133A7C]`}>남은 {fmtClock(r)}</span>}
+      {!st?.run?.manual && typeof r === "number" && r >= 0 && <span className={`${FS.card} font-bold tabular-nums text-[#133A7C]`}>남은 {fmtClock(r)}</span>}
       <span className="ml-auto"><StopButtons lock={lock} onAsk={onAsk} small /></span>
     </div>
   );
@@ -122,6 +122,9 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
   const endAt = rem.sec !== null && active ? new Date(nowMs + rem.sec * 1000) : null;
   const recText = rec ? `${rec.name || "이름 없음"}${rec.listActive ? ` · ${rec.row ?? "-"}/${rec.rows ?? "-"}행` : rec.row ? ` · ${rec.row}/${rec.rows ?? "-"}행` : ` · 적재됨 · ${rec.rows ?? "-"}행`}` : null;
   const hm = (d: Date) => fmtKst(d.toISOString()).slice(-8, -3);
+  // 수동 조작(W-15) — 끝이 정해져 있지 않아 진행 막대·남은 시간·예상 끝 없이 "수동 조작 중 · 시작 · 경과 · 켜져 있는 출력"
+  const manual = st?.run?.manual ?? null;
+  const outs = (manual?.outputs ?? []).map((o) => `${o.label}${typeof o.value === "number" ? ` ${Number(o.value.toPrecision(6))}${o.unit ? ` ${o.unit}` : ""}` : ""}`);
 
   return (
     <section className="min-w-0 rounded-[12px] border border-[#D9DDE3] bg-white p-4 sm:p-5">
@@ -149,7 +152,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
               {detail && st?.runId && <span className="ml-2 font-mono text-[#8A929D]">run {st.runId}</span>}
             </p>
           )}
-          {active && st && (
+          {active && st && !manual && (
             <p className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 ${FS.body} text-[#1B1F24]`}>
               {step && <span className="tabular-nums text-[#5B6470]">블록 {step.no}/{step.total}</span>}
               <b>{blockTitle(bundle, st, v1Row)}</b>
@@ -168,7 +171,15 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
         <StopButtons lock={lock} onAsk={onAsk} />
       </div>
 
-      {active && (
+      {active && manual && (
+        <p className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 ${FS.body} text-[#5B6470]`}>
+          <b className="text-[#1B1F24]">수동 조작 중{manual.waiting ? " · 다음 조작을 기다림" : ""}</b>
+          {startedMs !== null && <span>시작 <b className="tabular-nums text-[#1B1F24]">{hm(new Date(startedMs))}</b></span>}
+          {elapsedS !== null && <span>경과 <b className="tabular-nums text-[#1B1F24]">{fmtDur(elapsedS)}</b></span>}
+          <span>켜져 있는 출력 <b className="text-[#1B1F24]">{outs.length ? outs.join(" · ") : "없음"}</b></span>
+        </p>
+      )}
+      {active && !manual && (
         <div className="mt-3 space-y-1.5">
           {progress !== null && (
             <div className="h-2 overflow-hidden rounded-full bg-[#E3E6EA]" role="progressbar" aria-valuemin={0} aria-valuemax={100}

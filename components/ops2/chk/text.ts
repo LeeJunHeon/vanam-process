@@ -121,7 +121,8 @@ export function runTitle(r: { name: string | null; recipeName: string | null; st
 
 // ───────────── 로그(사건) ─────────────
 export type FeedLike = { type: string; data: Obj };
-export type LogLine = { level: string; kind: string; text: string; raw: string; main: boolean; source?: string };
+export type LogLine = { level: string; kind: string; text: string; raw: string; main: boolean; source?: string;
+  desc?: string };   // desc: 사건 종류의 뜻(묶음 19 eventKinds[].desc) — 있을 때만 마우스 설명
 
 const ADJ_RESULT: Record<string, string> = {
   applied: "바로 적용", scheduled: "다음 블록부터", confirmed: "장비 확인", failed: "장비 적용 실패", rejected: "거부",
@@ -142,12 +143,15 @@ export function adjustLine(b: Bundle | null, d: Obj): string {
 export function logLine(b: Bundle | null, e: FeedLike): LogLine {
   const d = e.data;
   if (e.type === "run_start") {
-    return { level: "info", kind: "공정 시작", main: true, raw: `RUN_START ${s(d.runId)}`,
+    return { level: "info", kind: d.manual ? "수동 조작 시작" : "공정 시작", main: true, raw: `RUN_START ${s(d.runId)}`,
              text: `${runTitle({ name: s(d.name) || null, recipeName: s(d.recipeName) || null }) || "공정"}${d.by ? ` · ${s(d.by)}` : ""}` };
   }
   if (e.type === "run_end") {
     const r = s(d.result);
-    return { level: r === "done" ? "info" : "warn", kind: "공정 끝", main: true, raw: `RUN_END ${s(d.reasonCode)}`,
+    // 수동 조작(묶음 19 summary.endText — '수동 조작 끝'·'수동 조작 중단')은 종류 이름을 그 말로
+    const sm = isObj(d.summary) ? d.summary : {};
+    const manual = d.manual === true || sm.manual === true;
+    return { level: r === "done" ? "info" : "warn", kind: manual ? (s(sm.endText) || "수동 조작 끝") : "공정 끝", main: true, raw: `RUN_END ${s(d.reasonCode)}`,
              text: `${RUN_RESULT[r] ?? r}${d.reasonCode ? ` · ${reasonLabel(b, s(d.reasonCode))}` : ""}` };
   }
   if (e.type === "cmd_result") {
@@ -204,5 +208,5 @@ export function logLine(b: Bundle | null, e: FeedLike): LogLine {
     const label = reasonLabel(b, code);
     text = [label !== code && label !== name ? label : "", s(d.message)].filter(Boolean).join(" — ");
   }
-  return { level, kind: name, text, raw, main, source: source ? sourceLabel(b, source) : undefined };
+  return { level, kind: name, text, raw, main, source: source ? sourceLabel(b, source) : undefined, ...(ek?.desc ? { desc: ek.desc } : {}) };
 }

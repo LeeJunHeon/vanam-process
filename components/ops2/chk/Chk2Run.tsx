@@ -12,7 +12,8 @@ import { BellRing, ChevronDown, ChevronRight, FileEdit, Flame, Play, Upload, X }
 import { checkEnvOf, checkHeaterRecipe, checkProcessRecipe, devSpOf, type RecipeCheck, type Row } from "@/lib/ops2/chk/recipe";
 import { expectedTime } from "@/lib/ops2/chk/blocks";
 import { fmtKst } from "@/lib/ops2/time";
-import { FS, Btn, Card, Chip, Empty, KV, RangeBar, StateBox, Tile, Val, Dot, type Ask } from "./kit";
+import { FS, Btn, Card, Chip, Empty, KV, RangeBar, Tile, Val, type Ask } from "./kit";
+import { StateTag, wordsOf } from "./StateTag";
 import { DeviceGrid } from "./Chk2Devices";
 import Chk2Seq from "./Chk2Seq";
 import Chk2Trend from "./Chk2Trend";
@@ -117,16 +118,12 @@ function KeyValues({ bundle, st, blocks }: { bundle: Bundle | null; st: StateDat
 // ───────────── 장비 상태 목록 ─────────────
 function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
   const lab = (n: string) => fieldOf(bundle, `plc.${n}`)?.label ?? n;
-  const box = (n: string, label?: string) => <StateBox key={n} on={snap?.[`plc.${n}`] as boolean | undefined} label={label ?? lab(n)} />;
-  const lamp = (n: string, label: string) => (
-    <span key={n} className={`flex items-center gap-1.5 ${FS.body} text-[#5B6470]`} title={snap?.[`plc.${n}`] === true ? "감지" : "없음"}>
-      <Dot on={snap?.[`plc.${n}`] === true} dim={snap?.[`plc.${n}`] === undefined} />{fieldOf(bundle, `plc.${n}`)?.label ?? label}
-    </span>
-  );
+  const box = (n: string, label?: string) => <StateTag key={n} on={snap?.[`plc.${n}`] as boolean | undefined} label={label ?? lab(n)} words={wordsOf(n)} />;
+  const lamp = (n: string, label: string) => box(n, fieldOf(bundle, `plc.${n}`)?.label ?? label);
   const group = (title: string, items: ReactNode[]) => (
     <div>
       <p className={`mb-1 ${FS.small} font-semibold text-[#5B6470]`}>{title}</p>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1">{items}</div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1">{items}</div>
     </div>
   );
   return (
@@ -143,12 +140,12 @@ function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
 }
 
 // ───────────── 알림 ─────────────
-/** 알림 — 높이는 같은 줄 카드에 맞추고(격자 늘이기) 사건 목록은 카드 안에서 스크롤 */
+/** 알림 — 높이는 내용만큼(옆 카드에 맞추지 않음), 사건 목록은 최대 높이 안에서 스크롤 */
 function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateData | null; feed: FeedItem[]; onLog?: () => void }) {
   const alarms = st?.alarms ?? [];
   const lines = useMemo(() => feed.map((e) => ({ e, ...logLine(bundle, e) })).filter((r) => r.main).slice(-20).reverse(), [bundle, feed]);
   return (
-    <Card className="flex h-full flex-col" title={<><BellRing size={15} /> 알림</>} right={onLog && <Btn size="sm" kind="ghost" onClick={onLog}>기록 전체 보기</Btn>}>
+    <Card title={<><BellRing size={15} /> 알림</>} right={onLog && <Btn size="sm" kind="ghost" onClick={onLog}>기록 전체 보기</Btn>}>
       <p className={`mb-2 ${FS.body} text-[#5B6470]`}>
         활성 알람 {alarms.length ? <Chip tone="alarm">{alarms.length}개</Chip> : <b className="text-[#1B1F24]">없음</b>}
       </p>
@@ -158,10 +155,9 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
         </div>
       )}
       {lines.length ? (
-        <div className="relative min-h-[200px] flex-1">
-        <ul className="absolute inset-0 space-y-1.5 overflow-y-auto pr-1">
+        <ul className="max-h-[320px] space-y-1.5 overflow-y-auto pr-1">
           {lines.map((r) => (
-            <li key={r.e.id} className={`${FS.body} leading-snug`} title={r.raw}>
+            <li key={r.e.id} className={`${FS.body} leading-snug`} title={r.desc}>
               <span className={`mr-1.5 tabular-nums text-[#5B6470] ${FS.small}`}>{whenText(r.e.ts)}</span>
               {r.level === "warn" ? <Chip tone="warn">{r.kind}</Chip> : r.level === "error" || r.level === "critical"
                 ? <Chip tone="alarm">{r.kind}</Chip> : <b className="text-[#1B1F24]">{r.kind}</b>}
@@ -169,7 +165,6 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
             </li>
           ))}
         </ul>
-        </div>
       ) : <Empty>최근 사건이 없습니다</Empty>}
     </Card>
   );
@@ -337,7 +332,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
             pressureTarget={pressureTargetCol(snap, bundle)} />
           <Chk2Adjust bundle={bundle} st={st} skewMs={skewMs} canKey={canKey} onAsk={onAsk} />
         </div>
-        <div className="grid min-w-0 gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">
+        <div className="grid min-w-0 items-start gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">
           <DeviceStates bundle={bundle} snap={snap} />
           <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} />
         </div>
@@ -346,7 +341,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
   }
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid items-start gap-3 lg:grid-cols-3">
         {recipes && onEditRecipe ? <NextProcess bundle={bundle} st={st} recipes={recipes} lock={lock} onAsk={onAsk} onEdit={onEditRecipe} />
           : local ? <Chk2LocalNext bundle={bundle} st={st} lock={lock} onAsk={onAsk} />
           : <Card title="다음 공정" className="lg:col-span-2">
