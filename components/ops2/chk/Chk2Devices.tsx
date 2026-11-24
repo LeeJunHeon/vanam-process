@@ -442,20 +442,24 @@ export function ShutterCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => vo
   );
 }
 
-/** 장비 카드 격자 — 4열 같은 너비(1280 화면에서도 — 격자 폭 900px 이상), 카드는 내용 높이(items-start), 좁으면 2열·1열(격자 폭 기준) */
+/** 장비 카드 배치(W-16) — 줄 격자가 아니라 장비 계통별 세로 열 4개에 위에서부터 쌓는다(카드 사이 빈칸 없음, 상세 보기를 켜도 열·순서 그대로).
+ *  1열 진공 → 셔터·안전 · 2열 가스·압력 → 이온 게이지 · 3열 DC Power → RF Power → RF Pulse · 4열 히터.
+ *  격자 폭 900px 이상 4열, 520px 이상 2열(왼쪽 = 1·2열, 오른쪽 = 3·4열을 위아래로), 더 좁으면 1열(같은 순서) */
 export function DeviceGrid(p: Ctx & { onHmi: () => void }) {
+  const col = (children: ReactNode) => <div className="flex min-w-0 flex-col gap-3">{children}</div>;
+  const half = (children: ReactNode) => <div className="grid min-w-0 grid-cols-1 items-start gap-3 @[900px]:grid-cols-2">{children}</div>;
   return (
     <div className="@container">
-    <div className="grid grid-cols-1 items-start gap-3 @[520px]:grid-cols-2 @[900px]:grid-cols-4">
-      <VacuumCard {...p} />
-      <GasCard {...p} />
-      <HeaterCard {...p} />
-      <IgCard {...p} />
-      <PowerCard {...p} name="dc" />
-      <PowerCard {...p} name="rf" />
-      <PowerCard {...p} name="rfp" />
-      <ShutterCard {...p} />
-    </div>
+      <div className="grid grid-cols-1 items-start gap-3 @[520px]:grid-cols-2">
+        {half(<>
+          {col(<><VacuumCard {...p} /><ShutterCard {...p} /></>)}
+          {col(<><GasCard {...p} /><IgCard {...p} /></>)}
+        </>)}
+        {half(<>
+          {col(<><PowerCard {...p} name="dc" /><PowerCard {...p} name="rf" /><PowerCard {...p} name="rfp" /></>)}
+          {col(<HeaterCard {...p} />)}
+        </>)}
+      </div>
     </div>
   );
 }

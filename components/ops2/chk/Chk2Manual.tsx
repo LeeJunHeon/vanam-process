@@ -187,7 +187,10 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
         </div>
       </Card>
 
+      {/* W-16 배치 — 세로 열에 위에서부터 쌓는다(빈칸 없음): 1열 가스 → DC Power · 2열 압력 → RF Power · 3열 셔터 → RF Pulse.
+          좁으면 1·2열을 나란히 두고 3열(셔터·RF Pulse)은 그 아래 두 칸, 더 좁으면 한 줄(같은 순서) */}
       <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+        <div className="flex min-w-0 flex-col gap-3">
         <Panel title="가스" icon={<Wind size={14} />} off={offWhy("mfc")} warn={failWhy("mfc")}>
           <div className="grid grid-cols-2 gap-x-3">
             <KV k="Ar 유량"><Val text={fmt(num(snap?.["mfc.ar_sccm"]), 2)} unit="sccm" /></KV>
@@ -209,7 +212,21 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
             {btn(gasOff, "가스 끄기", <>가스 끄기</>)}
           </div>
         </Panel>
-
+        <Panel title="DC Power" icon={<Power size={14} />} off={offWhy("dc")} warn={failWhy("dc")}>
+          <div>
+            <KV k="파워"><Val text={fmt(num(snap?.["dc.p"]))} unit="W" /></KV>
+            <KV k="전압"><Val text={fmt(num(snap?.["dc.v"]))} unit="V" /></KV>
+            <KV k="전류"><Val text={fmt(num(snap?.["dc.i"]), 3)} unit="A" /></KV>
+          </div>
+          <div className="mt-2"><StateTag on={b("dc.out")} label="출력" /></div>
+          <div className="mt-2"><Field label="목표" unit="W" value={dc} onChange={setDc} /></div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {btn(pOn({ dc_power: parse(dc) }), `DC ${dc || "?"} W 켜기`, <>{onWord(snap?.["dc.out"] === true)}</>, "danger", { red: true, lines: powerLines() })}
+            {btn(pOff({ dc: true }), "DC 끄기", <>끄기</>)}
+          </div>
+        </Panel>
+        </div>
+        <div className="flex min-w-0 flex-col gap-3">
         <Panel title="압력" icon={<Gauge size={14} />} off={offWhy("mfc")} warn={failWhy("mfc")}>
           <div className="grid grid-cols-2 gap-x-3">
             <KV k="챔버 압력"><Val text={fmt(num(snap?.["mfc.pressure_mtorr"]), 2)} unit="mTorr" /></KV>
@@ -244,33 +261,6 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
             {btn(valve("hold"), "MFC 밸브 정지", <>지금 위치로 유지</>)}
           </div>
         </Panel>
-
-        <Panel title="셔터" icon={<Square size={14} />} off={offWhy("plc")} warn={failWhy("plc")}>
-          {([["s1", "g1", "Gun 1"], ["s2", "g2", "Gun 2"], ["ms", "ms", "Main"]] as const).map(([col, t, name]) => (
-            <div key={t} className="flex items-center justify-between gap-3 py-1">
-              <span className="min-w-0 flex-1"><StateTag on={snap?.[`plc.${col}`] as boolean | undefined} label={`${name} 셔터`} words="open" /></span>
-              <span className="flex gap-1.5">
-                {btn(shutter("open", t), `${name} 셔터 열기`, <>열기</>)}
-                {btn(shutter("close", t), `${name} 셔터 닫기`, <>닫기</>)}
-              </span>
-            </div>
-          ))}
-        </Panel>
-
-        <Panel title="DC Power" icon={<Power size={14} />} off={offWhy("dc")} warn={failWhy("dc")}>
-          <div>
-            <KV k="파워"><Val text={fmt(num(snap?.["dc.p"]))} unit="W" /></KV>
-            <KV k="전압"><Val text={fmt(num(snap?.["dc.v"]))} unit="V" /></KV>
-            <KV k="전류"><Val text={fmt(num(snap?.["dc.i"]), 3)} unit="A" /></KV>
-          </div>
-          <div className="mt-2"><StateTag on={b("dc.out")} label="출력" /></div>
-          <div className="mt-2"><Field label="목표" unit="W" value={dc} onChange={setDc} /></div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {btn(pOn({ dc_power: parse(dc) }), `DC ${dc || "?"} W 켜기`, <>{onWord(snap?.["dc.out"] === true)}</>, "danger", { red: true, lines: powerLines() })}
-            {btn(pOff({ dc: true }), "DC 끄기", <>끄기</>)}
-          </div>
-        </Panel>
-
         <Panel title="RF Power" icon={<Power size={14} />} off={offWhy("rf")} warn={failWhy("rf")}>
           <div className="grid grid-cols-2 gap-x-3">
             <KV k="순방향"><Val text={fmt(num(snap?.["rf.fwd_w"]))} unit="W" /></KV>
@@ -283,7 +273,19 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
             {btn(pOff({ rf: true }), "RF 끄기(천천히 내린 뒤)", <>끄기</>)}
           </div>
         </Panel>
-
+        </div>
+        <div className="grid min-w-0 items-start gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:flex 2xl:flex-col">
+        <Panel title="셔터" icon={<Square size={14} />} off={offWhy("plc")} warn={failWhy("plc")}>
+          {([["s1", "g1", "Gun 1"], ["s2", "g2", "Gun 2"], ["ms", "ms", "Main"]] as const).map(([col, t, name]) => (
+            <div key={t} className="flex items-center justify-between gap-3 py-1">
+              <span className="min-w-0 flex-1"><StateTag on={snap?.[`plc.${col}`] as boolean | undefined} label={`${name} 셔터`} words="open" /></span>
+              <span className="flex gap-1.5">
+                {btn(shutter("open", t), `${name} 셔터 열기`, <>열기</>)}
+                {btn(shutter("close", t), `${name} 셔터 닫기`, <>닫기</>)}
+              </span>
+            </div>
+          ))}
+        </Panel>
         <Panel title="RF Pulse" icon={<Power size={14} />} off={!rfpOn ? "사용하지 않음(장비 설정에서 꺼짐)" : offWhy("rfp")} warn={failWhy("rfp")}>
           <div className="grid grid-cols-2 gap-x-3">
             <KV k="순방향"><Val text={fmt(num(snap?.["rfp.fwd_w"]), 0)} unit="W" /></KV>
@@ -300,6 +302,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
             {btn(pOff({ rfpulse: true }), "RF Pulse 끄기", <>끄기</>)}
           </div>
         </Panel>
+        </div>
       </div>
       {/* 히터·이온 게이지 — 운전 탭 장비 카드와 같은 부품(조작·확인창 그대로) */}
       <div className="grid items-start gap-3 lg:grid-cols-2">
