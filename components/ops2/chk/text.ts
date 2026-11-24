@@ -2,6 +2,7 @@
 // 묶음에 이름이 없으면(v10 이하 옛 장비) 지금처럼 코드·이름 그대로. 원시 코드·키는 '상세'에서만(부르는 쪽이 detail 로).
 import type { BlockDef as BDef, BParamDef } from "@/lib/ops2/chk/blocks";
 import type { ColDef } from "@/lib/ops2/chk/recipe";
+import { byWord, genericEventName, isCode, stripCodes } from "@/lib/ops2/chk/plain";
 import { CMD_STATUS, RUN_RESULT, commandLabel, fmtValue, reasonLabel, stateLabel, type Bundle, type FieldDef } from "./types";
 
 type Obj = Record<string, unknown>;
@@ -140,8 +141,47 @@ export function adjustLine(b: Bundle | null, d: Obj): string {
     + `${d.reason ? ` (${reasonLabel(b, s(d.reason))})` : ""}`;
 }
 
-/** 로그 한 줄 — 평소 보기(main)와 상세 보기 문구 */
-export function logLine(b: Bundle | null, e: FeedLike): LogLine {
+/** 로그 한 줄 — 평소 보기(main)와 상세 보기 문구.
+ *  o.plain(W-16 — 챔버K 화면만 켠다, 기본은 지금 동작): 글에 대문자 코드·영문 local 이 나오지 않게 — 이름이 없는 사건은 장비 이름으로 된
+ *  일반 이름("웹 연결 기록"), 요청자 local 은 "노트북", 명령 결과는 "수동 조작(가스 도입) 받음" 처럼(o.blockType — 수동 조작의 블록 종류).
+ *  코드는 raw·code 에만(상세 보기 끝에 작게) */
+export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; blockType?: string | null }): LogLine {
+  const line = logLine0(b, e);
+  if (!o?.plain) return line;
+  const d = e.data;
+  if (e.type === "run_start") {
+    return { ...line, text: `${runTitle({ name: s(d.name) || null, recipeName: s(d.recipeName) || null }) || "공정"}${byWord(d.by) ? ` · ${byWord(d.by)}` : ""}` };
+  }
+  const rl = (c: string) => { const x = reasonLabel(b, c); return x !== c && !isCode(x) ? x : ""; };
+  if (e.type === "run_end") {
+    const r = s(d.result), why = d.reasonCode ? rl(s(d.reasonCode)) : "";
+    return { ...line, text: `${RUN_RESULT[r] ?? r}${why ? ` · ${why}` : ""}`, code: d.reasonCode ? s(d.reasonCode) : undefined };
+  }
+  if (e.type === "cmd_result") {
+    // 묶음 19 이하의 수동 조작 이름("수동 조작: 블록 하나 실행")은 앞말만 — 묶음 20 은 "수동 조작"
+    const lab = d.kind === "MANUAL_BLOCK" ? commandLabel(b, s(d.kind)).split(":")[0] : commandLabel(b, s(d.kind));
+    const what = isCode(lab) ? "명령" : lab;
+    const bt = o.blockType ? blockName(b, o.blockType) : "";
+    const why = d.reasonCode ? rl(s(d.reasonCode)) : "";
+    return { ...line, text: `${what}${bt && !isCode(bt) ? `(${bt})` : ""} ${CMD_STATUS[s(d.status)] ?? "결과"}${why ? ` · ${why}` : ""}`,
+             code: `${s(d.kind)}${d.reasonCode ? ` ${s(d.reasonCode)}` : ""}` };
+  }
+  if (e.type === "config_ack") {
+    const why = d.reasonCode ? rl(s(d.reasonCode)) : "";
+    return { ...line, text: `설정 버전 ${s(d.version)} ${({ applied: "적용됨", rejected: "거부", pending_idle: "대기(공정 끝나면)", pending_restart: "대기(재시작 때)" } as Record<string, string>)[s(d.status)] ?? "결과"}${why ? ` · ${why}` : ""}`,
+             code: d.reasonCode ? s(d.reasonCode) : undefined };
+  }
+  // event
+  const c = isObj(d.context) ? d.context : {};
+  const source = s(c.source), kind = s(c.kind), code = s(d.code);
+  const named = !!b?.eventKinds?.some((x) => x.source === source && x.kind === kind);
+  const kindName = named && !isCode(line.kind) ? line.kind : rl(code) || genericEventName(source, code, (x) => sourceLabel(b, x));
+  const text = stripCodes(line.text.split(" — ").filter((t) => t && t !== kindName).join(". ")).replace(/노트북 · 노트북/g, "노트북");
+  return { ...line, kind: kindName, text, source: line.source && line.source !== source ? line.source
+    : source || code ? genericEventName(source, code).replace(/ 기록$/, "").replace(/^장비$/, "") || undefined : undefined };
+}
+
+function logLine0(b: Bundle | null, e: FeedLike): LogLine {
   const d = e.data;
   if (e.type === "run_start") {
     return { level: "info", kind: d.manual ? "수동 조작 시작" : "공정 시작", main: true, raw: `RUN_START ${s(d.runId)}`,

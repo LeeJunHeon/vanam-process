@@ -17,9 +17,11 @@ import { FS, Card, ErrText, Tag, type TagKind } from "./kit";
 import { CmdStatusTag, RunResultTag } from "./Chk2Logs";
 import { ExpandedView, fmtSec } from "./Chk2BlockEditor";
 import Chk2SummaryChart, { type PickField, type SummaryRow } from "./Chk2SummaryChart";
-import { commandLabel, reasonLabel, type Bundle, type RunSummary } from "./types";
+import { commandLabel, type Bundle, type RunSummary } from "./types";
 import { blockName, fmtDur } from "./text";
 import { Chip } from "./kit";
+import { reasonText } from "./logView";
+import { byWord } from "@/lib/ops2/chk/plain";
 
 type RunItem = {
   runId: string; name: string | null; recipeName: string | null; startedBy: string | null; stepNo: number | null;
@@ -121,10 +123,10 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
     const c = isObj(e.context) ? e.context : null;
     const x = c && isObj(c.data) ? c.data : null;
     if (c?.kind !== "edit" || !x) return [];
-    return [{ id: e.msgId, ts: e.ts, rev: typeof x.revision === "number" ? x.revision : "?", by: String(x.by ?? x.source ?? "-"),
+    return [{ id: e.msgId, ts: e.ts, rev: typeof x.revision === "number" ? x.revision : "?", by: byWord(String(x.by ?? (x.source === "local" ? "노트북" : x.source) ?? "-")),
               what: String(x.summary ?? "순서 고침") }];
   });
-  const lines = d.events.map((e) => ({ e, ...logLine(bundle, { type: "event", data: { level: e.level, code: e.code, ruleId: e.ruleId, message: e.message, context: e.context } }) }));
+  const lines = d.events.map((e) => ({ e, ...logLine(bundle, { type: "event", data: { level: e.level, code: e.code, ruleId: e.ruleId, message: e.message, context: e.context } }, { plain: true }) }));
   const seenEv = detail ? lines : lines.filter((x) => x.main);
   const events = onlyIssue ? seenEv.filter((x) => x.level !== "info") : seenEv;
   const issues = lines.filter((x) => x.level !== "info").length;
@@ -143,14 +145,14 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
         <b className={`${FS.body} text-[#1B1F24]`}>{runTitle(r)}</b>
         {detail && <span className={`font-mono ${FS.small} text-[#5B6470]`}>{r.name}</span>}
         <ResultBadge r={r} />
-        {r.reasonCode && <span className={`${FS.body} text-[#5B6470]`}>{reasonLabel(bundle, r.reasonCode)}{detail && <span className={`ml-1 font-mono ${FS.small} text-[#5B6470]`}>{r.reasonCode}</span>}</span>}
+        {r.reasonCode && <span className={`${FS.body} text-[#5B6470]`}>{reasonText(bundle, r.reasonCode)}{detail && <span className={`ml-1 font-mono ${FS.small} text-[#5B6470]`}>{r.reasonCode}</span>}</span>}
         <button onClick={() => void load()} className={`ml-auto flex items-center gap-1 rounded-lg px-2 py-1 ${FS.small} text-[#5B6470] hover:bg-[#F5F6F8]`}>
           <RefreshCw size={12} /> 다시 읽기
         </button>
       </div>
       <dl className={`grid grid-cols-2 gap-x-4 gap-y-1 ${FS.small} sm:grid-cols-4`}>
         {[["시작", r.startedAt ? fmtKst(r.startedAt) : "시작 기록 없음"], ["끝", fmtKst(r.endedAt)], ["소요", r.startedAt && r.endedAt ? fmtSec((Date.parse(r.endedAt) - Date.parse(r.startedAt)) / 1000) : "-"],
-          ["누가", r.startedBy ?? "-"], ["행 번호", r.stepNo ?? "-"], ["설정 버전", r.configVersion ?? "-"],
+          ["누가", byWord(r.startedBy) || "-"], ["행 번호", r.stepNo ?? "-"], ["설정 버전", r.configVersion ?? "-"],
           ...(detail ? [["run id", r.runId], ["실행(instance)", r.instance]] : [])].map(([k, v]) => (
           <div key={String(k)} className="min-w-0"><dt className="text-[#5B6470]">{k}</dt><dd className="truncate font-semibold text-[#1B1F24]" title={String(v)}>{String(v)}</dd></div>
         ))}
@@ -239,7 +241,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
           </div>
           <h4 className={`mb-1 mt-3 ${FS.body} font-bold text-[#1B1F24]`}>판 목록</h4>
           <ol className={`space-y-0.5 ${FS.small} text-[#1B1F24]`}>
-            <li><Chip>판 1</Chip> <span className="text-[#5B6470]">{r.startedAt ? fmtKst(r.startedAt) : "-"}</span> · 시작 · {r.startedBy ?? "-"}</li>
+            <li><Chip>판 1</Chip> <span className="text-[#5B6470]">{r.startedAt ? fmtKst(r.startedAt) : "-"}</span> · 시작 · {byWord(r.startedBy) || "-"}</li>
             {edits.map((e) => (
               <li key={e.id}><Chip>판 {e.rev}</Chip> <span className="text-[#5B6470]">{fmtKst(e.ts)}</span> · 순서 고침 · {e.by} — {e.what}</li>
             ))}
@@ -277,10 +279,10 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
                 {d.commands.map((c) => (
                   <tr key={c.id} className="border-t border-[#E3E6EA] align-top">
                     <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-[#5B6470]">{fmtKst(c.requestedAt).slice(6)}</td>
-                    <td className="px-1.5 py-1 text-[#1B1F24]">{c.label ?? commandLabel(bundle, c.kind)} <span className="text-[#5B6470]">({c.requestedBy}{detail ? `, ${c.origin}` : ""})</span></td>
+                    <td className="px-1.5 py-1 text-[#1B1F24]">{c.label ?? commandLabel(bundle, c.kind)} <span className="text-[#5B6470]">({byWord(c.requestedBy)}{detail ? `, ${c.origin}` : ""})</span></td>
                     <td className="whitespace-nowrap px-1.5 py-1">
                       <CmdStatusTag status={c.status} />
-                      {c.reasonCode && <span className={`block ${FS.small} text-[#5B6470]`}>{reasonLabel(bundle, c.reasonCode)}{c.detail ? ` — ${c.detail}` : ""}</span>}
+                      {c.reasonCode && <span className={`block ${FS.small} text-[#5B6470]`}>{reasonText(bundle, c.reasonCode, "장비가 받지 않음")}{detail && c.detail ? `. ${c.detail}` : ""}</span>}
                     </td>
                   </tr>
                 ))}
@@ -384,9 +386,9 @@ export default memo(function Chk2History({ equipment, bundle, refreshKey }: { eq
                       <span className="font-semibold text-[#1B1F24]">{runTitle(r)}</span>
                       {detail && <span className={`block font-mono ${FS.small} text-[#5B6470]`}>{r.name} · {r.runId}</span>}
                     </td>
-                    <td className="px-2 py-1.5 text-[#5B6470]">{r.startedBy ?? "-"}</td>
+                    <td className="px-2 py-1.5 text-[#5B6470]">{byWord(r.startedBy) || "-"}</td>
                     <td className="px-2 py-1.5"><ResultBadge r={r} /></td>
-                    <td className={`px-2 py-1.5 ${FS.small} text-[#5B6470]`}>{r.reasonCode ? reasonLabel(bundle, r.reasonCode) : ""}</td>
+                    <td className={`px-2 py-1.5 ${FS.small} text-[#5B6470]`}>{reasonText(bundle, r.reasonCode)}</td>
                     <td className="whitespace-nowrap px-2 py-1.5 text-right tabular-nums text-[#5B6470]">{r.durationS !== null ? fmtSec(r.durationS) : "-"}</td>
                   </tr>
                 ))}

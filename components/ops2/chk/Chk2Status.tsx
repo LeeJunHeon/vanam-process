@@ -14,7 +14,9 @@ import { useChk2Mode } from "./mode";
 import { fmtClock, fmtDur, runTitle } from "./text";
 import { blockTarget, blockTitle, kindOf, remainOf, DONE_STATUS, OPEN_TYPES } from "./runview";
 import { paramValue } from "./logic";
-import { HEATER_OWNER, GAS_STATE, RUN_RESULT, reasonLabel, stateLabel, type Bundle, type RunBlock, type RunRow, type StateData } from "./types";
+import { HEATER_OWNER, GAS_STATE, RUN_RESULT, stateLabel, type Bundle, type RunBlock, type RunRow, type StateData } from "./types";
+import { reasonText } from "./logView";
+import { byWord } from "@/lib/ops2/chk/plain";
 
 const LEFT_LABEL: Record<string, string> = {
   filament: "이온 게이지 필라멘트", ms: "Main 셔터", heater: "히터", mfc_valve: "MFC 밸브", ar: "Ar 유량", o2: "O₂ 유량",
@@ -164,7 +166,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
             <p className={`mt-1 ${FS.body} text-[#5B6470]`}>
               마지막 공정 {fmtKst(lastRun.startedAt ?? lastRun.endedAt).slice(0, 11)} · {runTitle(lastRun)} ·{" "}
               {lastRun.result ? RUN_RESULT[lastRun.result] ?? lastRun.result : "끝 기록 없음"}
-              {lastRun.reasonCode && ` (${reasonLabel(bundle, lastRun.reasonCode)})`}
+              {reasonText(bundle, lastRun.reasonCode) && ` (${reasonText(bundle, lastRun.reasonCode)})`}
             </p>
           )}
         </div>
@@ -203,7 +205,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
           {st?.paused && (
             <Issue level="warn">
               <b>일시정지 {fmtClock(paused?.pausedS ?? 0)}</b>{pauseMax > 0 ? ` / 한도 ${fmtClock(pauseMax)}` : " · 한도 없음"}
-              {paused?.by && ` · ${paused.by}`}{pauseMax > 0 && " · 한도를 넘으면 정지 순서"}
+              {paused?.by && ` · ${byWord(paused.by)}`}{pauseMax > 0 && " · 한도를 넘으면 정지 순서"}
             </Issue>
           )}
           {hr && (
@@ -230,7 +232,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
             <div className="flex flex-wrap gap-1.5">
               {alarms.map((a) => (
                 <Chip key={a.ruleId} tone="alarm" title={`${a.ruleId}${a.since ? ` · 시작 ${fmtKst(a.since)}` : ""}`}>
-                  {a.code ? reasonLabel(bundle, a.code) : a.ruleId}
+                  {reasonText(bundle, a.code, "안전 규칙 발동")}
                   {detail && <span className="font-mono font-normal">{a.ruleId}{a.code && ` · ${a.code}`}</span>}
                 </Chip>
               ))}
