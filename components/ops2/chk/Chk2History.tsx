@@ -22,6 +22,7 @@ import { blockName, fmtDur } from "./text";
 import { Chip } from "./kit";
 import { reasonText } from "./logView";
 import { byWord } from "@/lib/ops2/chk/plain";
+import { fieldTip } from "@/lib/ops2/chk/terms";
 
 type RunItem = {
   runId: string; name: string | null; recipeName: string | null; startedBy: string | null; stepNo: number | null;
@@ -180,7 +181,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
                       const sel = picked.includes(f.column);
                       return (
                         <button key={f.column} onClick={() => setCols(sel ? picked.filter((c) => c !== f.column) : [...picked, f.column])}
-                          title={detail ? `${f.column} · ${f.summary ?? "mean"}` : f.desc || undefined} aria-pressed={sel}
+                          title={detail ? `${f.column} · ${f.summary ?? "mean"}` : fieldTip(f, false)} aria-pressed={sel}
                           className={`flex items-center gap-0.5 rounded-md border px-1.5 py-0.5 ${FS.small} ${sel ? "border-[#C7D5FB] bg-[#E8EEFC] font-semibold text-[#1D4ED8]" : "border-[#D9DDE3] text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
                           {sel ? <CheckSquare size={10} aria-hidden /> : <Square size={10} aria-hidden />}
                           {f.label.split(" · ").pop()}{f.unit && ` ${f.unit}`}

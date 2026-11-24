@@ -14,6 +14,7 @@ import { useChk2Mode } from "./mode";
 import { logLine, runTitle, blockName } from "./text";
 import { chkLines } from "./logView";
 import { byWord, isCode } from "@/lib/ops2/chk/plain";
+import { reasonTip } from "@/lib/ops2/chk/terms";
 import { CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, type Bundle, type CmdRow, type RunRow } from "./types";
 import type { FeedItem } from "./useChk2";
 
@@ -138,7 +139,7 @@ export function CommandLog({ bundle, commands, plain = false }: {
               </p>
               {c.reasonCode && (
                 <p className={`flex items-center gap-1 truncate pl-1 ${FS.small} ${c.status === "rejected" ? "text-[#B42318]" : "text-[#B54708]"}`}
-                  title={c.detail ?? undefined}>
+                  title={plain ? reasonTip(bundle, c.reasonCode, detail) ?? (detail ? c.detail ?? undefined : undefined) : c.detail ?? undefined}>
                   {c.status === "rejected" ? <AlertOctagon size={10} className="shrink-0" aria-label="거부" /> : <AlertTriangle size={10} className="shrink-0" aria-label="주의" />}
                   <span className="truncate">{plain && reasonLabel(bundle, c.reasonCode) === c.reasonCode ? "장비가 받지 않음" : reasonLabel(bundle, c.reasonCode)}{detail && ` (${c.reasonCode})`}</span>
                 </p>
@@ -188,7 +189,7 @@ export function RunList({ bundle, runs, plain = false }: {
                 <td className="py-2 pr-3">
                   <RunResultTag endedAt={r.endedAt} result={r.result} />
                   {r.reasonCode && !(plain && !detail && reasonLabel(bundle, r.reasonCode) === r.reasonCode) && (
-                    <p className={`mt-0.5 ${FS.small} text-[#5B6470]`}>{reasonLabel(bundle, r.reasonCode)}</p>
+                    <p className={`mt-0.5 ${FS.small} text-[#5B6470]`} title={plain ? reasonTip(bundle, r.reasonCode, detail) : undefined}>{reasonLabel(bundle, r.reasonCode)}</p>
                   )}
                 </td>
                 <td className="py-2 whitespace-nowrap text-right tabular-nums">{dur(r.startedAt, r.endedAt)}</td>
