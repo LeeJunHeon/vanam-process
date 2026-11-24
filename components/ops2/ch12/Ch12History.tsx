@@ -15,7 +15,7 @@ import { fmtKst } from "@/lib/ops2/time";
 import { blockSummary } from "./Ch12BlockEditor";
 import { blockDefOf, blockLabel, clockOrDash } from "./logic";
 import { asChk, type Ch12Bundle } from "./types";
-import { blockName, fieldName, placeName } from "@/lib/ops2/ch12/terms";
+import { blockName, fieldName, fieldTip, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
 
 type RunItem = {
   runId: string; name: string | null; recipeName: string | null; startedBy: string | null; stepNo: number | null;
@@ -91,7 +91,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
         <span className="rounded bg-[#3A424D] px-1.5 py-0.5 text-[12px] font-semibold text-white">{placeName(bundle, ch)}</span>
         <b className="text-[14px] text-[#1B1F24]">{runTitle(r)}</b>
         <ResultBadge r={r} />
-        {r.reasonCode && <span className="text-[12px] text-[#5B6470]">{reasonLabel(asChk(bundle), r.reasonCode)}</span>}
+        {r.reasonCode && <span className="text-[12px] text-[#5B6470]" title={reasonTip(asChk(bundle), r.reasonCode, detail)}>{reasonLabel(asChk(bundle), r.reasonCode)}</span>}
         <button onClick={() => void load()} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-[#5B6470] hover:bg-[#F5F6F8]"><RefreshCw size={12} /> 다시 읽기</button>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-4">
@@ -106,7 +106,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
           {all.map((f) => {
             const on = picked.includes(f.column);
             return (
-              <button key={f.column} onClick={() => setCols(on ? picked.filter((c) => c !== f.column) : [...picked, f.column])}
+              <button key={f.column} onClick={() => setCols(on ? picked.filter((c) => c !== f.column) : [...picked, f.column])} title={fieldTip(f, detail)}
                 className={`rounded-md border px-1.5 py-0.5 text-[12px] ${on ? "border-[#C7D5FB] bg-[#E8EEFC] font-semibold text-[#1D4ED8]" : "border-[#D9DDE3] text-[#5B6470]"}`}>
                 {f.label}{f.unit && ` ${f.unit}`}
               </button>
@@ -134,8 +134,8 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
           <h4 className="mb-1 text-[12px] font-bold text-[#1B1F24]">로그 {lines.length}</h4>
           <div className="max-h-96 overflow-y-auto rounded-[10px] border border-[#E3E6EA]">
             <table className="w-full text-[12px]"><tbody>
-              {lines.map(({ e, kind, text, raw, level }) => (
-                <tr key={e.msgId} className="border-t border-[#E3E6EA] align-top" title={raw}>
+              {lines.map(({ e, kind, text, raw, level, desc }) => (
+                <tr key={e.msgId} className="border-t border-[#E3E6EA] align-top" title={detail ? raw : desc}>
                   <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-[#8A929D]">{fmtKst(e.ts).slice(6)}</td>
                   <td className="px-1 py-1"><span className={`whitespace-nowrap rounded px-1 text-[12px] font-semibold ${LEVEL_TONE[level] ?? LEVEL_TONE.info}`}>{kind}</span></td>
                   <td className="px-1.5 py-1 text-[#1B1F24]">{text}</td>
@@ -216,7 +216,7 @@ export default memo(function Ch12History({ equipment, bundle, refreshKey }: { eq
                       {detail && <span className="block font-mono text-[12px] text-[#8A929D]">{r.runId}</span>}</td>
                     <td className="px-2 py-1.5 text-[#5B6470]">{r.startedBy ?? "-"}</td>
                     <td className="px-2 py-1.5"><ResultBadge r={r} /></td>
-                    <td className="px-2 py-1.5 text-[12px] text-[#5B6470]">{r.reasonCode ? reasonLabel(asChk(bundle), r.reasonCode) : ""}</td>
+                    <td className="px-2 py-1.5 text-[12px] text-[#5B6470]" title={reasonTip(asChk(bundle), r.reasonCode, detail)}>{r.reasonCode ? reasonLabel(asChk(bundle), r.reasonCode) : ""}</td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">{r.durationS !== null ? clockOrDash(r.durationS) : "-"}</td>
                   </tr>
                 ))}

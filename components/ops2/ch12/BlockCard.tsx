@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { BigValue, Card, FieldValue, QBadge } from "../chk/kit";
 import type { BlockDef, Link } from "../chk/types";
 import { useChk2Mode } from "../chk/mode";
+import { fieldTip } from "@/lib/ops2/ch12/terms";
 
 type Common = { def?: BlockDef; snap?: Record<string, unknown>; link?: Link };
 
@@ -19,7 +20,9 @@ export function BlockCard({ def: def0, snap, link, big = [], foldable, hide = []
   const [manual, setManual] = useState<boolean | null>(null);   // 누르기 전에는 품질대로(off 면 접음)
   const { detail } = useChk2Mode();
   if (!def0) return null;
-  const def = detail ? def0 : { ...def0, fields: def0.fields.map((f) => ({ ...f, label: plainLabel(f.label) })) };
+  // 마우스 설명(W-19 ③): kit FieldValue 는 title 을 desc(+상세 보기면 열 이름)로 그린다 — 평소 보기는 help 를 desc 자리에 넣어 넘긴다
+  //   (챔버12 desc 에는 레지스터·코일 이름이 있어 상세 보기에서만)
+  const def = detail ? def0 : { ...def0, fields: def0.fields.map((f) => ({ ...f, label: plainLabel(f.label), desc: fieldTip(f, false) ?? "" })) };
   const off = link?.q === "off";
   const open = manual ?? (startOpen && (!foldable || !off));
   const dimOf = (column: string, own?: boolean) =>
@@ -48,7 +51,8 @@ export function BlockCard({ def: def0, snap, link, big = [], foldable, hide = []
           {bigs.length > 0 && (
             <div className={`grid divide-x divide-gray-100 rounded-[10px] border border-[#E3E6EA]`}
               style={{ gridTemplateColumns: `repeat(${bigs.length}, minmax(0, 1fr))` }}>
-              {bigs.map((f) => <BigValue key={f.column} f={f} v={snap?.[f.column]} dim={dimOf(f.column, f.ownQuality)} />)}
+              {bigs.map((f) => <div key={f.column} className="min-w-0" title={fieldTip(def0.fields.find((x) => x.column === f.column), detail)}>
+                <BigValue f={f} v={snap?.[f.column]} dim={dimOf(f.column, f.ownQuality)} /></div>)}
             </div>
           )}
           {bools.length > 0 && (

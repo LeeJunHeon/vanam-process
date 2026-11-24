@@ -14,7 +14,7 @@ import { reasonLabel } from "../chk/types";
 import { fmtKst } from "@/lib/ops2/time";
 import { KINDS, blockLabel, chamberState, clockOrDash, engineOf, isRunning, pickKind, stateInfo } from "./logic";
 import { asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types";
-import { ownerName, placeName } from "@/lib/ops2/ch12/terms";
+import { ownerName, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
 
 export type LockFn = (kind: string, key?: string) => string | null;
 export type ConnInfo = { label: string; tone: Tone };
@@ -149,7 +149,7 @@ export function StatusBand12({ bundle, st, connected, conn, links, mode, equipme
         <Sum name={placeName(bundle, "pc")} text={pcLine} tone={chamberState(st, "pc")?.alarms?.length ? "alarm" : "neutral"} />
         <Sum name={placeName(bundle, "tsp")} text={tspLine} tone={chamberState(st, "tsp")?.alarms?.length ? "alarm" : "neutral"} />
         {glob.map((a) => (
-          <Chip key={a.ruleId} tone="alarm" title={a.since ? `시작 ${fmtKst(a.since)}` : undefined}>
+          <Chip key={a.ruleId} tone="alarm" title={[reasonTip(asChk(bundle), a.code, detail), a.since ? `시작 ${fmtKst(a.since)}` : ""].filter(Boolean).join(" · ") || undefined}>
             {a.code ? reasonLabel(asChk(bundle), a.code) : a.ruleId}{detail && <span className="font-mono font-normal">{a.ruleId}</span>}
           </Chip>
         ))}

@@ -118,7 +118,7 @@ function useDraw(p: Props, scale: number) {
       <g role="button" tabIndex={w ? -1 : 0} aria-disabled={!!w} aria-label={`${name} — ${state}${w ? ` (잠김: ${w})` : " — 눌러서 바꾸기"}`}
         onClick={() => press(t)} onKeyDown={keys(t)} style={{ cursor: w ? "default" : "pointer", outline: "none" }}
         className={w ? "" : "[&:focus-visible>.ring]:opacity-100 [&:hover>.ring]:opacity-100"}>
-        <title>{`${b ? plcName(b) : name} · ${state}${w ? ` · 잠김: ${w}` : ""}${detail && b ? ` · ${b.name ?? b.target}` : ""}`}</title>
+        <title>{`${b ? plcName(b) : name} · ${state}${w ? ` · 잠김: ${w}` : ""}${detail && b ? ` · ${b.desc || b.name || b.target}` : ""}`}</title>
         {children}
       </g>
     );
@@ -337,7 +337,7 @@ function OtherButtons(p: Props) {
                 const wait = p.plcOk && p.pending[b.target] !== undefined && p.pending[b.target] !== (p.snapshot?.[col] === true);
                 return (
                   <div key={b.target} className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate" title={detail ? `${b.name ?? b.target} · ${col}` : undefined}>
+                    <span className="min-w-0 truncate" title={detail ? `${b.desc || b.name || b.target} · ${col}` : undefined}>
                       <StateBox on={p.plcOk ? lit : null} label={buttonName(p.bundle, b.target, g === "shared" ? null : placeName(p.bundle, g))} />
                       {detail && <span className={`ml-1 font-mono ${FS.small} text-[#8A929D]`}>{b.name ?? b.target}</span>}
                     </span>

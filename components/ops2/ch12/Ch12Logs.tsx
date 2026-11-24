@@ -114,7 +114,7 @@ export function Ch12EventFeed({ bundle, feed, height = "h-[28rem]" }: { bundle: 
         <div ref={box} onScroll={() => { const el = box.current; if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
           className={`${height} space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 [overflow-anchor:none]`}>
           {shown.map((r) => (
-            <p key={r.e.id} className={`flex items-start gap-2 ${FS.small} leading-snug`} title={detail ? r.raw : undefined}>
+            <p key={r.e.id} className={`flex items-start gap-2 ${FS.small} leading-snug`} title={detail ? r.raw : r.desc}>
               <span className="shrink-0 tabular-nums text-[#8A929D]">{fmtKst(r.e.ts)}</span>
               {f === "all" && <span className="w-12 shrink-0 font-semibold text-[#5B6470]">{chamberWord(bundle, feedChamber(r.e))}</span>}
               <span className={`flex shrink-0 items-center gap-1 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
@@ -136,7 +136,7 @@ export const chamberWord = (b: Ch12Bundle | null, c: string) => placeName(b, ["c
 
 /** 챔버 칸 알림 — 이 챔버의 활성 알람 + 최근 사건(평소 보기 줄, 새것 위), '기록 전체 보기' → 기록 탭(챔버K 알림과 같은 모양) */
 export function ChamberLog({ bundle, feed, ch, alarms, onLog, max = 12 }: {
-  bundle: Ch12Bundle | null; feed: FeedItem[]; ch: string; alarms: { ruleId: string; text: string }[]; onLog?: () => void; max?: number;
+  bundle: Ch12Bundle | null; feed: FeedItem[]; ch: string; alarms: { ruleId: string; text: string; tip?: string }[]; onLog?: () => void; max?: number;
 }) {
   const lines = useMemo(() => feed.filter((e) => feedChamber(e) === ch).map((e) => ({ e, ...ch12LogLine(bundle, e) }))
     .filter((r) => r.main).slice(-max).reverse(), [bundle, feed, ch, max]);
@@ -146,12 +146,12 @@ export function ChamberLog({ bundle, feed, ch, alarms, onLog, max = 12 }: {
         활성 알람 {alarms.length ? <Chip tone="alarm">{alarms.length}개</Chip> : <b className="text-[#1B1F24]">없음</b>}
       </p>
       {alarms.length > 0 && (
-        <div className="mb-2 flex flex-wrap gap-1">{alarms.map((a) => <Chip key={a.ruleId} tone="alarm">{a.text}</Chip>)}</div>
+        <div className="mb-2 flex flex-wrap gap-1">{alarms.map((a) => <Chip key={a.ruleId} tone="alarm" title={a.tip}>{a.text}</Chip>)}</div>
       )}
       {lines.length ? (
         <ul className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
           {lines.map((r) => (
-            <li key={r.e.id} className={`${FS.body} leading-snug`}>
+            <li key={r.e.id} className={`${FS.body} leading-snug`} title={r.desc}>
               <span className={`mr-1.5 tabular-nums text-[#5B6470] ${FS.small}`}>{fmtKst(r.e.ts).slice(-8)}</span>
               {r.level === "warn" ? <Chip tone="warn">{r.kind}</Chip> : r.level === "error" || r.level === "critical"
                 ? <Chip tone="alarm">{r.kind}</Chip> : <b className="text-[#1B1F24]">{r.kind}</b>}

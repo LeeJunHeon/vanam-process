@@ -29,7 +29,7 @@ import {
   KINDS, blockControl, blockLabel, chArgs, chamberState, clockOrDash, engineOf, hasKind, isRunning, pickKind, short, startedUpto, stateInfo,
 } from "./logic";
 import { asChk, type Ch12Bundle, type Ch12State } from "./types";
-import { blockName, fieldName, ownerName, placeName } from "@/lib/ops2/ch12/terms";
+import { blockName, fieldName, fieldTip, fieldTipOf, ownerName, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
 import type { Row } from "@/lib/ops2/ch12/recipe";
 import { fmtKst } from "@/lib/ops2/time";
 
@@ -87,6 +87,7 @@ const keyDefs = (ch: Ch): KeyDef[] => [
 ];
 
 function KeyTile({ d, bundle, snap, ch }: { d: KeyDef; bundle: Ch12Bundle | null; snap?: Record<string, unknown>; ch: Ch }) {
+  const { detail } = useChk2Mode();
   const name = valueName(bundle, d.value, ch);
   const f = fieldOf(bundle, d.value), tf = d.target ? fieldOf(bundle, d.target) ?? (bundle?.snapshot?.process ?? []).find((x) => x.column === d.target) : undefined;
   const v = num(snap?.[d.value]), t = d.target ? num(snap?.[d.target]) : null;
@@ -95,7 +96,7 @@ function KeyTile({ d, bundle, snap, ch }: { d: KeyDef; bundle: Ch12Bundle | null
   const max = scaleMax(t, v, null);
   return (
     <Tile className="p-3">
-      <div className="flex items-baseline justify-between gap-2">
+      <div className="flex items-baseline justify-between gap-2" title={fieldTip(f, detail)}>
         <span className={`truncate ${FS.body} font-semibold text-[#1B1F24]`}>{name}</span>
         {t !== null && <span className={`shrink-0 ${FS.small} text-[#5B6470]`}>목표 {short(t)} {tf?.unit ?? unit}</span>}
       </div>
@@ -253,9 +254,9 @@ export function ChamberRun(p: ChamberProps) {
   const step = cs?.step;
   const eta = cs?.etaRemainingS;
   const etaAt = typeof eta === "number" && eta >= 0 ? new Date(nowMs + eta * 1000).toISOString() : null;
-  const alarms = [...(cs?.alarms ?? []).map((r) => ({ ruleId: r, text: r })),
+  const alarms = [...(cs?.alarms ?? []).map((r) => ({ ruleId: r, text: r, tip: undefined as string | undefined })),
     ...(st?.alarms ?? []).filter((a) => a.chamber === ch && !(cs?.alarms ?? []).includes(a.ruleId))
-      .map((a) => ({ ruleId: a.ruleId, text: a.code ? reasonLabel(asChk(bundle), a.code) : a.ruleId }))];
+      .map((a) => ({ ruleId: a.ruleId, text: a.code ? reasonLabel(asChk(bundle), a.code) : a.ruleId, tip: reasonTip(asChk(bundle), a.code, detail) }))];
   const blocks = (cdef?.blocks ?? []).map((n) => bundle?.snapshot?.blocks?.find((b) => b.name === n)).filter((b) => !!b)
     .filter((b) => !(ch === "ch2" && ["ch2.heater", "ch2.thk", "ch2.stm100"].includes(b.name)));          // CH2 히터·두께는 아래 칸
   const targets = (bundle?.snapshot?.process ?? []).filter((f) => (cdef?.targets ?? []).includes(f.column))
@@ -310,7 +311,7 @@ export function ChamberRun(p: ChamberProps) {
               <span className={`block ${FS.small} text-[#5B6470]`}>{etaAt ? `끝 예정 ${fmtKst(etaAt).slice(-8, -3)}` : running ? "확정 전" : ""}</span></p>
           </div>
         </div>
-        {alarms.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{alarms.map((a) => <Chip key={a.ruleId} tone="alarm">{a.text}</Chip>)}</div>}
+        {alarms.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{alarms.map((a) => <Chip key={a.ruleId} tone="alarm" title={a.tip}>{a.text}</Chip>)}</div>}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Btn size="lg" kind="danger" lock={lock(kStop, key(kStop))} onClick={() => ask({ kind: kStop, label: `${label} STOP`, stop: true,
             args: chArgs(bundle, kStop, ch), note: `${label} 공정을 정지 순서대로 멈춥니다(끝날 때 파워 끄기는 빠지지 않습니다). 다른 챔버는 그대로입니다.` })}>
@@ -363,7 +364,7 @@ export function ChamberRun(p: ChamberProps) {
         <Card title="공정 목표값" right={<span className={`${FS.small} text-[#5B6470]`}>그 시각 엔진이 장비에 요청한 값</span>}>
           <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">
             {targets.map((f) => (
-              <KV key={f.column} k={fieldName(bundle, f.column, label)} title={detail ? f.column : undefined}>
+              <KV key={f.column} k={fieldName(bundle, f.column, label)} title={fieldTipOf(bundle, f.column, detail)}>
                 <b className="tabular-nums text-[#133A7C]">{short(snap?.[f.column])}</b><span className={`ml-1 ${FS.small} text-[#5B6470]`}>{f.unit}</span>
               </KV>
             ))}
