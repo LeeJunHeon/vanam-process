@@ -13,6 +13,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertTriangle, OctagonAlert } from "lucide-react";
 import type { FeedItem } from "../chk/useChk2";
+import { useChk2Mode } from "../chk/mode";
+import { stripCodes } from "@/lib/ops2/chk/plain";
+import { placeName, toTerms12 } from "@/lib/ops2/ch12/terms";
+
+/** 평소 보기 알림창 글 — 장비(v1) 알림창 문구의 'Step 1 IG_CMD:' 같은 스텝 코드·대문자 코드를 빼고 옛 말은 용어표 말로(원문은 상세 보기) */
+export const popupText = (t: string) => toTerms12(stripCodes(t.replace(/\bStep \d+ [A-Z][A-Z0-9]*_[A-Z0-9_]+:\s*/g, "")));
 
 export const POPUP_MAX_OPEN = 5;
 export const WARNING_AUTO_CLOSE_MS = 5000;
@@ -103,6 +109,7 @@ export function usePopups(feed: FeedItem[], openedDeviceMs: number, onClear: (c:
 }
 
 export function PopupStack({ list, onClose }: { list: Popup[]; onClose: (id: string) => void }) {
+  const { detail } = useChk2Mode();
   useEffect(() => {
     if (!list.length) return;
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(list[list.length - 1].id); };
@@ -117,10 +124,10 @@ export function PopupStack({ list, onClose }: { list: Popup[]; onClose: (id: str
           className={`pointer-events-auto w-full max-w-md rounded-[12px] border bg-white p-3 shadow-xl ${p.kind === "warning" ? "border-[#F5D9A8]" : "border-[#F7C1BB]"}`}>
           <p className="flex items-center gap-2 text-[14px] font-bold text-[#1B1F24]">
             {p.kind === "warning" ? <AlertTriangle size={16} className="text-[#B54708]" /> : <OctagonAlert size={16} className="text-[#B42318]" />}
-            {p.title}
-            {p.chamber !== "shared" && <span className="rounded bg-[#EEF0F3] px-1.5 py-0.5 text-[12px] font-semibold text-[#5B6470]">{p.chamber.toUpperCase()}</span>}
+            {detail ? p.title : popupText(p.title)}
+            {p.chamber !== "shared" && <span className="rounded bg-[#EEF0F3] px-1.5 py-0.5 text-[12px] font-semibold text-[#5B6470]">{placeName(null, p.chamber)}</span>}
           </p>
-          <p className="mt-1.5 whitespace-pre-wrap text-[12px] text-[#1B1F24]">{p.text}</p>
+          <p className="mt-1.5 whitespace-pre-wrap text-[12px] text-[#1B1F24]">{detail ? p.text : popupText(p.text)}</p>
           <div className="mt-2 flex items-center gap-2">
             {p.autoMs && <span className="text-[12px] text-[#8A929D]">{Math.round(p.autoMs / 1000)}초 뒤 닫힘</span>}
             {p.clear && <span className="text-[12px] text-[#8A929D]">확인하면 오류 표시가 해제됩니다</span>}

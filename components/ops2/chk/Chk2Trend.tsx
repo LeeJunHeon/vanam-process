@@ -83,8 +83,9 @@ export function layoutTrendLabels(items: (TrendLabelIn | null)[], lo: number, hi
 }
 const fmt = (v: number) => String(Number(v.toPrecision(4)));
 
-function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
+function Panel({ title, unit, lines, t0, t1, width, hover, setHover, skipEdgeTick = false }: {
   title: string; unit: string; lines: Line[]; t0: number; t1: number; width: number; hover: number | null; setHover: (t: number | null) => void;
+  skipEdgeTick?: boolean;
 }) {
   const vals = lines.flatMap((l) => l.pts.map((p) => p.v)).filter((v): v is number => v !== null);
   let hi = vals.length ? Math.max(...vals) : 1;
@@ -98,7 +99,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
   for (let v = 0; v <= hi + step / 2; v += step) yTicks.push(v);
   const tStep = TIME_STEPS.find((s) => (t1 - t0) / s <= 6) ?? TIME_STEPS[TIME_STEPS.length - 1];
   const xTicks: number[] = [];
-  for (let t = Math.ceil(t0 / tStep) * tStep; t <= t1; t += tStep) xTicks.push(t);
+  for (let t = Math.ceil(t0 / tStep) * tStep; t <= t1; t += tStep) if (!skipEdgeTick || x(t) - LEFT >= 18) xTicks.push(t);
   // 선 — 빈 값·90 s 넘는 틈에서 끊는다. 목표(점선)는 계단
   const path = (l: Line) => {
     let d = "", prev: { t: number; v: number } | null = null;
@@ -194,10 +195,11 @@ const trendDefs = (pressureTarget: string): TrendDef[] => [
   { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", "heater.sv2"]] },
 ];
 
-export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세" }: {
+export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세", skipEdgeTick = false }: {
   trend: TrendPt[]; equipment: string; runId: string | null; local: boolean; nowMs: number; pressureTarget?: string;
   defs?: TrendDef[];          // 없으면 챔버K 그래프(압력·밸브 위치·파워·히터) — 챔버12 는 챔버별 열(값이 바뀌지 않게 메모해서)
   title?: string;
+  skipEdgeTick?: boolean;     // W-19 CH1&2 — 왼쪽 축에 18px 안으로 붙는 시각 눈금 글자는 빼서 세로축 0 과 겹치지 않게(기본: 지금 그대로 — 챔버K 그대로)
 }) {
   const TREND_DEFS = useMemo(() => defs ?? trendDefs(pressureTarget), [defs, pressureTarget]);
   const [range, setRange] = useState<Range>("15m");
@@ -263,7 +265,7 @@ export default function Chk2Trend({ trend, equipment, runId, local, nowMs, press
         {range !== "run" && <p className={`mb-1 ${FS.small} text-[#5B6470]`}>이 화면을 연 뒤부터 쌓은 값입니다(2초 간격).</p>}
         {range === "run" && rows === null ? <Empty>1분 요약을 읽는 중…</Empty>
           : !panels.length ? <Empty>그릴 값이 없습니다. 이번 공정이 쓰는 압력·파워·히터 값이 들어오면 그립니다</Empty>
-          : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} />)}
+          : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} skipEdgeTick={skipEdgeTick} />)}
       </div>
     </Card>
   );
