@@ -14,7 +14,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BAD = /안 ?(함|씀|됨)(?![가-힣])|못 ?함(?![가-힣])|미룸|(?<![가-힣])(켬|끔)(?![가-힣])|[가-힣](켬|끔)(?![가-힣])/;
 const HANGUL = /[가-힣]/;
 const dashBad = (t) => t.includes("—") && HANGUL.test(t);
-const bad = (t) => BAD.test(t) || dashBad(t);
+// W-16: 평소 보기 글에 대문자 코드(UPLINK_AUTH_FAILED 등)·영문 local 이 섞이지 않는다 — 한글 글 속의 코드 모양·local 을 잡는다
+//   (코드는 상세 보기에서만 — 부르는 쪽이 detail 일 때 따로 붙이고, 그 글은 코드만이라 한글이 없어 걸리지 않는다)
+const CODE = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/;
+const codeBad = (t) => HANGUL.test(t) && (CODE.test(t) || /(?<![A-Za-z])local(?![A-Za-z])/.test(t));
+const bad = (t) => BAD.test(t) || dashBad(t) || codeBad(t);
 
 // 예외 — [파일(저장소 기준), 글의 일부]. 이유를 옆에 적는다
 const EXCEPT = [
@@ -33,6 +37,14 @@ const EXCEPT = [
   ["components/ops2/chk/Chk2Config.tsx", "거부 —"],
   ["components/ops2/chk/Chk2Config.tsx", "편집한 값은 그대로 남아 있습니다 —"],
   ["components/ops2/chk/Chk2Config.tsx", "설정 적용 확인 —"],
+  ["components/ops2/chk/Chk2Config.tsx", "local_override.json"], ["components/ops2/chk/Chk2Config.tsx", "CONFIG_INVALID"],
+  ["components/ops2/chk/Chk2Config.tsx", "CONFIG_H_IN_PROCESS"],
+  // 장비가 만든 검사·순서 글(골든·장비 recipe.py 와 같은 글 — 설정 키 이름이 글에 들어 있다)
+  ["lib/ops2/chk/blocks.ts", "_SET=X 설정"], ["lib/ops2/chk/recipe.ts", "IG_ENABLED=false"], ["lib/ops2/chk/recipe.ts", "HEATER_ENABLED=false"],
+  ["lib/ops2/chk/recipe.ts", "HEATER_RECIPE_MAX_STEPS"],
+  // 웹 챗: 서버 콘솔 글(사람 화면 아님)·모든 장비(CH1&2 포함)가 같이 쓰는 웹 연락 끊김 글
+  ["lib/ops2/chat.ts", "[ops2/chat] OPS2_CHAT_TREAT_AS_PROD"], ["lib/ops2/chat.ts", "늦게 판단(웹이 그동안 보지 못함)"],
+  ["lib/ops2/chat.ts", "웹이 장비 연락을 X 동안 받지 못함"], ["lib/ops2/chat.ts", "장비 연락을 다시 받음 —"],
 ];
 const SKIP_ATTR = new Set(["className", "key", "d", "viewBox", "fill", "stroke", "strokeDasharray", "fontFamily", "textAnchor",
   "role", "type", "inputMode", "name", "id", "href", "src", "style", "kind", "tone", "size", "level", "words"]);
@@ -49,8 +61,10 @@ const hits = [];
 const except = (rel, t) => EXCEPT.some(([f, part]) => (f === "*" || f === rel) && t.includes(part));
 const add = (rel, line, t) => { if (bad(t) && !except(rel, t)) hits.push(`${rel}:${line}  ${t.replace(/\s+/g, " ").trim().slice(0, 140)}`); };
 
-for (const dir of ["components/ops2/chk", "lib/ops2/chk"]) {
-  for (const f of files(join(root, dir))) {
+const LISTS = [...["components/ops2/chk", "lib/ops2/chk"].flatMap((dir) => [...files(join(root, dir))]),
+  join(root, "lib/ops2/chatText.ts"), join(root, "lib/ops2/chat.ts")];      // 웹 챗 문구(챔버K)
+{
+  for (const f of LISTS) {
     const rel = relative(root, f);
     const src = readFileSync(f, "utf8");
     const sf = ts.createSourceFile(f, src, ts.ScriptTarget.Latest, true, f.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);

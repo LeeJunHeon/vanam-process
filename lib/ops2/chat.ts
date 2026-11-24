@@ -20,6 +20,7 @@ import { alertText, isAlertEvent } from "@/lib/ops2/chatText";
 
 export { NOTICE_CODES, alertText, isAlertEvent } from "@/lib/ops2/chatText";
 import type { Prisma } from "@/app/generated/prisma/client";
+import { byWord, genericEventName } from "./chk/plain";
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -163,12 +164,20 @@ function startFields(params: Obj, blocks: Blk[]): [string, string][] {
   return out;
 }
 
-type Labels = { reason: (code: string | null) => string; base: string };
+// W-16: 글에 대문자 코드가 나오지 않게 — 사유는 묶음 이름(없으면 "장비 사유"), 사건은 사유 → eventKinds 이름 → 장비 이름 일반 이름
+type Labels = { reason: (code: string | null) => string; event: (code: string, ctx: unknown) => string; base: string };
 async function labelsOf(webSchemaHash: string | null, equipment: string): Promise<Labels> {
   const b = await deviceBundle(webSchemaHash);
   const reasons = Array.isArray(b?.reasons) ? (b.reasons as { code?: string; label?: string }[]) : [];
   return {
-    reason: (code) => (code ? reasons.find((r) => r.code === code)?.label ?? code : ""),
+    reason: (code) => (code ? reasons.find((r) => r.code === code)?.label ?? "장비 사유" : ""),
+    event: (code, ctx) => {
+      const c = isObj(ctx) ? ctx : {};
+      const r = reasons.find((x) => x.code === code)?.label;
+      if (r) return r;
+      const ek = Array.isArray(b?.eventKinds) ? (b.eventKinds as { source?: string; kind?: string; label?: string }[]) : [];
+      return ek.find((x) => x.source === c.source && x.kind === c.kind)?.label ?? genericEventName(str(c.source), code);
+    },
     base: equipment.endsWith("-SIM") ? equipment.slice(0, -4) : equipment,
   };
 }
@@ -213,7 +222,7 @@ export async function enqueueChat(equipment: string, envs: Env[], now: Date): Pr
       const fields: [string, string][] = [
         ["Chamber", L.base], ["장비", `${equipment}${dev.label ? ` (${dev.label})` : ""}`],
         ["공정 이름", name(r)], ["레시피", str(d.recipeName) ?? "—"],
-        ["시작 시각", kstOf(r?.startedAt ?? e.ts)], ["시작한 사람", str(d.by) ?? "—"],
+        ["시작 시각", kstOf(r?.startedAt ?? e.ts)], ["시작한 사람", byWord(d.by) || "—"],
         ...startFields(params, blocks),
       ];
       // 수동 조작(묶음 18 — run_start data.manual): 블록을 하나씩 실행하는 공정이라 '수동 조작 시작'으로 구분
@@ -233,9 +242,9 @@ export async function enqueueChat(equipment: string, envs: Env[], now: Date): Pr
       const fields: [string, string][] = [["공정 이름", name(r)],
         ["결과", ({ done: "정상", aborted: "중단", error: "오류" } as Obj)[result] as string ?? (result || "—")]];
       if (r?.startedAt && r.endedAt) fields.push(["소요", dur(r.endedAt.getTime() - r.startedAt.getTime())]);
-      else fields.push(["소요", "— (시작 기록 없음)"]);
-      if (!ok && !userStop) fields.push(["원인", code ? ` • ${L.reason(code)} (${code})` : "알 수 없음"]);
-      else if (code) fields.push(["사유", `${L.reason(code)} (${code})`]);
+      else fields.push(["소요", "알 수 없음(시작 기록 없음)"]);
+      if (!ok && !userStop) fields.push(["원인", code ? ` • ${L.reason(code)}` : "알 수 없음"]);
+      else if (code) fields.push(["사유", L.reason(code)]);
       if (lateNote) fields.push(["⚠ 늦게 받음", lateNote]);
       const endHead = d.manual === true ? "수동 조작 끝" : "공정 종료";
       items.push({ kind: "run_end", msgId: e.id, at: e.ts.getTime(),
@@ -243,7 +252,7 @@ export async function enqueueChat(equipment: string, envs: Env[], now: Date): Pr
                               body: card("notify-card", endHead, subtitle, ok ? "SUCCESS" : "FAIL", fields) } });
       // v1: 실패 && STOP 아님이면 카드 뒤 일반 글로 원인 한 줄
       if (!ok && !userStop) {
-        const text = `❌ ${L.base} 공정 실패 이유: ${name(r)} | ${code ? `${L.reason(code)} (${code})` : "오류"}`;
+        const text = `❌ ${L.base} 공정 실패 이유: ${name(r)} | ${code ? L.reason(code) : "오류"}`;
         items.push({ kind: "run_fail", msgId: `${e.id}:fail`, at: e.ts.getTime(), skip: late ? "늦게 받음" : null,
                      payload: { title: text, body: { text } } });
       }
@@ -265,7 +274,7 @@ export async function enqueueChat(equipment: string, envs: Env[], now: Date): Pr
       }
       const runId = evRuns.get(e.id) ?? null;
       const r = runId ? runs.get(runId) ?? await ops2Db.ops2Run.findUnique({ where: { runId }, select: { runId: true, name: true, recipeName: true, startedBy: true, startedAt: true, endedAt: true, params: true, blocks: true, stepNo: true } }) : null;
-      const text = alertText(L.base, d, L.reason(code), r ? name(r) : null);
+      const text = alertText(L.base, d, L.event(code, d.context), r ? name(r) : null);
       items.push({ kind: "alert", msgId: e.id, at: e.ts.getTime(), skip: late ? "늦게 받음" : null, key: `${rule ?? code}|${runId ?? "-"}`, runId,
                    payload: { title: text, body: { text } } });
     }

@@ -11,7 +11,9 @@ import { AlertOctagon, AlertTriangle, CheckSquare, Hourglass, Send, Square } fro
 import { FS, Card, Tag, type TagKind } from "./kit";
 import { fmtKst } from "@/lib/ops2/time";
 import { useChk2Mode } from "./mode";
-import { logLine, runTitle } from "./text";
+import { logLine, runTitle, blockName } from "./text";
+import { chkLines } from "./logView";
+import { byWord, isCode } from "@/lib/ops2/chk/plain";
 import { CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, type Bundle, type CmdRow, type RunRow } from "./types";
 import type { FeedItem } from "./useChk2";
 
@@ -19,12 +21,16 @@ const LEVEL_TONE: Record<string, string> = {
   error: "text-[#B42318]", critical: "text-[#B42318]", warn: "text-[#B54708]", info: "text-[#5B6470]",
 };
 
-export function EventFeed({ bundle, feed, fill = false }: { bundle: Bundle | null; feed: FeedItem[]; fill?: boolean }) {
+export function EventFeed({ bundle, feed, fill = false, plain = false, commands }: {
+  bundle: Bundle | null; feed: FeedItem[]; fill?: boolean;
+  plain?: boolean;          // W-16 챔버K — 평소 보기 글(코드·local 없음, 수동 조작 명령 결과에 조작 이름). 기본은 지금 동작
+  commands?: CmdRow[];      // plain 일 때 수동 조작 명령의 조작 이름을 찾는 웹 조작 기록
+}) {
   const [onlyIssue, setOnlyIssue] = useState(false);
   const { detail } = useChk2Mode();
   const box = useRef<HTMLDivElement | null>(null);
   const stick = useRef(true);
-  const rows = useMemo(() => feed.map((e) => ({ e, ...logLine(bundle, e) })), [bundle, feed]);   // state 마다 다시 그리지 않게
+  const rows = useMemo(() => (plain ? chkLines(bundle, feed, commands) : feed.map((e) => ({ e, ...logLine(bundle, e) }))), [bundle, feed, plain, commands]);   // state 마다 다시 그리지 않게
   const seen = detail ? rows : rows.filter((r) => r.main);
   const shown = onlyIssue ? seen.filter((r) => r.level !== "info") : seen;
   const issues = rows.filter((r) => r.level !== "info").length;
@@ -51,7 +57,7 @@ export function EventFeed({ bundle, feed, fill = false }: { bundle: Bundle | nul
           {shown.map((r) => (
             <p key={r.e.id} className={`flex gap-2 ${FS.small} leading-snug`} title={r.desc}>
               <span className="shrink-0 font-mono tabular-nums text-[#8A929D]">{fmtKst(r.e.ts)}</span>
-              {r.source && <span className="w-24 shrink-0 truncate text-[#5B6470]">{r.source}</span>}
+              {(r.source || plain) && <span className="w-24 shrink-0 truncate text-[#5B6470]">{r.source ?? ""}</span>}
               <span className={`flex shrink-0 items-center gap-1 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.level === "warn" ? <AlertTriangle size={11} /> : r.level === "error" || r.level === "critical" ? <AlertOctagon size={11} /> : null}{r.kind}
               </span>
@@ -91,7 +97,27 @@ function argText(a: Record<string, unknown> | null): string {
   return "";
 }
 
-export function CommandLog({ bundle, commands }: { bundle: Bundle | null; commands: CmdRow[] }) {
+/** 조작 인자 — 평소 보기 글(W-16 plain): PLC 버튼 이름·켜기/끄기, 수동 조작은 조작 이름 */
+function argPlain(bundle: Bundle | null, kind: string, a: Record<string, unknown> | null): string {
+  if (!a) return "";
+  const on = typeof a.on === "boolean" ? (a.on ? "켜기" : "끄기") : "";
+  if (typeof a.target === "string") {
+    const b = bundle?.plcButtons?.find((x) => x.target === a.target);
+    return `${b?.label ?? ""} ${on}`.trim();
+  }
+  if (kind === "MANUAL_BLOCK" && a.block && typeof a.block === "object" && typeof (a.block as Record<string, unknown>).type === "string") {
+    const n = blockName(bundle, (a.block as Record<string, string>).type);
+    return isCode(n) ? "" : n;
+  }
+  if (on) return on;
+  if (a.value !== undefined && a.value !== null) return `${String(a.value)}`;
+  return "";
+}
+
+export function CommandLog({ bundle, commands, plain = false }: {
+  bundle: Bundle | null; commands: CmdRow[];
+  plain?: boolean;          // W-16 챔버K — 코드·영문(ON/OFF·local) 없이. 기본은 지금 동작
+}) {
   const { detail } = useChk2Mode();
   return (
     <Card title="조작 기록">
@@ -103,18 +129,18 @@ export function CommandLog({ bundle, commands }: { bundle: Bundle | null; comman
             <div key={c.id}>
               <p className={`flex flex-wrap items-baseline gap-x-2 ${FS.small} leading-snug`}>
                 <span className="shrink-0 font-mono text-[#8A929D]">{fmtKst(c.requestedAt)}</span>
-                <span className="font-medium text-[#1B1F24]">{c.label ?? commandLabel(bundle, c.kind)}</span>
-                {argText(c.args) && <span className="font-bold text-[#1B1F24]">{argText(c.args)}</span>}
-                <span className="text-[#5B6470]">{c.requestedBy}</span>
+                <span className="font-medium text-[#1B1F24]">{plain && isCode(c.label ?? commandLabel(bundle, c.kind)) ? "명령" : c.label ?? commandLabel(bundle, c.kind)}</span>
+                {(plain ? argPlain(bundle, c.kind, c.args) : argText(c.args)) && <span className="font-bold text-[#1B1F24]">{plain ? argPlain(bundle, c.kind, c.args) : argText(c.args)}</span>}
+                <span className="text-[#5B6470]">{plain ? byWord(c.requestedBy) : c.requestedBy}</span>
                 {detail && <span className="text-[#8A929D]">{c.origin === "web" ? (c.sentVia ? `${c.sentVia} × ${c.sendCount}` : "") : c.origin}</span>}
-                {!detail && c.origin !== "web" && <span className="text-[#8A929D]">노트북</span>}
+                {!detail && c.origin !== "web" && !(plain && byWord(c.requestedBy) === "노트북") && <span className="text-[#8A929D]">노트북</span>}
                 <CmdStatusTag status={c.status} className="ml-auto shrink-0" />
               </p>
               {c.reasonCode && (
                 <p className={`flex items-center gap-1 truncate pl-1 ${FS.small} ${c.status === "rejected" ? "text-[#B42318]" : "text-[#B54708]"}`}
                   title={c.detail ?? undefined}>
                   {c.status === "rejected" ? <AlertOctagon size={10} className="shrink-0" aria-label="거부" /> : <AlertTriangle size={10} className="shrink-0" aria-label="주의" />}
-                  <span className="truncate">{reasonLabel(bundle, c.reasonCode)}{detail && ` (${c.reasonCode})`}</span>
+                  <span className="truncate">{plain && reasonLabel(bundle, c.reasonCode) === c.reasonCode ? "장비가 받지 않음" : reasonLabel(bundle, c.reasonCode)}{detail && ` (${c.reasonCode})`}</span>
                 </p>
               )}
             </div>
@@ -131,7 +157,10 @@ function dur(a: string | null, b: string | null): string {
   return sec < 3600 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${Math.floor(sec / 3600)}시간 ${Math.floor((sec % 3600) / 60)}분`;
 }
 
-export function RunList({ bundle, runs }: { bundle: Bundle | null; runs: RunRow[] }) {
+export function RunList({ bundle, runs, plain = false }: {
+  bundle: Bundle | null; runs: RunRow[];
+  plain?: boolean;          // W-16 챔버K — 시작한 사람 local → 노트북, 이름 없는 사유 코드는 숨김(상세에서만). 기본은 지금 동작
+}) {
   const { detail } = useChk2Mode();
   return (
     <Card title="런 이력">
@@ -153,12 +182,14 @@ export function RunList({ bundle, runs }: { bundle: Bundle | null; runs: RunRow[
                 <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{fmtKst(r.startedAt)}</td>
                 <td className="py-2 pr-3">
                   <span className="block max-w-[260px] truncate" title={`${r.name ?? ""} · ${r.runId}`}>{runTitle(r)}</span>
-                  {r.startedBy && <span className={`${FS.small} text-[#5B6470]`}>{r.startedBy}</span>}
+                  {r.startedBy && <span className={`${FS.small} text-[#5B6470]`}>{plain ? byWord(r.startedBy) : r.startedBy}</span>}
                   {detail && <span className={`block font-mono ${FS.small} text-[#8A929D]`}>{r.name} · {r.runId}</span>}
                 </td>
                 <td className="py-2 pr-3">
                   <RunResultTag endedAt={r.endedAt} result={r.result} />
-                  {r.reasonCode && <p className={`mt-0.5 ${FS.small} text-[#5B6470]`}>{reasonLabel(bundle, r.reasonCode)}</p>}
+                  {r.reasonCode && !(plain && !detail && reasonLabel(bundle, r.reasonCode) === r.reasonCode) && (
+                    <p className={`mt-0.5 ${FS.small} text-[#5B6470]`}>{reasonLabel(bundle, r.reasonCode)}</p>
+                  )}
                 </td>
                 <td className="py-2 whitespace-nowrap text-right tabular-nums">{dur(r.startedAt, r.endedAt)}</td>
               </tr>

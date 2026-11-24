@@ -78,7 +78,7 @@ function SeqItem({ b, bundle, st, current, lock, onAsk, revision, pauseMax }: {
                 <Btn size="sm" lock={lock("PROCESS_PAUSE")}
                   onClick={() => onAsk({ kind: "PROCESS_PAUSE", label: "블록 일시정지", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
                     args: { no: b.no, revision }, lines: [`${name}: ${b.pauseText ?? ""}`],
-                    note: pauseMax > 0 ? `한도 ${fmtDur(pauseMax)}를 넘으면 정지 순서로 갑니다(5분 전 경고).` : "한도 없음(설정 PROCESS_PAUSE_MAX_SEC 0)." })}>
+                    note: pauseMax > 0 ? `한도 ${fmtDur(pauseMax)}를 넘으면 정지 순서로 갑니다(5분 전 경고).` : "한도 없음(설정의 일시정지 한도가 0)." })}>
                   <PauseCircle size={13} /> 일시정지
                 </Btn>
               ) : <span className={`${FS.small} text-[#5B6470]`}>일시정지할 수 없음: {b.pauseText || "이 블록은 멈출 수 없음"}</span>}

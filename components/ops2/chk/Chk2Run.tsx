@@ -21,11 +21,12 @@ import Chk2Adjust from "./Chk2Adjust";
 import Chk2LocalNext from "./Chk2LocalNext";
 import { ExpandedView, fmtSec } from "./Chk2BlockEditor";
 import { argRange, paramValue } from "./logic";
-import { enumLabel, fieldText, logLine } from "./text";
+import { enumLabel, fieldText } from "./text";
+import { chkLines, reasonText } from "./logView";
 import { bandOf, kindOf, pressureTargetCol, scaleMax, usesNow } from "./runview";
 import { heaterLines, processLines, rowLine } from "./recipeText";
 import { useChk2Mode } from "./mode";
-import { reasonLabel, type Bundle, type FieldDef, type StateData } from "./types";
+import { type Bundle, type FieldDef, type StateData } from "./types";
 import type { EditBase, FeedItem, RunBlocks, TrendPt } from "./useChk2";
 import type { RecipeFull, useRecipes } from "./useRecipes";
 import type { LockFn } from "./Chk2Status";
@@ -143,7 +144,7 @@ function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
 /** 알림 — 높이는 내용만큼(옆 카드에 맞추지 않음), 사건 목록은 최대 높이 안에서 스크롤 */
 function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateData | null; feed: FeedItem[]; onLog?: () => void }) {
   const alarms = st?.alarms ?? [];
-  const lines = useMemo(() => feed.map((e) => ({ e, ...logLine(bundle, e) })).filter((r) => r.main).slice(-20).reverse(), [bundle, feed]);
+  const lines = useMemo(() => chkLines(bundle, feed).filter((r) => r.main).slice(-20).reverse(), [bundle, feed]);   // 평소 보기 글(코드·local 없음)
   return (
     <Card title={<><BellRing size={15} /> 알림</>} right={onLog && <Btn size="sm" kind="ghost" onClick={onLog}>기록 전체 보기</Btn>}>
       <p className={`mb-2 ${FS.body} text-[#5B6470]`}>
@@ -151,7 +152,7 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
       </p>
       {alarms.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">
-          {alarms.map((a) => <Chip key={a.ruleId} tone="alarm">{a.code ? reasonLabel(bundle, a.code) : a.ruleId}</Chip>)}
+          {alarms.map((a) => <Chip key={a.ruleId} tone="alarm">{reasonText(bundle, a.code, "안전 규칙 발동")}</Chip>)}
         </div>
       )}
       {lines.length ? (
