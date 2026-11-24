@@ -81,7 +81,8 @@ export function ch12LogLine(b: Ch12Bundle | null, e: FeedItem): LogLine {
   const code = s(d.code);
   if (code && text.startsWith(`${code} `)) text = text.slice(code.length + 1);
   const rule = d.ruleId ? ` [${s(d.ruleId)}]` : "";
-  const raw = code && msg.startsWith(code) ? `${msg}${rule}` : `${code}${rule} ${msg}`;
+  const msgRest = code && msg.startsWith(`${code} `) ? msg.slice(code.length + 1) : msg;      // 원시 줄에는 내용에 없는 장비 문구만
+  const raw = `${code}${rule}${msgRest && !text.includes(msgRest) ? ` ${msgRest}` : ""}`;
   return tidyLine({ ...base, kind, text, source: source || sourceName12(b, s(c.source)) || "장비", raw: raw.trim() });
 }
 

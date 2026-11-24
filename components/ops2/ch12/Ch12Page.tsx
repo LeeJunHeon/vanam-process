@@ -396,7 +396,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
         <div className="space-y-3">
           {!local && (
             <Tabs small value={logTab} onChange={setLogTab}
-              tabs={[{ key: "events", label: "로그", title: "장비가 보낸 사건과 공정 진행" }, { key: "commands", label: "조작 기록", title: "웹·노트북에서 보낸 명령과 결과" },
+              tabs={[{ key: "events", label: "로그", title: "장비가 보낸 기록과 공정 진행" }, { key: "commands", label: "조작 기록", title: "웹·노트북에서 보낸 명령과 결과" },
                 { key: "runs", label: "공정 이력", title: "끝난 공정과 챔버별 공정 기록" }]} />
           )}
           {(local || logTab === "events") && <Ch12EventFeed bundle={bundle} feed={d.feed} />}

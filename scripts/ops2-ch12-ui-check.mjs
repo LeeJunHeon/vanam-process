@@ -213,15 +213,16 @@ const chamberProps = (ch) => ({
   const html = render(U.ChamberRun, chamberProps("ch1"));
   const t = textOf(html), b = buttons(html);
   const cs = st.chambers.ch1;
-  check("ui:chamber-running — 공정 중 상태 글·블록 n/전체·남은 시간·ETA, STOP 은 늘 눌림(v1 START/STOP 늘 활성)",
-        cs.procState === "RUNNING" && t.includes(L.stateInfo(bundle, "RUNNING", "ch1").label) && t.includes("블록 1/1")
-        && t.includes(L.clockOrDash(cs.remainS)) && t.includes("ETA(공정 끝까지)") && b["CH1 STOP"] === false
-        && b["건너뛰기"] === false && b["일시정지"] === false && b["시퀀스 편집"] === false,
+  check("ui:chamber-running — 공정 중 상태 글·단계 n/전체·남은 시간·공정 끝까지, STOP 은 늘 눌림(v1 START/STOP 늘 활성), 지금 동작(stepLabel)",
+        cs.procState === "RUNNING" && t.includes(L.stateInfo(bundle, "RUNNING", "ch1").label) && t.includes("단계 1/1")
+        && t.includes(L.clockOrDash(cs.remainS)) && t.includes("공정 끝까지") && b["CH1 STOP"] === false
+        && b["건너뛰기"] === false && b["일시정지"] === false && b["공정 순서 편집"] === false
+        && (!cs.stepLabel || t.includes(`진행 중 동작 ${cs.stepLabel}`)),
         { procState: cs.procState, stop: b["CH1 STOP"], b, text: t.slice(0, 400) });
   const mine = feed.filter((e) => L.feedChamber(e) === "ch1").map((e) => U.ch12LogLine(bundle, e)).filter((l) => l.main);
-  check("ui:chamber-log — 이 챔버 사건만 로그(로그 줄 = 장비 시각 + 종류 + 글, 평소 보기에 공정 단계 줄)",
-        t.includes("알림·로그") && mine.length > 0 && mine.every((l) => t.includes(l.text.replace(/\s+/g, " ")))
-        && mine.some((l) => l.kind === "공정 단계" && l.text.includes("시작")), mine.map((l) => `${l.kind} ${l.text}`));
+  check("ui:chamber-log — 이 챔버 기록만 로그(로그 줄 = 장비 시각 + 출처 + 이름 + 내용, 평소 보기에 공정 단계 줄)",
+        t.includes("알림·로그") && mine.length > 0 && mine.every((l) => t.includes(l.text.replace(/\s+/g, " ")) && t.includes(l.source))
+        && mine.some((l) => l.source === "공정" && l.kind === "단계" && l.text.includes("시작")), mine.map((l) => `${l.source} | ${l.kind} | ${l.text}`));
   check("ui:no-dev-text — 운전 탭 CH1 칸에 개발용 글(인자 형식·명령 이름·코일 이름·열 이름)이 없음(상세 끔)", devHits(t).length === 0, devHits(t));
 }
 {
@@ -268,8 +269,9 @@ const chamberProps = (ch) => ({
   const pcList = [{ id: "r1", kind: "pc", name: "PC-1", rowCount: 1, check: { errors: 0, warnings: 0, first: null } }];
   const html = render(U.PcPanel, { bundle, st, lock: noLock, onAsk: noop, recipes: pcList, getRecipe: async () => null });
   const t = textOf(html), b = buttons(html);
-  check("ui:pc-panel — 플라즈마 클리닝 채널(CH1/CH2) 선택·PC 레시피 목록에서 고르기(JSON 칸 없음)·시작·정지·오류 해제(장비가 PC 실행 중 전환 거부)",
-        "채널 선택" in b && "CH1" in b && "CH2" in b && b["클리닝 시작"] === false && b["클리닝 정지"] === false && b["오류 해제"] === false
+  check("ui:pc-panel — Plasma Cleaning 채널(CH1/CH2) 선택·레시피 목록에서 고르기(JSON 칸 없음)·시작·정지·오류 해제(장비가 실행 중 전환 거부)",
+        "채널 선택" in b && "CH1" in b && "CH2" in b && b["시작"] === false && b["정지"] === false && b["오류 해제"] === false
+        && t.includes("Plasma Cleaning") && !t.includes("PC 레시피")
         && t.includes("PC-1") && !/<textarea|font-mono/.test(html) && devHits(t).length === 0 && fx.cmd.pc_sel.ok, { b, dev: devHits(t) });
   const rg = U.PC.pcRanges(bundle);
   const good = { use_ch: "2", process_name: "PC", base_pressure: "5e-6", gas_flow: "20", working_pressure: "2", rf_power: "100", process_time: "1" };
@@ -305,15 +307,18 @@ const chamberProps = (ch) => ({
   const t = textOf(html);
   const r = st.engines.robot;
   check("ui:robot-panel — 로봇 연결 상태 칸(장비 engines.robot — 받는 중·처리한 명령·처리 중·마지막 명령, 값 없으면 그렇게)",
-        t.includes("로봇") && !!r && t.includes(r.listening ? "받는 중" : "받지 않음") && new RegExp(`처리한 명령 ${r.count} ?건`).test(t) && t.includes(r.last ? String(r.last.cmd) : "아직 없음")
-        && !t.includes("모름"), t.slice(0, 300));
+        t.includes("로봇") && !!r && t.includes(`로봇 명령 받기 ${r.listening ? "켜짐" : "꺼짐"}`) && new RegExp(`처리한 명령 ${r.count} ?건`).test(t)
+        && t.includes(r.last ? (bundle.commands.find((c) => c.kind === `ROBOT_${r.last.cmd}`)?.label.replace(/^로봇 /, "") ?? "명령") : "아직 없음")
+        && !t.includes("모름") && !/\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/.test(t), t.slice(0, 300));
 }
 {
   const html = render(U.Ch12Hmi, { bundle, snapshot: st.snapshot, plcOk: true, lockOf: noLock, pending: {}, onAsk: noop, note: "노드를 눌러 조작" });
   const t = textOf(html);
   const drawn = U.drawnTargets(bundle);
-  const shown = bundle.plcButtons.filter((x) => drawn.has(x.target) ? html.includes(`<title>${L.plcName(x)} · `) : t.includes(L.plcName(x)));
-  check("ui:plc-buttons — 장비 PLC 버튼 전부(계통도 노드 + 그 밖의 버튼 목록 — Power Select·부저 정지 포함), 이름은 한국어(코일 원래 이름은 상세에서만)",
+  // 그 밖의 버튼 목록은 묶음 이름에서 칸 제목(CH1·CH2·Loadlock)과 같은 앞말을 뺀다('CH1 Chuck 중간' → CH1 칸의 'Chuck 중간')
+  const shown = bundle.plcButtons.filter((x) => drawn.has(x.target) ? html.includes(`<title>${L.plcName(x)} · `)
+    : t.includes(L.plcName(x).replace(/^(CH1|CH2|Loadlock) /, "")));
+  check("ui:plc-buttons — 장비 PLC 버튼 전부(계통도 노드 + 그 밖의 버튼 목록 — Power Select·부저 정지 포함), 이름은 묶음 이름(코일 원래 이름은 상세에서만)",
         bundle.plcButtons.length > 20 && shown.length === bundle.plcButtons.length && !/[A-Za-z0-9]+_SW/.test(t),
         bundle.plcButtons.filter((x) => !shown.includes(x)).map((x) => x.label));
   // ── PLC 버튼 확인창·기록(2026-11-20 D425 — 잠그지 않고 알린다) ──
@@ -329,12 +334,12 @@ const chamberProps = (ch) => ({
   const st2 = { ...st, chambers: { ...st.chambers, ch2: st.chambers.ch1 }, engines: { ...st.engines, "proc.ch2": st.engines["proc.ch1"] } };
   const g1 = ctx("shutter_1_sw", true, st2), g1idle = ctx("shutter_1_sw", true), bz = ctx("buzzer_stop_sw", true, st2);
   const pin = ctx("l_pin_up_sw", true), ar = ctx("ar_1_gas_sw", true), mv = ctx("m_v_2_sw", false), chuck = ctx("z_m_p_1_cw_sw", true);
-  const want1 = "CH1 공정 중 — TEST MODE · T1";
-  check("ui:plc-confirm — 확인창: 그 버튼의 챔버가 공정 중이면 맨 위 'CH1 공정 중 — 블록 · 공정 이름'(공유 건 셔터·Power Select 는 CH2, 로드락·부저는 없음), " +
-        "위험 두 갈래 — 사람(벤트·도어·게이트·로드락 핀·척 모터)·장비(터보·로터리 끄기, 포어라인·러핑·메인 밸브, Power Select — DC Pulse 출력 중 SW_RF_SELECT 켜기는 RF 전용 릴레이 문구 더)",
+  const want1 = "CH1 공정 중 · TEST 모드 · T1";
+  check("ui:plc-confirm — 확인창: 그 버튼의 챔버가 공정 중이면 맨 위 'CH1 공정 중 · 단계 · 공정 이름'(공유 Gun 셔터·Power Select 는 CH2, Loadlock·부저는 없음), " +
+        "위험 두 갈래 — 사람(Vent·Door·Gate·Loadlock 4Pin·Chuck)·장비(Turbo·Rotary 끄기, FV·RV·MV, Power Select·RF Select — DC Pulse 출력 중 RF Select 켜기는 RF 전용 릴레이 문구 더)",
         fx.plc_busy.ch1 && !fx.plc_busy.ch2 && c1.procLine === want1 && kinds(c1) === "person" && c2.procLine === null && kinds(c2) === "person" &&
         kinds(tOff) === "equipment" && kinds(tOn) === "" && kinds(rfNo) === "equipment" && kinds(rfDcp) === "equipment,equipment" &&
-        rfDcp.hazards[1].text.includes("RF 전용 릴레이") && kinds(rfOff) === "equipment" && g1.procLine === "CH2 공정 중 — TEST MODE · T1" &&
+        rfDcp.hazards[1].text.includes("RF 전용 릴레이") && kinds(rfOff) === "equipment" && g1.procLine === "CH2 공정 중 · TEST 모드 · T1" &&
         g1idle.procLine === null && bz.procLine === null && kinds(bz) === "" && pin.procLine === null && kinds(pin) === "person" &&
         ar.procLine === want1 && kinds(ar) === "" && kinds(mv) === "equipment" && kinds(chuck) === "person" &&
         c1.hazards[0].text === bundle.plcHazardText.person && tOff.hazards[0].text === bundle.plcHazardText.equipment &&
@@ -346,12 +351,12 @@ const chamberProps = (ch) => ({
   const hw = body(a1, false), hl = body(a2, true), hn = body(a3, false);
   const dlgHtml = renderToStaticMarkup(h(U.Chk2ModeContext.Provider, { value: { local: false, hmiKinds: [], detail: false } },
     h(U.Ch12Confirm, { ask: a1, onOk: noop, onCancel: noop })));
-  check("ui:plc-confirm-text — 확인창 글: 빨간 줄이 맨 위(공정 중일 때만) → 조작 확인 · 'CH1 벤트 → 켜기·열기' · 잠그지 않음 안내 · 위험 문구 · 기록 안내(웹 = 이름·계정, 노트북 = '노트북'), " +
-        "공정 중·위험이면 실행 빨강, 그 밖의 확인창은 챔버K 확인창 그대로",
-        hw.startsWith(`${want1} 조작 확인 CH1 벤트 → 켜기·열기`) && hw.includes("잠그지 않음") && hw.includes(bundle.plcHazardText.person) &&
-        hw.endsWith("이 조작은 로그인한 이름·계정과 함께 장비 로그에 기록됩니다.") &&
-        hl.startsWith("조작 확인 CH2 도어 열기 → 켜기·열기") && hl.endsWith("이 조작은 '노트북'에서 누른 것으로 장비 로그에 기록됩니다.") &&
-        !hn.includes("위험 —") && a1.red && a2.red && !a3.red && dlgHtml.includes("data-proc-line") && dlgHtml.includes("bg-[#B42318]") &&
+  check("ui:plc-confirm-text — 확인창 글: 빨간 줄이 맨 위(공정 중일 때만) → 조작 확인 · 'CH1 Vent → 켜기·열기' · '명령을 장비에 보냅니다.' · 공정 중에도 실행 안내 · 위험 문구 · " +
+        "기록 안내(웹 = 이름·계정, 노트북 = '노트북'), 공정 중·위험이면 실행 빨강, 그 밖의 확인창도 같은 동작(챔버12 글)",
+        hw.startsWith(`${want1} 조작 확인 CH1 Vent → 켜기·열기 명령을 장비에 보냅니다.`) && hw.includes("공정 중에도 실행되고") && hw.includes(bundle.plcHazardText.person) &&
+        hw.endsWith("이 조작은 로그인한 이름·계정과 함께 장비 로그에 기록됩니다.") && !hw.includes(" — ") &&
+        hl.startsWith("조작 확인 CH2 Door 열기 → 켜기·열기") && hl.endsWith("이 조작은 '노트북'에서 누른 것으로 장비 로그에 기록됩니다.") &&
+        !hn.includes("위험:") && a1.red && a2.red && !a3.red && dlgHtml.includes("data-proc-line") && dlgHtml.includes("bg-[#B42318]") &&
         U.isPlcAsk(a1) && !U.isPlcAsk({ kind: "PROCESS_STOP", label: "x" }) &&
         textOf(renderToStaticMarkup(h(U.Ch12Confirm, { ask: { kind: "PROCESS_STOP", label: "CH1 STOP", stop: true }, onOk: noop, onCancel: noop }))).includes("실행자 계정과 함께 기록됩니다"),
         { hw, hl, hn });
@@ -361,14 +366,17 @@ const chamberProps = (ch) => ({
   const byT = (x) => plcEv.filter((e) => e.data.context.data.target === x);
   const ll = ["vent_1_sw", "door_2_open_sw", "nope"].map((x) => byT(x)).filter((a) => a.length === 1)
     .map(([e]) => ({ tab: L.feedChamber(e), ...U.ch12LogLine(bundle, e) }));
-  check("ui:plc-log-line — 화면 로그: 'PLC 버튼 · CH1 벤트 켬 · 홍길동(웹) (CH1 공정 중 · TEST MODE)'·'… · 노트북'·거부면 '— 거부: 이유', 그 챔버 탭(CH1·CH2·공통), " +
-        "평소 보기 줄(계정은 상세 원시 줄에만), 'PLC 버튼 — 받음' 명령 결과 줄은 상세에만(같은 일 두 줄 막기)",
-        plcEv.length === 3 && ll.length === 3 && ll[0].text === "PLC 버튼 · CH1 벤트 켬 · 홍길동(웹) (CH1 공정 중 · TEST MODE)" && ll[0].tab === "ch1" &&
-        ll[1].text === "PLC 버튼 · CH2 도어 열기 켬 · 노트북" && ll[1].tab === "ch2" &&
-        ll[2].text.startsWith("PLC 버튼 · nope 켬 · 노트북 — 거부: target 'nope'") && ll[2].tab === "shared" && ll[2].level === "warn" &&
+  check("ui:plc-log-line — 화면 로그 한 줄 = 출처 | 이름 | 내용: '웹 | PLC 버튼 | CH1 Vent 켜기 · 홍길동 · 진행 중 단계 TEST 모드'·'노트북 | PLC 버튼 | CH2 Door 열기 켜기'·" +
+        "거부면 '… · 거부 · 사유 이름', 그 챔버 탭(CH1·CH2·공통), 평소 보기 줄(계정·장비 문장은 상세 원시 줄에만), 같은 말 두 번 없음, " +
+        "'PLC 버튼 받음' 명령 결과 줄은 상세에만(같은 일 두 줄 막기)",
+        plcEv.length === 3 && ll.length === 3 && ll[0].source === "웹" && ll[0].text === "CH1 Vent 켜기 · 홍길동 · 진행 중 단계 TEST 모드" && ll[0].tab === "ch1" &&
+        ll[1].source === "노트북" && ll[1].text === "CH2 Door 열기 켜기" && ll[1].tab === "ch2" &&
+        ll[2].source === "노트북" && ll[2].text === `모르는 대상 켜기 · 거부 · ${bundle.reasons.find((r) => r.code === "BAD_ARGS").label}` &&
+        ll[2].tab === "shared" && ll[2].level === "warn" &&
+        ll.every((x) => { const ws = `${x.source} ${x.kind} ${x.text}`.split(/[\s·|,()]+/).filter((w) => w.length >= 2); return ws.length === new Set(ws).size; }) &&
         ll.every((x) => x.main && x.kind === "PLC 버튼") && !ll[0].text.includes("@") && ll[0].raw.includes("hong@vanam.co.kr") &&
         plcRes.length === 3 && plcRes.every((e) => U.ch12LogLine(bundle, e).main === false) && L.hasPlcEvent(bundle),
-        ll.map((x) => `${x.tab} ${x.level} ${x.text} | ${x.raw}`));
+        ll.map((x) => `${x.tab} ${x.level} ${x.source} | ${x.kind} | ${x.text} || ${x.raw}`));
   const dWho = [L.whoOf("web", "hong@vanam.co.kr", "홍길동"), L.whoOf("web", "hong@vanam.co.kr", null), L.whoOf("local", "local"), L.whoOf("robot", "robot")];
   const def = bundle.commands.find((c) => c.kind === "PLC_BUTTON"), kdef = { kind: "X", args: [{ name: "ch" }] };
   const sa = U.withServerArgs(def, { target: "vent_1_sw", on: true, by_name: "꾸민 이름" }, "홍길동");
@@ -379,8 +387,8 @@ const chamberProps = (ch) => ({
         { dWho, sa });
   const dt = textOf(render(U.Ch12Hmi, { bundle, snapshot: st.snapshot, plcOk: true, lockOf: noLock, pending: {}, onAsk: noop, note: "" }, { detail: true }));
   const locked = render(U.Ch12Hmi, { bundle, snapshot: st.snapshot, plcOk: false, lockOf: () => "PLC 값이 오래됨", pending: { [bundle.plcButtons[5].target]: true }, onAsk: noop, note: "PLC 응답 늦음 — 조작 잠금" });
-  check("ui:hmi-map — HMI 계통도(CH1·CH2·로드락 2D — 진회색 = 켜짐·열림, 전환 중 파란 점선, 잠금 이유 aria·흐리게, 상세면 원래 이름)",
-        html.includes('aria-label="CH1 계통도"') && html.includes('aria-label="CH2 계통도"') && html.includes('aria-label="로드락 계통도"')
+  check("ui:hmi-map — HMI 계통도(CH1·CH2·Loadlock 2D — 진회색 = 켜짐·열림, 전환 중 파란 점선, 잠금 이유 aria·흐리게, 상세면 원래 이름)",
+        html.includes('aria-label="CH1 계통도"') && html.includes('aria-label="CH2 계통도"') && html.includes('aria-label="Loadlock 계통도"')
         && html.includes('role="button"') && locked.includes("opacity-50") && locked.includes("잠김: PLC 값이 오래됨") && locked.includes("조작 잠금")
         && /[A-Z0-9]+_SW/.test(dt) && t.includes("열림·켜짐") && t.includes("전환 중"), null);
 }
@@ -390,13 +398,13 @@ const chamberProps = (ch) => ({
                   door_1_open_lamp: false, door_1_close_lamp: true, l_pin_up_lamp: true, l_pin_down_lamp: false, l_vac_ready_sw: false };
   const snap = { ...st.snapshot, ...Object.fromEntries(Object.entries(lamps).map(([k, v]) => [`plc.${k}`, v])) };
   const html = render(U.Ch12Hmi, { bundle, snapshot: snap, plcOk: true, lockOf: noLock, pending: {}, onAsk: noop, note: "" });
-  const aria = (name) => (html.match(new RegExp(`aria-label="${name} — ([^"— ]+)`, "g")) ?? []).map((m) => m.split(" — ")[1]);
-  const got = { "게이트 닫기": aria("게이트 닫기"), "게이트 열기": aria("게이트 열기"), "도어 닫기": aria("도어 닫기"), "도어 열기": aria("도어 열기"),
-                "4핀 올림": aria("4핀 올림"), "4핀 내림": aria("4핀 내림"), "진공 준비": aria("진공 준비") };
+  const aria = (name) => (html.match(new RegExp(`aria-label="${name} · ([^"· ]+)`, "g")) ?? []).map((m) => m.split(" · ")[1]);
+  const got = { "Gate 닫기": aria("Gate 닫기"), "Gate 열기": aria("Gate 열기"), "Door 닫기": aria("Door 닫기"), "Door 열기": aria("Door 열기"),
+                "4Pin 올림": aria("4Pin 올림"), "4Pin 내림": aria("4Pin 내림"), "진공 준비": aria("진공 준비") };
   const words = Object.values(got).flat();
-  check("ui:hmi-buttons — 사각 버튼 상태 글 켜짐/꺼짐(게이트 닫기 램프 켜짐 → '게이트 닫기 켜짐', 열기 → '꺼짐'), 열림/닫힘은 밸브·셔터만",
-        got["게이트 닫기"].join() === "켜짐,꺼짐" && got["게이트 열기"].join() === "꺼짐,켜짐" && got["도어 닫기"][0] === "켜짐"
-        && got["도어 열기"][0] === "꺼짐" && got["4핀 올림"][0] === "켜짐" && got["4핀 내림"][0] === "꺼짐" && got["진공 준비"][0] === "꺼짐"
+  check("ui:hmi-buttons — 사각 버튼 상태 글 켜짐/꺼짐(Gate 닫기 램프 켜짐 → 'Gate 닫기 켜짐', 열기 → '꺼짐'), 열림/닫힘은 밸브·셔터만, 이름은 칸 제목 앞말을 뺀 묶음 이름",
+        got["Gate 닫기"].join() === "켜짐,꺼짐" && got["Gate 열기"].join() === "꺼짐,켜짐" && got["Door 닫기"][0] === "켜짐"
+        && got["Door 열기"][0] === "꺼짐" && got["4Pin 올림"][0] === "켜짐" && got["4Pin 내림"][0] === "꺼짐" && got["진공 준비"][0] === "꺼짐"
         && words.length >= 9 && !words.some((w) => w === "열림" || w === "닫힘"), got);
 }
 {
@@ -502,9 +510,10 @@ const chamberProps = (ch) => ({
   const html = render(U.StatusBand12, { bundle, st, connected: true, conn: { label: "장비 연결됨 · 1초 전", tone: "neutral" },
     links: [{ label: "PLC 정상", tone: "neutral" }], mode: "sim", equipment: "CH12-SIM", label: null, lock: noLock, onAsk: noop, nowMs, plcOk: true });
   const t = textOf(html), b = buttons(html);
-  check("ui:status-band — 상태 띠(CH1·CH2 상태·블록·남은·ETA, 로드락·플라즈마 클리닝·TSP 요약, SIM·연결·PLC 칩, ALL STOP·부저 정지)",
-        t.includes(L.stateInfo(bundle, "RUNNING", "ch1").label) && t.includes("블록 1/1") && t.includes("대기 중") && t.includes("로드락")
-        && t.includes("플라즈마 클리닝") && t.includes("TSP") && t.includes("SIM — 모의 장비") && t.includes("PLC 정상") && b["ALL STOP"] === false
+  check("ui:status-band — 상태 띠(CH1·CH2 상태·단계·남은·공정 끝까지, Loadlock·Plasma Cleaning·TSP 요약, 모의 장비·연결·PLC 칩, ALL STOP·부저 정지)",
+        t.includes(L.stateInfo(bundle, "RUNNING", "ch1").label) && t.includes("단계 1/1") && t.includes("대기 중") && t.includes("Loadlock")
+        && t.includes("Plasma Cleaning") && t.includes("TSP") && t.includes("모의 장비") && !t.includes("SIM —") && t.includes("공정 끝까지")
+        && t.includes("PLC 정상") && b["ALL STOP"] === false
         && b["부저 정지"] === false && (html.match(/data-band-chamber="ch[12]"/g) ?? []).length === 2, b);
 }
 {
@@ -514,9 +523,10 @@ const chamberProps = (ch) => ({
   const lr = L.lockReason;
   check("ui:tabs-locks — 탭(웹 운전·HMI·레시피·기록·설정 / 노트북 운전·HMI·기록)·잠금 순서와 문구(로그인 → 권한 → bench → 정지 쪽 → 기다림 → 끊김 → PLC)",
         U.WEB_TABS.map((x) => x.label).join() === "운전,HMI,레시피,기록,설정" && U.LOCAL_TABS.map((x) => x.label).join() === "운전,HMI,기록"
-        && lr({ ...base, authLost: true }, "PROCESS_STOP") === "로그인이 끊김 — 새로고침하세요" && lr({ ...base, perms: undefined }, "X") === "권한 정보를 읽는 중"
-        && lr({ ...base, local: true }, "PC_START") === "노트북 화면에서 받지 않는 조작 — 웹에서" && lr(base, "PC_START") === "권한 없음 — 장비 담당자·관리자만"
-        && lr({ ...base, bench: true }, "PROCESS_START") === "읽기 전용(bench) — 장비로 보내는 조작은 잠김" && lr({ ...base, bench: true }, "RECIPE_LOAD") === null
+        && U.WEB_TABS.every((x) => !!x.title) && U.LOCAL_TABS.every((x) => !!x.title)
+        && lr({ ...base, authLost: true }, "PROCESS_STOP") === "로그인이 끊겨 새로고침해야 함" && lr({ ...base, perms: undefined }, "X") === "권한 정보를 읽는 중"
+        && lr({ ...base, local: true }, "PC_START") === "노트북 화면에서 받지 않는 조작이라 웹에서 해야 함" && lr(base, "PC_START") === "권한 없음(장비 담당자·관리자만)"
+        && lr({ ...base, bench: true }, "PROCESS_START") === "읽기 전용이라 잠김" && lr({ ...base, bench: true }, "RECIPE_LOAD") === null
         && lr({ ...base, connected: false }, "PROCESS_STOP") === null && lr({ ...base, connected: false, webOnline: false }, "PROCESS_STOP") === "장비 끊김"
         && lr({ ...base, inflight: () => true }, "PROCESS_START") === "결과를 기다리는 중" && lr({ ...base, inflight: () => true }, "PROCESS_STOP") === null
         && lr({ ...base, connected: false }, "PROCESS_START") === "장비 끊김" && lr({ ...base, local: true, connected: false, streamUp: false }, "PROCESS_START") === "노트북 프로그램 연결 끊김"
@@ -532,9 +542,11 @@ const chamberProps = (ch) => ({
   const html = render(U.Ch12EventFeed, { bundle, feed: [...feed, dup] }, { detail: true });
   const t = textOf(html);
   const plain = textOf(render(U.Ch12EventFeed, { bundle, feed }));
-  check("ui:log-main — 로그 평소 보기에 공정 진행 줄(공정 단계 '1/1 … 시작' — 묶음 eventKinds main)·같은 글이 한 줄에 두 번 붙지 않음('STATUS … STATUS STATUS' 없음)·챔버 고르기",
-        !!bl && bl.main && /^1\/1 .+ 시작$/.test(bl.text) && plain.includes(bl.text) && !t.includes("STATUS STATUS") && (t.match(/on=1 fwd=10\.0W/g) ?? []).length === 1
-        && dl.raw === "STATUS" && ["전체", "CH1", "CH2", "플라즈마 클리닝", "TSP", "공통"].every((x) => t.includes(x)), { bl, dl });
+  check("ui:log-main — 로그 평소 보기에 공정 진행 줄('공정 | 단계 | 1/1 … 시작' — 묶음 eventKinds main)·같은 글이 한 줄에 두 번 붙지 않음('STATUS … STATUS STATUS' 없음)·챔버 고르기·출처 칸 늘 채움",
+        !!bl && bl.main && bl.source === "공정" && bl.kind === "단계" && /^1\/1 .+ 시작$/.test(bl.text) && plain.includes(bl.text) && !t.includes("STATUS STATUS")
+        && (t.match(/on=1 fwd=10\.0W/g) ?? []).length === 1 && dl.raw === "STATUS" && !dl.text.startsWith("STATUS")
+        && ["전체", "CH1", "CH2", "Plasma Cleaning", "TSP", "공통"].every((x) => t.includes(x))
+        && feed.map((e) => U.ch12LogLine(bundle, e)).every((l) => !!l.source), { bl, dl });
 }
 {
   // RGA 그래프 — 장비 rga data 사건(드라이버 rga_link 'data' {mass_axis, pressures}) 마지막 것, v1 규칙으로 점 거름
@@ -579,20 +591,22 @@ const chamberProps = (ch) => ({
   const cb = L.currentBlocks(st, feed, "ch1");
   const html = render(U.ChamberRun, chamberProps("ch1"));
   const seq = textOf(render(U.Ch12SeqEdit, { bundle, st, feed, ch: "ch1", can, onAsk: noop, onClose: noop }));
-  check("ui:engines-key — 포털이 장비 키 proc.chN 을 읽음(엔진 상태 글·블록 목록(공정 순서)·started_upto·수정 항목·시퀀스 편집 창이 채워짐)",
+  check("ui:engines-key — 포털이 장비 키 proc.chN 을 읽음(지금 동작·단계 목록(공정 순서)·started_upto·수정 항목·공정 순서 편집 창이 채워짐, v1 스텝 문구는 상세 보기에서만)",
         L.engineOf(st, "ch1") === eng && !!eng && cb.from === "engine" && cb.blocks.length === eng.blocks.length && eng.blocks.length > 0
         && L.startedUpto(st, "ch1", cb.blocks.length) === eng.started_upto && eng.started_upto >= 1 && Array.isArray(eng.adjust)
-        && textOf(html).includes(eng.text) && textOf(html).includes(`시작한 블록 ${eng.started_upto}/${eng.blocks.length}`)
-        && !seq.includes("아직 받지 못했습니다") && !seq.includes("모르는 키") && !seq.includes("오류 ") && seq.includes(`시작한 블록 ${eng.started_upto}/${eng.blocks.length}`)
+        && !textOf(html).includes(eng.text) && textOf(render(U.ChamberRun, chamberProps("ch1"), { detail: true })).includes(eng.text)
+        && (!eng.step_label || textOf(html).includes(eng.step_label)) && textOf(html).includes(`시작한 단계 ${eng.started_upto}/${eng.blocks.length}`)
+        && !seq.includes("받는 중") && !seq.includes("모르는 키") && !seq.includes("오류 ") && seq.includes(`시작한 단계 ${eng.started_upto}/${eng.blocks.length}`)
         && L.engineOf(st, "ch2") === st.engines["proc.ch2"], { keys: Object.keys(st.engines), from: cb.from, seq: seq.slice(0, 200) });
 }
 {
   // 히터 패널 글(v1 ui/heater_panel.py 우선순위 문구 — 장비 heater_panel_text)
   const p = st.heater.panel;
   const t = textOf(render(U.HeaterThicknessPanel, { bundle, st, lock: noLock, onAsk: noop, plcOk: true }));
-  check("ui:heater-text — v1 히터 패널 상태 문구·상태 줄·배지·소유자·램프(값 표 대신)",
-        !!p && t.includes(p.status_text) && t.includes(p.state_line) && t.includes(p.badge) && t.includes(`소유 ${p.owner_text}`)
-        && ["TC", "D/A", "냉각수", "진공", "인터락", "과온", "TC 이상", "워치독"].every((x) => t.includes(x))
+  const badge = { RUN: "운전", ITL: "인터락", FAULT: "이상", STOP: "정지" }[p?.badge] ?? p?.badge;
+  check("ui:heater-text — v1 히터 패널 상태 문구·상태 줄·배지(운전·인터락·이상·정지)·소유자·램프(묶음 필드 이름 — 값 표 대신)",
+        !!p && t.includes(p.status_text) && t.includes(p.state_line) && t.includes(badge) && t.includes(p.owner_text) && !/\b(RUN|ITL|FAULT|STOP)\b/.test(t.replace("ALL STOP", ""))
+        && ["TC 정상", "D/A 정상", "Water", "진공 인터락", "히터 인터락", "과온", "TC 이상", "워치독 이상"].every((x) => t.includes(x))
         && ["정지", "운전 중", "운전 중 · 램프", "운전 중 · 유지", "PLC 응답 없음"].some((x) => p.status_text.startsWith(x) || p.status_text.startsWith("인터락")),
         p);
 }
@@ -656,10 +670,10 @@ const chamberProps = (ch) => ({
   const csv = fx.files.entries.find((e) => e.name === "r1.csv");
   const tg = U.LF.fileTargets(bundle, csv);
   const tx = U.LF.fileTargets(bundle, fx.files_sub.entries[0]);
-  check("ui:local-files — 장비 폴더 목록(폴더 먼저·csv/xlsx 만·위 폴더)·고른 파일 → CH1/CH2 적재·PC 불러오기(csv)·프리스퍼터 레시피(path)",
+  check("ui:local-files — 장비 폴더 목록(폴더 먼저·csv/xlsx 만·위 폴더)·고른 파일 → CH1/CH2 적재·Plasma Cleaning 불러오기(csv)·프리스퍼터 레시피(path)",
         fx.files.dir === "" && fx.files.parent === null && fx.files.entries.map((e) => e.name).join() === "sub,r1.csv" && t.includes("sub")
         && t.includes("r1.csv") && !t.includes("x.txt") && fx.files_sub.parent === "" && fx.files_bad === 403
-        && tg.map((x) => x.label).join() === "CH1 적재,CH2 적재,PC 불러오기,CH1 프리스퍼터 레시피,CH2 프리스퍼터 레시피"
+        && tg.map((x) => x.label).join() === "CH1 적재,CH2 적재,Plasma Cleaning 불러오기,CH1 프리스퍼터 레시피,CH2 프리스퍼터 레시피"
         && tg[0].kind === "RECIPE_LOAD" && tg[0].args.path === csv.full && tg[1].args.ch === 2
         && !tx.some((x) => x.kind === "PC_RECIPE_LOAD"), { files: fx.files, tg });
 }
