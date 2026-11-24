@@ -19,6 +19,7 @@ import { DONE_STATUS, OPEN_TYPES, blockTarget, topOf } from "./runview";
 import { paramValue } from "./logic";
 import type { LockFn } from "./Chk2Status";
 import { useChk2Mode } from "./mode";
+import { stepName } from "@/lib/ops2/chk/terms";
 import type { EditBase, RunBlocks } from "./useChk2";
 import type { Bundle, RunBlock, StateData } from "./types";
 
@@ -37,8 +38,8 @@ const EDIT_BASE_VERSION = 14;
 const step = (t?: string | null) => (t ?? "").replace(/블록/g, "단계");
 
 /** 블록 하나 이름(이름표가 있으면 같이) */
-const nameOf = (b: Bundle | null, x: { type: string; label?: string }) =>
-  x.type === "delay" ? "딜레이 행" : `${blockName(b, x.type)}${x.label && x.label !== blockName(b, x.type) && !/^[\d.#]+$/.test(x.label) ? ` · ${x.label}` : ""}`;
+// 단계 이름은 terms.stepName 한 곳(W-18 — 알림·기록 줄·상태 카드와 같은 규칙)
+const nameOf = (b: Bundle | null, x: { type: string; label?: string }) => stepName(b, x);
 
 function SeqItem({ b, bundle, st, current, lock, onAsk, revision, pauseMax }: {
   b: RunBlock; bundle: Bundle | null; st: StateData | null; current: boolean; lock: LockFn; onAsk: (a: Ask) => void;

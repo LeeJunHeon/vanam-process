@@ -258,13 +258,13 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
               {label(500, CT + 51 + px(5), "Gun1")}
               <rect x={600} y={CT + 34} width={120} height={34} rx={6} fill="#F5F6F8" stroke={T.border} />
               {label(660, CT + 51 + px(5), "Gun2")}
-              {shutter("s1", 455, CT + 82, 90, "S1")}
-              {shutter("s2", 615, CT + 82, 90, "S2")}
+              {shutter("s1", 455, CT + 82, 90, nm("plc.s1"))}
+              {shutter("s2", 615, CT + 82, 90, nm("plc.s2"))}
               {shutter("ms", 470, CT + 132, 220, nm("plc.ms"))}
               {/* 기판 히터 자리 — TC1 · TC2 같은 크기로 나란히(목표는 각각 아래 작게 — TC2 아래는 SV2) · 편차(TC2 단독 제어) · 제어 방식 */}
               <rect x={425} y={HY} width={310} height={CB - 8 - HY} rx={8} fill="#F5F6F8" stroke={T.border} />
               {label(437, HY + px(20), CARD.heater, "start")}
-              {tcCell(437, HY + px(20), "TC1", tc2Only ? "기록" : "", tc1,
+              {tcCell(437, HY + px(20), "TC1", tc2Only ? "참고" : "", tc1,
                 hSv.unit ? `목표 ${hSv.text} ${hSv.unit}` : "")}
               {tcCell(585, HY + px(20), "TC2", "", tc2,
                 tc2Pid && cascOn && hSv2.unit ? `목표 ${hSv2.text} ${hSv2.unit}` : "")}

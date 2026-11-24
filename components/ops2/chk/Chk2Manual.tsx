@@ -17,9 +17,8 @@ import { checkEnvOf } from "@/lib/ops2/chk/recipe";
 import { FS, Btn, Card, Chip, Empty, Issue, KV, Tile, Val, type Ask } from "./kit";
 import { StateBadge, StateTag, type StateWords } from "./StateTag";
 import { HeaterCard, IgCard } from "./Chk2Devices";
-import { fieldName } from "@/lib/ops2/chk/terms";
+import { fieldName, stepName } from "@/lib/ops2/chk/terms";
 import { paramValue } from "./logic";
-import { blockName } from "./text";
 import { kindOf } from "./runview";
 import { stateLabel, type Bundle, type StateData } from "./types";
 import type { LockFn } from "./Chk2Status";
@@ -137,7 +136,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
       return `${n} 파워를 ${v(w)} W 로 켭니다.`;
     }
     if (b.type === "power_off") return `${p.dc ? "DC" : p.rf ? "RF" : "RF Pulse"} 파워를 끕니다.`;
-    return `${blockName(bundle, b.type)}을 실행합니다.`;
+    return `${stepName(bundle, { type: b.type })} 조작을 실행합니다.`;
   };
   const ask = (b: Block, label: string, opts: { lines?: string[]; red?: boolean; note?: string } = {}) => onAsk({
     kind: "MANUAL_BLOCK", label: `수동 조작 · ${label}`, args: { block: b }, key: `MANUAL_BLOCK:${b.type}`,

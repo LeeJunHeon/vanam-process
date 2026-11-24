@@ -45,7 +45,7 @@ export default function Chk2LocalConfig({ bundle, st }: { bundle: Bundle | null;
         {!params.length ? <Issue level="warn">장비 정보를 받는 중입니다.</Issue> : (
           <>
             <div className="flex flex-wrap items-center gap-2">
-              <select value={g ?? ""} onChange={(e) => setGroup(e.target.value)} disabled={!!needle} aria-label="설정 묶음"
+              <select value={g ?? ""} onChange={(e) => setGroup(e.target.value)} disabled={!!needle} aria-label="설정 분류"
                 className={`h-9 rounded-[8px] border border-[#D9DDE3] bg-white px-2 ${FS.body} disabled:text-[#8A929D]`}>
                 {groups.map((k) => <option key={k} value={k}>{gName(k)}</option>)}
               </select>

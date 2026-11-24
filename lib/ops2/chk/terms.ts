@@ -8,6 +8,7 @@ type BundleLike = {
   plcButtons?: { target: string; addr: string; label: string }[];
   reasons?: { code: string; label: string; help?: string }[];
   eventSources?: { source: string; label: string }[];
+  blocks?: { defs?: { type: string; label: string }[] };
 } | null | undefined;
 
 /** 카드 제목·묶음 이름(묶음에 없는 이름) */
@@ -92,3 +93,26 @@ export function blockSub(b: BundleLike, name: string, detail: boolean): string |
 
 /** 모드 이름(평소 보기에 bench·SIM 같은 영문 모드 이름을 쓰지 않는다) */
 export const MODE_NAME = { run: "실제 운전", bench: "읽기 전용", sim: "모의 장비" } as const;
+
+/** 단계 이름(W-18) — 공정 순서 목록·알림·기록 줄·수동 조작 줄·건너뛰기/일시정지 확인창·상태 카드가 모두 이 함수를 쓴다.
+ *  이름표가 없으면 종류 이름, 이름표가 종류 이름을 담고 있으면 이름표만("압력 안정화 대기(60초)", "Gun 셔터 열기"),
+ *  아니면 "종류 · 이름표"("압력 설정 · Stage1(SP3)", "대기 · Shutter Delay 3s"). 괄호로 감싸지 않는다. 딜레이 행은 "딜레이 행" */
+export function stepName(b: BundleLike, x: { type?: string | null; label?: string | null }): string {
+  const type = x.type ?? "";
+  if (type === "delay") return "딜레이 행";
+  const name = b?.blocks?.defs?.find((d) => d.type === type)?.label ?? type;
+  const tag = (x.label ?? "").trim();
+  if (!tag || /^[\d.#]+$/.test(tag) || tag === name) return name;
+  if (name && tag.includes(name)) return tag;
+  return name ? `${name} · ${tag}` : tag;
+}
+
+/** 장비 문장을 대체 글로 쓸 때 옛 말 → 용어표 말(W-18) — 장비가 보내는 글은 그대로 두고 보일 때만 바꾼다 */
+export const OLD_TO_NEW: [RegExp, string][] = [
+  [/이온 게이지/g, "Ion Gauge"], [/이오나이저/g, "Ionizer"], [/필라멘트/g, "Filament"], [/디개스/g, "Degas"], [/방출/g, "Emission"],
+  [/냉각수/g, "Water"], [/도어/g, "Door"], [/(Ar|O₂|O2) 차단밸브/g, "$1 밸브"], [/차단밸브/g, "밸브"], [/메인 밸브|Main 밸브/g, "MV"],
+  [/인터록/g, "인터락"], [/건 셔터/g, "Gun 셔터"], [/Gun (\d)/g, "Gun$1"], [/순방향/g, "Forward"], [/반사파?/g, "Reflected"],
+  [/설정점/g, "SP"], [/끄기 순서/g, "정지 순서"], [/끄기 단계/g, "정지 단계"], [/감시 신호/g, "워치독"], [/스텝/g, "단계"],
+  [/블록/g, "단계"], [/램프다운/g, "천천히 내리기"], [/램프업/g, "천천히 올리기"], [/램프/g, "승온"], [/로컬/g, "노트북"],
+];
+export const toTerms = (t: string) => OLD_TO_NEW.reduce((x, [re, to]) => x.replace(re, to), t);

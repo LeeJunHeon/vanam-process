@@ -64,7 +64,7 @@ export function EventFeed({ bundle, feed, fill = false, plain = false, commands 
               </span>
               <span className={`min-w-0 ${r.level === "info" ? "text-[#1B1F24]" : LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.text}
-                {detail && <span className="ml-1.5 font-mono text-[11px] text-[#8A929D]">{r.code ?? r.raw}</span>}
+                {detail && <span className="ml-1.5 font-mono text-[11px] text-[#8A929D]">{plain ? r.raw : r.code ?? r.raw}</span>}
               </span>
             </p>
           ))}

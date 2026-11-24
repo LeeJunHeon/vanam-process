@@ -3,7 +3,7 @@
 import type { BlockDef as BDef, BParamDef } from "@/lib/ops2/chk/blocks";
 import type { ColDef } from "@/lib/ops2/chk/recipe";
 import { byWord, genericEventName, isCode, stripCodes } from "@/lib/ops2/chk/plain";
-import { SOURCE_NAME as TERM_SOURCE } from "@/lib/ops2/chk/terms";
+import { SOURCE_NAME as TERM_SOURCE, stepName, toTerms } from "@/lib/ops2/chk/terms";
 import { CMD_STATUS, RUN_RESULT, commandLabel, fmtValue, reasonLabel, stateLabel, type Bundle, type FieldDef } from "./types";
 
 type Obj = Record<string, unknown>;
@@ -150,7 +150,8 @@ export function adjustLine(b: Bundle | null, d: Obj): string {
 export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; blockType?: string | null }): LogLine {
   const line = logLine0(b, e);
   if (!o?.plain) return line;
-  // W-17 평소 보기 한 줄 = 출처(source) | 이름(kind) | 내용(text) — 빈 칸 없이, 같은 말 두 번 없이, 장비 문장(message)은 마지막 수단
+  // 평소 보기 한 줄(W-17·W-18) = 출처(source) | 이름(kind) | 내용(text) — 빈 칸 없이, 같은 말 두 번 없이.
+  // 내용은 사유 이름 > 웹이 값으로 만든 글 > (둘 다 없을 때만) 장비 문장을 다듬은 글(fromMessage). 장비 문장 원문은 상세 보기(raw)
   const d = e.data;
   const rl = (c: string) => { const x = reasonLabel(b, c); return x !== c && !isCode(x) ? x : ""; };
   const rh = (c: unknown) => (c ? b?.reasons?.find((x) => x.code === c)?.help || undefined : undefined);   // 사유 help(묶음 21)
@@ -160,6 +161,7 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     if (name && x.startsWith(`${name} `)) x = x.slice(name.length + 1);
     return x.replace(/^[:·]\s*/, "").replace(/: /g, " ").trim();
   };
+  const step = (x: Obj) => stepName(b, { type: s(x.type) || null, label: s(x.label) || null });
   if (e.type === "run_start") {
     const manual = d.manual === true;
     const title = runTitle({ name: s(d.name) || null, recipeName: s(d.recipeName) || null }) || "공정";
@@ -171,21 +173,20 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     const r = s(d.result), why = d.reasonCode ? rl(s(d.reasonCode)) : "";
     const sm = isObj(d.summary) ? d.summary : {};
     const manual = d.manual === true || sm.manual === true;
-    // 사유 이름이 종류 이름과 겹치면(수동 조작 끝 · 수동 조작 끝내기) 사유는 빼고 결과만
-    const stem = line.kind.replace(/ (끝|중단)$/, "");
-    const why2 = why && !why.startsWith(stem) ? why : "";
-    return { ...line, source: manual ? "수동 조작" : "공정", text: dedupe(line.kind, `${RUN_RESULT[r] ?? r}${why2 ? ` · ${why2}` : ""}`),
+    // 사유를 빼는 것은 사유가 종류 이름과 같은 일을 말할 때뿐(수동 조작 끝 · 수동 조작 끝내기). 정상이 아니면 사유 이름이 늘 보인다
+    const why2 = why && (r !== "done" || !why.startsWith(line.kind)) ? why : "";
+    return { ...line, source: manual ? "수동 조작" : "공정", text: `${RUN_RESULT[r] ?? r}${why2 ? ` · ${why2}` : ""}`,
              code: d.reasonCode ? s(d.reasonCode) : undefined, desc: rh(d.reasonCode) ?? line.desc };
   }
   if (e.type === "cmd_result") {
     // 묶음 19 이하의 수동 조작 이름("수동 조작: 블록 하나 실행")은 앞말만 — 묶음 20 은 "수동 조작"
     const lab = d.kind === "MANUAL_BLOCK" ? commandLabel(b, s(d.kind)).split(":")[0] : commandLabel(b, s(d.kind));
     const what = isCode(lab) ? "명령" : lab;
-    const bt = o.blockType ? blockName(b, o.blockType) : "";
+    const bt = o.blockType ? stepName(b, { type: o.blockType }) : "";
     const why = d.reasonCode ? rl(s(d.reasonCode)) : "";
     const src = s(d.source);
     return { ...line, source: src === "local" || src === "hmi" ? "노트북" : src === "web" ? "웹" : "장비",
-             text: `${what}${bt && !isCode(bt) ? `(${bt})` : ""} ${CMD_STATUS[s(d.status)] ?? "결과"}${why ? ` · ${why}` : ""}`,
+             text: `${what}${bt && !isCode(bt) ? ` · ${bt}` : ""} ${CMD_STATUS[s(d.status)] ?? "결과"}${why ? ` · ${why}` : ""}`,
              code: `${s(d.kind)}${d.reasonCode ? ` ${s(d.reasonCode)}` : ""}`, desc: rh(d.reasonCode) ?? line.desc };
   }
   if (e.type === "config_ack") {
@@ -196,32 +197,72 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
   // event
   const c = isObj(d.context) ? d.context : {};
   const cd = isObj(c.data) ? c.data : {};
-  const source = s(c.source), kind = s(c.kind), code = s(d.code), level = s(d.level) || "info";
+  const source = s(c.source), kind = s(c.kind), code = s(d.code), level = s(d.level) || "info", msg = s(d.message);
   const named = !!b?.eventKinds?.some((x) => x.source === source && x.kind === kind);
-  // 이름이 없는 사건(옛 묶음·옛 기록)은 출처 칸이 장비를 말하므로 이름은 '기록'(한 줄에 같은 말 두 번 없이)
+  // 이름이 없는 사건(옛 묶음·옛 기록)은 출처 칸이 장비를 말하므로 이름은 '기록'
   let name = named && !isCode(line.kind) ? line.kind : rl(code) || "기록";
-  if (source === "safety" && kind === "fired") name = level === "error" || level === "critical" ? "알람" : level === "warn" ? "경고" : "안내";
+  if (source === "safety" && kind === "fired") {
+    name = code === "ALL_STOP" ? "ALL STOP" : level === "error" || level === "critical" ? "알람" : level === "warn" ? "경고" : "안내";
+  }
   if (source === "safety" && kind === "released") name = "해제";
-  // 내용 — 사유 이름 > 웹이 값으로 만든 글 > (둘 다 없을 때만) 장비 문장에서 코드·주소를 뺀 글
-  const webMade = code === "PROCESS_ADJUST" || (source === "process" && (
-    (kind === "state" && cd.from !== undefined) || (kind === "block" && !!cd.type) || kind === "manual"
-    || ["skip", "pause", "resume", "edit", "pause_long"].includes(kind)));
-  const steps = [...s(d.message).matchAll(/(\d+):([a-z_]+)/g)].map((m) => m[2]);
+  const who = (x: Obj) => {
+    const src = x.source === "local" || x.source === "hmi" ? "노트북" : x.source === "web" ? "웹" : s(x.source);
+    const by = byWord(x.by);
+    return [src, by && by !== src ? by : ""].filter(Boolean).join(" · ");
+  };
+  const RES: Record<string, string> = { ok: "정상", done: "정상", aborted: "중단", error: "오류", failed: "실패", skipped: "건너뜀" };
   let text = "", fromMessage = false;
-  if (source === "safety" && kind === "seq_done" && steps.length) {
-    // 정지 순서 끝 — 장비 글 "1:ok, 2:not_needed, …" 은 단계 수로
+  const steps = [...msg.matchAll(/(\d+):([a-z_]+)/g)].map((m) => m[2]);
+  if (source === "uplink") {
+    text = "";                                         // 주소·오류 이름이 든 장비 문장은 상세 보기에서만
+  } else if (source === "safety" && kind === "seq_done" && steps.length) {
     const n = (k: string) => steps.filter((x) => x === k).length;
     const other = steps.length - n("ok") - n("not_needed");
     text = `${steps.length}단계 · 실행 ${n("ok")}${n("not_needed") ? ` · 필요 없음 ${n("not_needed")}` : ""}${other ? ` · 그 밖 ${other}` : ""}`;
-  } else if (webMade) {
-    text = stripCodes(line.text).replace(/노트북 · 노트북/g, "노트북");
+  } else if (source === "safety" && kind === "seq_start") {
+    text = /^(\d+)단계$/.test(msg.trim()) ? msg.trim() : "";
+  } else if (source === "ig" && kind === "filament_result") {
+    // 장비 문장 앞의 on:·off: 로 결과를 읽는다 — 성공이면 켜짐·꺼짐, 실패면 사유 이름
+    const ok = level === "info";
+    text = ok ? (/^on:/.test(msg) ? "켜짐" : /^off:/.test(msg) ? "꺼짐" : "") : rl(code) || rl(s(cd.reason)) || "실패";
+  } else if (source === "heater" && kind === "recipe_step") {
+    // 히터 레시피 단계 — 값으로 만든다(장비 문장의 단계 방식 이름 COOL·SOAK 등은 쓰지 않는다)
+    const PH: Record<string, string> = { RAMP: "승온", COOL: "냉각", SOAK: "유지", HOLD: "유지", WAIT: "대기" };
+    const temp = msg.match(/(\d+(?:\.\d+)?)\s*°C/)?.[1];
+    text = [`${s(cd.step)}/${s(cd.total)}`, temp ? `${temp}°C` : "", PH[s(cd.phase)] ?? ""].filter(Boolean).join(" · ");
+  } else if (source === "heater" && kind === "recipe_finished") {
+    text = [s(cd.name), cd.ok === true ? "정상" : cd.ok === false ? "실패" : ""].filter(Boolean).join(" · ");
+  } else if (code === "PROCESS_ADJUST") {
+    text = adjustLine(b, cd).replace(/^공정 중 수정 · /, "");
+  } else if (source === "process" && kind === "state" && cd.from !== undefined) {
+    text = `${stateLabel(b, s(cd.from))} → ${stateLabel(b, s(cd.to))}`;
+  } else if (source === "process" && kind === "block" && cd.type) {
+    if (cd.phase === "end") {
+      const el = num(cd.elapsed_s);
+      const why = cd.reason ? rl(s(cd.reason)) : "";
+      text = `${s(cd.index ?? cd.no)} ${step(cd)} 끝 ${RES[s(cd.result)] ?? s(cd.result)}${el !== null ? ` · ${fmtDur(el)}` : ""}${why ? ` · ${why}` : ""}`;
+    } else text = `${s(cd.index ?? cd.no)}/${s(cd.total)} ${step(cd)} 시작`;
+  } else if (source === "process" && kind === "manual") {
+    text = code === "MANUAL_END" ? `끝내기 · ${who(cd)}` : `${s(cd.no)} ${step(cd)} ${({ done: "끝남", skipped: "건너뜀", aborted: "중단" } as Record<string, string>)[s(cd.result)] ?? s(cd.result)} · ${who(cd)}`;
+  } else if (source === "process" && ["skip", "pause", "resume", "edit", "pause_long"].includes(kind)) {
+    const bn = cd.type === "delay" ? "딜레이 행" : cd.type ? step(cd) : "";
+    const by = cd.by || cd.source ? ` · ${who(cd)}` : "";
+    const ps = num(cd.pausedSec), rs = num(cd.remainS);
+    text = kind === "skip" ? `${s(cd.no)} ${bn}${by}`
+      : kind === "pause" ? `${s(cd.no)} ${bn}${rs !== null ? ` · 남은 ${fmtDur(rs)}` : ""}${by}`
+      : kind === "resume" ? `${s(cd.no)} ${bn}${ps !== null ? ` · 멈춘 시간 ${fmtDur(ps)}` : ""}${by}`
+      : kind === "edit" ? `${s(cd.summary) || "순서 고침"}${by}`
+      : `${ps !== null ? fmtDur(ps) : ""} 째 · 한도 ${num(cd.maxSec) !== null ? fmtDur(num(cd.maxSec) as number) : "-"}`;
   } else if (rl(code) && rl(code) !== name) {
     text = rl(code);
   } else if (!rl(code)) {
-    text = stripCodes(s(d.message).replace(/\s+/g, " ").replace(/\s+—\s+/g, ". ")).replace(/\b[MPD]0?\d{4,5}\b|\bD\d{2,3}\b/g, "").replace(/\(\s*\)/g, "").trim();
+    text = cleanMessage(msg);
     fromMessage = !!text;
   }
-  return { ...line, kind: name, text: dedupe(name, text), fromMessage, desc: (rl(code) ? rh(code) : undefined) ?? line.desc,
+  text = dedupe(name, text);
+  // 내용이 빈 안전 '안내' 줄(프로그램을 닫을 때 S41 등)은 평소 보기에 내지 않는다(상세 보기에는 그대로)
+  const hide = source === "safety" && level === "info" && !text;
+  return { ...line, kind: name, text, fromMessage, main: line.main && !hide, desc: (rl(code) ? rh(code) : undefined) ?? line.desc,
            source: sourceName(source) || genericEventName(source, code).replace(/ 기록$/, "") || "장비" };
 
   function sourceName(src: string): string {
@@ -229,6 +270,14 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     const l = sourceLabel(b, src);
     return l && l !== src && l !== "안전 규칙" && !/이온 게이지/.test(l) ? l : TERM_SOURCE[src] ?? l;
   }
+}
+
+/** 장비 문장을 대체 글로 쓸 때(W-18) — 코드·주소·한글 없는 괄호 덩어리(주소·오류 이름)·날것 낱말을 빼고 옛 말은 용어표 말로 */
+function cleanMessage(m: string): string {
+  return toTerms(stripCodes(m.replace(/\s+/g, " ").replace(/\s+—\s+/g, ". ")))
+    .replace(/\([^()가-힣]*\)/g, "").replace(/\b[MPD]0?\d{4,5}\b|\bD\d{2,3}\b/g, "")
+    .replace(/\b(on|off):\s*/g, "").replace(/\b(error|done|aborted|ok|sent|not_needed)\b/g, "")
+    .replace(/\s{2,}/g, " ").replace(/\s+([.,])/g, "$1").replace(/^[.,·\s]+|[.,·\s]+$/g, "").trim();
 }
 
 function logLine0(b: Bundle | null, e: FeedLike): LogLine {
