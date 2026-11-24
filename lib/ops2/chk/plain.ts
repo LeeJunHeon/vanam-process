@@ -6,7 +6,7 @@ import { SOURCE_NAME } from "./terms";
 /** 요청자·시작한 사람 — 노트북 경로(by "local")는 "노트북" */
 export function byWord(by: unknown): string {
   const s = typeof by === "string" ? by.trim() : "";
-  return s === "local" ? "노트북" : s;
+  return s === "local" ? "노트북" : s === "web" ? "웹" : s;        // 이름 없이 보낸 경로 값(local·web)은 한글로
 }
 
 /** 코드 모양(대문자·밑줄 — UPLINK_AUTH_FAILED, MANUAL_END …) */
