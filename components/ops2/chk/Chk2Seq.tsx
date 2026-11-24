@@ -33,6 +33,9 @@ function cleanKey(xs: unknown[], env: BlockEnv): string {
 /** 장비 묶음이 기준 목록(editBase)을 주는 판 */
 const EDIT_BASE_VERSION = 14;
 
+/** 장비 블록 정의의 건너뛰기·일시정지 글 — 운전 화면에서는 '단계'(W-17) */
+const step = (t?: string | null) => (t ?? "").replace(/블록/g, "단계");
+
 /** 블록 하나 이름(이름표가 있으면 같이) */
 const nameOf = (b: Bundle | null, x: { type: string; label?: string }) =>
   x.type === "delay" ? "딜레이 행" : `${blockName(b, x.type)}${x.label && x.label !== blockName(b, x.type) && !/^[\d.#]+$/.test(x.label) ? ` · ${x.label}` : ""}`;
@@ -77,18 +80,18 @@ function SeqItem({ b, bundle, st, current, lock, onAsk, revision, pauseMax }: {
               ) : b.pause ? (
                 <Btn size="sm" lock={lock("PROCESS_PAUSE")}
                   onClick={() => onAsk({ kind: "PROCESS_PAUSE", label: "단계 일시정지", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
-                    args: { no: b.no, revision }, lines: [`${name}: ${b.pauseText ?? ""}`],
+                    args: { no: b.no, revision }, lines: [`${name}: ${step(b.pauseText)}`],
                     note: pauseMax > 0 ? `한도 ${fmtDur(pauseMax)}를 넘으면 정지 순서로 갑니다(5분 전 경고).` : "한도 없음(설정의 일시정지 한도가 0)." })}>
                   <PauseCircle size={13} /> 일시정지
                 </Btn>
-              ) : <span className={`${FS.small} text-[#5B6470]`}>일시정지할 수 없음: {b.pauseText || "이 단계는 멈출 수 없음"}</span>}
+              ) : <span className={`${FS.small} text-[#5B6470]`}>일시정지할 수 없음: {step(b.pauseText) || "이 단계는 멈출 수 없음"}</span>}
               {b.skip ? (
                 <Btn size="sm" lock={lock("PROCESS_SKIP")}
                   onClick={() => onAsk({ kind: "PROCESS_SKIP", label: "단계 건너뛰기", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
-                    args: { no: b.no, revision }, lines: [`${name}: ${b.skipText ?? ""}`], red: true })}>
+                    args: { no: b.no, revision }, lines: [`${name}: ${step(b.skipText)}`], red: true })}>
                   <SkipForward size={13} /> 건너뛰기
                 </Btn>
-              ) : !paused && <span className={`${FS.small} text-[#5B6470]`}>건너뛸 수 없음: {b.skipText || "이 단계는 건너뛸 수 없음"}</span>}
+              ) : !paused && <span className={`${FS.small} text-[#5B6470]`}>건너뛸 수 없음: {step(b.skipText) || "이 단계는 건너뛸 수 없음"}</span>}
             </div>
           )}
         </div>
