@@ -14,7 +14,7 @@ import { reasonLabel } from "../chk/types";
 import { fmtKst } from "@/lib/ops2/time";
 import { KINDS, blockLabel, chamberState, clockOrDash, engineOf, isRunning, pickKind, stateInfo } from "./logic";
 import { asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types";
-import { ownerName, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
+import { MODE_NAME, fieldName, fieldTipOf, ownerName, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
 
 export type LockFn = (kind: string, key?: string) => string | null;
 export type ConnInfo = { label: string; tone: Tone };
@@ -24,23 +24,24 @@ const idleName = (p: string | null | undefined) => !p || /^idle$/i.test(p);
 
 /** 부저 정지·ALL STOP(정지 쪽 — 결과를 기다리는 중에도 막지 않음) */
 export function StopButtons12({ bundle, lock, onAsk, small }: { bundle: Ch12Bundle | null; lock: LockFn; onAsk: (a: Ask) => void; small?: boolean }) {
+  const all = (["ch1", "ch2", "pc", "tsp"] as const).map((c) => placeName(bundle, c)).join("·");
   const size = small ? "sm" : "lg";
   const kBuzz = pickKind(bundle, KINDS.buzz), kAll = pickKind(bundle, KINDS.allStop);
   return (
     <div className="flex shrink-0 flex-nowrap gap-2">
-      <Btn size={size} lock={lock(kBuzz)} onClick={() => onAsk({ kind: kBuzz, label: "부저 정지", stop: true, note: "울리는 부저를 끕니다." })}>
+      <Btn size={size} lock={lock(kBuzz)} title="울리는 부저를 끕니다." onClick={() => onAsk({ kind: kBuzz, label: "부저 정지", stop: true, note: "울리는 부저를 끕니다." })}>
         <BellOff size={14} /> 부저 정지
       </Btn>
-      <Btn size={size} kind="dangerSolid" lock={lock(kAll)}
+      <Btn size={size} kind="dangerSolid" lock={lock(kAll)} title="모든 챔버를 멈추고 출력을 끕니다."
         onClick={() => onAsk({ kind: kAll, label: "ALL STOP", stop: true,
-          note: "CH1·CH2·플라즈마 클리닝·TSP 를 모두 멈추고 출력을 끕니다(공정 여부와 무관 — 정지 순서 고정)." })}>
+          note: `${all} 을(를) 모두 멈추고 출력을 끕니다. 공정 중이 아니어도 정지 순서대로 합니다.` })}>
         <OctagonX size={14} /> ALL STOP
       </Btn>
     </div>
   );
 }
 
-/** 챔버 하나의 짧은 상태 글 — '대기' / '공정 진행 · 블록 2/5 · 남은 1:20' */
+/** 챔버 하나의 짧은 상태 글 — '대기' / '공정 중 · 단계 2/5 · 남은 1:20' */
 export function chamberLine(bundle: Ch12Bundle | null, st: Ch12State | null, ch: ChamberId): string {
   const cs = chamberState(st, ch);
   if (!cs) return "상태 없음";
@@ -48,7 +49,7 @@ export function chamberLine(bundle: Ch12Bundle | null, st: Ch12State | null, ch:
   const info = stateInfo(bundle, cs.procState, ch);
   const step = cs.step;
   const rem = cs.remainS ?? step?.remainS;
-  return [info.label, step?.no ? `블록 ${step.no}/${step.total ?? "-"}` : "", typeof rem === "number" ? `남은 ${clockOrDash(rem)}` : ""]
+  return [info.label, step?.no ? `단계 ${step.no}/${step.total ?? "-"}` : "", typeof rem === "number" ? `남은 ${clockOrDash(rem)}` : ""]
     .filter(Boolean).join(" · ");
 }
 
@@ -82,7 +83,7 @@ function ChamberCell({ bundle, st, ch, connected, nowMs }: {
       </p>
       {running && step ? (
         <p className={`truncate ${FS.body} text-[#1B1F24]`}>
-          <span className="tabular-nums text-[#5B6470]">블록 {step.no ?? "-"}/{step.total ?? "-"}</span>{" "}
+          <span className="tabular-nums text-[#5B6470]">단계 {step.no ?? "-"}/{step.total ?? "-"}</span>{" "}
           <b>{blockLabel(bundle, step.type)}</b>
         </p>
       ) : (
@@ -90,7 +91,7 @@ function ChamberCell({ bundle, st, ch, connected, nowMs }: {
       )}
       <p className={`mt-0.5 flex flex-wrap gap-x-3 ${FS.body} text-[#5B6470]`}>
         <span>남은 <b className="tabular-nums text-[#133A7C]">{clockOrDash(cs?.remainS ?? step?.remainS)}</b></span>
-        <span title="공정 끝까지 — 장비가 확정하기 전에는 '—'">ETA <b className="tabular-nums text-[#133A7C]">{clockOrDash(eta)}</b>
+        <span title={fieldTipOf(bundle, `${ch}.proc.eta_remaining_s`, detail) ?? "공정이 끝날 때까지 남은 예상 시간입니다."}>공정 끝까지 <b className="tabular-nums text-[#133A7C]">{clockOrDash(eta)}</b>
           <span className={`ml-1 ${FS.small}`}>{etaAt ? `끝 예정 ${etaAt}` : running ? "확정 전" : ""}</span></span>
       </p>
       {prog !== null && (
@@ -121,7 +122,9 @@ export function StatusBand12({ bundle, st, connected, conn, links, mode, equipme
   const { detail } = useChk2Mode();
   const snap = st?.snapshot;
   const plc = (k: string) => (plcOk ? snap?.[`plc.${k}`] === true : null);
-  const ll = plc("l_vac_ready_sw") ? "진공 준비" : plc("l_atm") || plc("l_atm_sensor") ? "대기압" : plc("l_vac_not_ready") ? "진공 준비 안 됨" : plcOk ? "—" : "PLC 값 없음";
+  const llName = (c: string) => fieldName(bundle, `plc.${c}`, placeName(bundle, "loadlock"));          // 'Loadlock 진공 준비' → '진공 준비'
+  const ll = plc("l_vac_ready_sw") ? llName("l_vac_ready_sw") : plc("l_atm") || plc("l_atm_sensor") ? llName("l_atm")
+    : plc("l_vac_not_ready") ? llName("l_vac_not_ready") : plcOk ? "—" : "PLC 값 없음";
   const glob = (st?.alarms ?? []).filter((a) => !a.chamber || !["ch1", "ch2"].includes(a.chamber));
   const left = st?.left ?? {};
   const pcLine = chamberLine(bundle, st, "pc"), tspLine = chamberLine(bundle, st, "tsp");
@@ -132,9 +135,9 @@ export function StatusBand12({ bundle, st, connected, conn, links, mode, equipme
         {label && <span className={`font-mono ${FS.small} text-[#5B6470]`}>{equipment}</span>}
         <Chip tone={conn.tone}>{conn.label}</Chip>
         {links.map((l) => <Chip key={l.label} tone={l.tone}>{l.label}</Chip>)}
-        {mode === "bench" && <Chip tone="dark" icon={<Lock size={11} />}>읽기 전용(bench)</Chip>}
-        {mode === "sim" && <Chip tone="info">SIM — 모의 장비</Chip>}
-        {mode === "run" && <Chip>실제 운전</Chip>}
+        {mode === "bench" && <Chip tone="dark" icon={<Lock size={11} />}>{MODE_NAME.bench}</Chip>}
+        {mode === "sim" && <Chip tone="info">{MODE_NAME.sim}</Chip>}
+        {mode === "run" && <Chip>{MODE_NAME.run}</Chip>}
         {extra && <span className="ml-auto flex items-center gap-2">{extra}</span>}
       </div>
       <div className="mt-2 flex flex-wrap items-start gap-3">
@@ -156,9 +159,9 @@ export function StatusBand12({ bundle, st, connected, conn, links, mode, equipme
       </div>
       {(st?.stopping || Object.keys(left).length > 0) && (
         <div className="mt-2 space-y-1.5">
-          {st?.stopping && <Issue level="warn">정지 순서 실행 중{detail ? ` — ${String(st.stopping)}` : ""}</Issue>}
+          {st?.stopping && <Issue level="warn">정지 순서 실행 중{detail ? ` · ${String(st.stopping)}` : ""}</Issue>}
           {Object.keys(left).length > 0 && (
-            <Issue level="warn"><b>지난 공정이 남긴 출력</b> — {Object.keys(left).length}개 켜져 있음 — 챔버 STOP 또는 ALL STOP 으로 정리</Issue>
+            <Issue level="warn"><b>지난 공정이 남긴 출력</b> {Object.keys(left).length}개가 켜져 있습니다. 챔버 STOP 또는 ALL STOP 으로 정리하세요.</Issue>
           )}
         </div>
       )}

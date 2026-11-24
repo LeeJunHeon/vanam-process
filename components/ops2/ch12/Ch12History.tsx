@@ -18,7 +18,7 @@ import { fmtKst } from "@/lib/ops2/time";
 import { blockSummary } from "./Ch12BlockEditor";
 import { blockDefOf, blockLabel, clockOrDash } from "./logic";
 import { asChk, type Ch12Bundle } from "./types";
-import { blockName, fieldName, fieldTip, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
+import { CARD, blockName, fieldName, fieldTip, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
 
 type RunItem = {
   runId: string; name: string | null; recipeName: string | null; startedBy: string | null; stepNo: number | null;
@@ -120,7 +120,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
       </section>
       <div className="grid gap-3 xl:grid-cols-2">
         <section>
-          <h4 className="mb-1 text-[12px] font-bold text-[#1B1F24]">블록 기록({blocks.length})</h4>
+          <h4 className="mb-1 text-[12px] font-bold text-[#1B1F24]">단계 기록({blocks.length})</h4>
           <ol className="max-h-96 space-y-0.5 overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2 text-[12px]">
             {blocks.map((b, i) => (
               <li key={i} className="flex gap-1.5">
@@ -130,7 +130,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
                 <span className="truncate text-[#5B6470]">{blockSummary(blockDefOf(bundle, String(b.type)), isObj(b.params) ? b.params : {})}</span>
               </li>
             ))}
-            {!blocks.length && <li className="text-[#8A929D]">블록 기록 없음</li>}
+            {!blocks.length && <li className="text-[#8A929D]">단계 기록 없음</li>}
           </ol>
         </section>
         <section>
@@ -182,7 +182,7 @@ export default memo(function Ch12History({ equipment, bundle, refreshKey }: { eq
 
   const shown = (list ?? []).filter((r) => !chamber || !r.chamber || r.chamber === chamber);
   return (
-    <Card title={<><History size={15} /> 공정 기록(챔버별)</>}>
+    <Card title={<><History size={15} /> {CARD.history}</>}>
       {open ? <RunDetail equipment={equipment} runId={open} bundle={bundle} onBack={() => setOpen(null)} /> : (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#5B6470]">

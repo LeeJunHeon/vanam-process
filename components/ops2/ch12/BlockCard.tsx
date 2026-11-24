@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight } from "lucide-react";
 import { BigValue, Card, FieldValue, QBadge } from "../chk/kit";
 import type { BlockDef, Link } from "../chk/types";
 import { useChk2Mode } from "../chk/mode";
-import { fieldTip } from "@/lib/ops2/ch12/terms";
+import { dropPrefix, fieldTip, toTerms12 } from "@/lib/ops2/ch12/terms";
 
 type Common = { def?: BlockDef; snap?: Record<string, unknown>; link?: Link };
 
@@ -14,15 +14,18 @@ type Common = { def?: BlockDef; snap?: Record<string, unknown>; link?: Link };
 /** 라벨 끝의 PLC 레지스터·코일 주소 '(D119)'·'(D148/D149)'·'(D128×6)'·'(M00401)' — 개발용, '상세'에서만 */
 export const plainLabel = (label: string) => label.replace(/\s*\((?:[DM]\d+)[^)]*\)/g, "").trim() || label;
 
-export function BlockCard({ def: def0, snap, link, big = [], foldable, hide = [], children, startOpen = true }: Common & {
+export function BlockCard({ def: def0, snap, link, big = [], foldable, hide = [], children, startOpen = true, strip }: Common & {
   big?: string[]; foldable?: boolean; hide?: string[]; children?: ReactNode; startOpen?: boolean;   // startOpen=false — 처음 접어 둠
+  strip?: string | null;          // 둘레 칸 제목(CH1·Plasma Cleaning·Loadlock) — 블록·필드 이름에서 같은 앞말을 뺀다(W-19)
 }) {
   const [manual, setManual] = useState<boolean | null>(null);   // 누르기 전에는 품질대로(off 면 접음)
   const { detail } = useChk2Mode();
   if (!def0) return null;
   // 마우스 설명(W-19 ③): kit FieldValue 는 title 을 desc(+상세 보기면 열 이름)로 그린다 — 평소 보기는 help 를 desc 자리에 넣어 넘긴다
   //   (챔버12 desc 에는 레지스터·코일 이름이 있어 상세 보기에서만)
-  const def = detail ? def0 : { ...def0, fields: def0.fields.map((f) => ({ ...f, label: plainLabel(f.label), desc: fieldTip(f, false) ?? "" })) };
+  const def = detail ? { ...def0, label: dropPrefix(def0.label, strip) }
+    : { ...def0, label: dropPrefix(toTerms12(def0.label), strip),
+        fields: def0.fields.map((f) => ({ ...f, label: dropPrefix(toTerms12(plainLabel(f.label)), strip), desc: fieldTip(f, false) ?? "" })) };
   const off = link?.q === "off";
   const open = manual ?? (startOpen && (!foldable || !off));
   const dimOf = (column: string, own?: boolean) =>
@@ -44,7 +47,7 @@ export function BlockCard({ def: def0, snap, link, big = [], foldable, hide = []
           </button>
         ) : title
       }
-      right={<span className="flex items-center gap-1.5">{foldable && !open && off && <span className="text-[12px] text-[#8A929D]">꺼져 있음 — 접어 둠</span>}<QBadge link={link} /></span>}
+      right={<span className="flex items-center gap-1.5">{foldable && !open && off && <span className="text-[12px] text-[#8A929D]">꺼져 있어 접어 둠</span>}<QBadge link={link} /></span>}
     >
       {open && (
         <>

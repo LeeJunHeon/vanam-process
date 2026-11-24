@@ -142,7 +142,7 @@ export function Ch12EventFeed({ bundle, feed, height = "h-[28rem]" }: { bundle: 
     }>
       <div className="mb-2"><Tabs small tabs={filters(bundle)} value={f} onChange={setF} /></div>
       {!shown.length ? (
-        <p className={`py-6 text-center ${FS.body} text-[#8A929D]`}>{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다 — 장비가 연결되면 쌓입니다"}</p>
+        <p className={`py-6 text-center ${FS.body} text-[#8A929D]`}>{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다. 장비가 연결되면 쌓입니다"}</p>
       ) : (
         <div ref={box} onScroll={() => { const el = box.current; if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
           className={`${height} space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 [overflow-anchor:none]`}>
@@ -193,7 +193,7 @@ export function ChamberLog({ bundle, feed, ch, alarms, onLog, max = 12 }: {
             </li>
           ))}
         </ul>
-      ) : <Empty>최근 사건이 없습니다</Empty>}
+      ) : <Empty>최근 기록이 없습니다</Empty>}
     </Card>
   );
 }

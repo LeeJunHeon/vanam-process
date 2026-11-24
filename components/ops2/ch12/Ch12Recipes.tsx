@@ -21,6 +21,7 @@ import { PC_FIELDS, checkPcRow, pcRanges, pcRowLine } from "@/lib/ops2/ch12/pc";
 import { NumField } from "./Ch12Inputs";
 import { KINDS, cfgOf, chArgs, defsOf, envFor, hasKind, pickKind } from "./logic";
 import type { Ch12Bundle } from "./types";
+import { PLACE } from "@/lib/ops2/ch12/terms";
 
 type Kind = "ch1" | "ch2" | "pc";
 
@@ -31,7 +32,7 @@ const Btn = ({ onClick, disabled, title, tone, small, children }: {
   <KBtn onClick={onClick} disabled={disabled} title={title} size={small ? "sm" : "md"}
     kind={tone === "blue" ? "primary" : tone === "rose" ? "danger" : tone === "roseSolid" ? "dangerSolid" : "neutral"}>{children}</KBtn>
 );
-const KIND_LABEL: Record<Kind, string> = { ch1: "CH1", ch2: "CH2", pc: "플라즈마 클리닝" };
+const KIND_LABEL: Record<Kind, string> = { ch1: PLACE.ch1, ch2: PLACE.ch2, pc: PLACE.pc };
 type Draft = { id: string | null; kind: Kind; name: string; rows: Row[]; updatedAt: string | null; base: string };
 const snapOf = (d: Pick<Draft, "name" | "rows" | "kind">) => JSON.stringify([d.kind, d.name.trim(), d.rows]);
 export const isBlockRow = (r: Row) => Array.isArray(r.blocks);
@@ -44,7 +45,7 @@ const isKind = (k: unknown): k is Kind => k === "ch1" || k === "ch2" || k === "p
 export function loadPayload(rows: Row[], name: string): { args: Record<string, unknown>; why: string } {
   const blk = rows.filter(isBlockRow);
   if (!blk.length) return { args: { name, rows }, why: "" };
-  if (blk.length !== rows.length) return { args: {}, why: "v1 행과 블록 행을 함께 적재할 수 없음 — 한 종류만 남기세요" };
+  if (blk.length !== rows.length) return { args: {}, why: "v1 행과 블록 행을 함께 적재할 수 없습니다. 한 종류만 남기세요" };
   const blocks = blk.flatMap((r, k) => (r.blocks as Blk[]).map((x) => (blk.length > 1 ? { ...x, row: k + 1 } : x)));
   return { args: { name, blocks }, why: "" };
 }
@@ -121,7 +122,7 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
   const guard = (go: () => void) => (dirty ? setAskLeave(() => go) : go());
   const open = useCallback(async (id: string) => {
     const r = await recipes.get(id);
-    if (!r.ok) return notify({ tone: "bad", title: "레시피를 열지 못함", text: RECIPE_ERROR[r.error] ?? r.error });
+    if (!r.ok) return notify({ tone: "bad", title: "레시피를 열 수 없었음", text: RECIPE_ERROR[r.error] ?? r.error });
     const f: RecipeFull = r.data.recipe;
     const nd = { id: f.id, kind: isKind(f.kind) ? f.kind : "ch1" as Kind, name: f.name, rows: f.rows.map((x) => ({ ...x })), updatedAt: f.updatedAt };
     setD({ ...nd, base: snapOf(nd) });
@@ -138,7 +139,7 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
     if (!d) return;
     // 챔버12 레시피 kind 는 챔버(ch1·ch2 — 웹 서버 lib/ops2/ch12/ids CH12_RECIPE_KINDS). 챔버K 타입에 없어 바꿔 넘긴다
     const r = await recipes.save({ kind: d.kind as unknown as RecipeKind, name: d.name.trim(), rows: d.rows, gas: null }, d.id, d.updatedAt);
-    if (!r.ok) return notify({ tone: "bad", title: "저장 못 함", text: `${RECIPE_ERROR[r.error] ?? r.error}${r.detail ? ` · ${r.detail}` : ""}` });
+    if (!r.ok) return notify({ tone: "bad", title: "저장할 수 없었음", text: `${RECIPE_ERROR[r.error] ?? r.error}${r.detail ? ` · ${r.detail}` : ""}` });
     const f = r.data.recipe;
     const nd = { id: f.id, kind: isKind(f.kind) ? f.kind : d.kind, name: f.name, rows: f.rows.map((x) => ({ ...x })), updatedAt: f.updatedAt };
     setD({ ...nd, base: snapOf(nd) });
@@ -177,7 +178,7 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
     : !d.name.trim() ? "이름 없음" : all.why;
   const send = (args: Record<string, unknown>, what: string, lines: string[]) => onAsk({
     kind: kLoad, label: `CH${ch} 레시피 적재`, detail: what, key: `${kLoad}@ch${ch}`, args: chArgs(bundle, kLoad, ch === 1 ? "ch1" : "ch2", args),
-    lines: [...lines, `CH${ch} 에 적재 — 시작은 운전 탭 CH${ch} 칸의 '공정 시작'`],
+    lines: [...lines, `CH${ch} 에 적재합니다. 시작은 운전 탭 CH${ch} 칸의 '공정 시작'으로 합니다.`],
   });
   const load = () => d && send(all.args, `'${d.name}'`, [`레시피 '${d.name}' · ${content.length}행(블록 행 ${content.filter(isBlockRow).length})`]);
   const loadRow = (i: number) => {
@@ -190,15 +191,15 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
   const list = (recipes.list ?? []).filter((r) => isKind(r.kind));
   return (
     <Card title={<><BookOpen size={15} /> 레시피</>}
-      right={<span className={`flex items-center gap-2 ${FS.small} text-[#5B6470]`} title="챔버마다 장비 지원·가스 라인이 달라 레시피는 챔버별(저장한 뒤에는 바꿀 수 없음). 플라즈마 클리닝은 v1 PC CSV 첫 행과 같은 열">
+      right={<span className={`flex items-center gap-2 ${FS.small} text-[#5B6470]`} title={`챔버마다 장비 지원·가스 라인이 달라 레시피는 챔버별(저장한 뒤에는 바꿀 수 없음). ${PLACE.pc}은 v1 PC CSV 첫 행과 같은 열`}>
         종류
         <select value={chamber} disabled={!!d?.id} aria-label="레시피 종류"
           onChange={(e) => { const k = e.target.value as Kind; if (d && !d.id && (k === "pc") !== (d.kind === "pc")) return; if (d) setD({ ...d, kind: k }); else setNewKind(k); }}
           className={`h-8 rounded-[8px] border border-[#D9DDE3] bg-white px-1.5 ${FS.small} disabled:bg-[#F5F6F8]`}>
-          <option value="ch1">CH1</option><option value="ch2">CH2</option><option value="pc">플라즈마 클리닝</option>
+          <option value="ch1">CH1</option><option value="ch2">CH2</option><option value="pc">{PLACE.pc}</option>
         </select>
       </span>}>
-      {outdated && <p className="mb-2 rounded-lg bg-[#FFFAEB] p-2 text-[12px] text-[#B54708]">장비 블록 정의 판({bundle?.blocks?.version ?? "-"})이 웹 검사 판({WEB_BLOCKS_VERSION})과 다릅니다 — 웹 검사 없이 장비가 검사합니다.</p>}
+      {outdated && <p className="mb-2 rounded-lg bg-[#FFFAEB] p-2 text-[12px] text-[#B54708]">장비 블록 정의 판({bundle?.blocks?.version ?? "-"})이 웹 검사 판({WEB_BLOCKS_VERSION})과 다릅니다. 웹 검사 없이 장비가 검사합니다.</p>}
       {recipes.error && <p className="mb-2 text-[12px] text-[#B42318]">{recipes.error}</p>}
       {!d ? (
         <div className="space-y-2">
@@ -239,9 +240,9 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
             <input value={d.name} onChange={(e) => setD({ ...d, name: e.target.value })} placeholder="레시피 이름"
               readOnly={!recipes.canEdit} className="w-56 rounded-lg border border-[#D9DDE3] px-2 py-1 text-[12px] font-semibold" />
             <span className={`rounded px-1.5 py-0.5 text-[12px] font-semibold ${nErr ? "bg-[#FEE4E2] text-[#B42318]" : nWarn ? "bg-[#FFFAEB] text-[#B54708]" : "bg-[#EEF0F3] text-[#3A424D]"}`}>
-              {!env && !isPc ? "웹 검사 안 함" : nErr ? `오류 ${nErr}` : nWarn ? `경고 ${nWarn}` : "검사 통과"} · {KIND_LABEL[chamber]}
+              {!env && !isPc ? "웹 검사 없음" : nErr ? `오류 ${nErr}` : nWarn ? `경고 ${nWarn}` : "검사 통과"} · {KIND_LABEL[chamber]}
             </span>
-            {dirty && <span className="text-[12px] font-semibold text-[#B54708]">저장 안 함</span>}
+            {dirty && <span className="text-[12px] font-semibold text-[#B54708]">저장하지 않음</span>}
             <span className="ml-auto flex flex-wrap gap-1.5">
               {recipes.canEdit && <Btn onClick={() => void save()} disabled={!dirty || !d.name.trim()} tone="blue" small><Save size={12} /> 저장</Btn>}
               {hasKind(bundle, KINDS.load) && !isPc && <Btn onClick={load} disabled={!!loadWhy || !can(kLoad)} title={loadWhy || undefined} small><Upload size={12} /> CH{ch} 적재</Btn>}
@@ -325,10 +326,10 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
         <SimpleConfirm title="레시피 지우기" ok="지우기" danger text="이 레시피를 지울까요? 되돌릴 수 없습니다."
           onCancel={() => setAskDel(null)}
           onOk={async () => { const id = askDel; setAskDel(null); const r = await recipes.remove(id);
-            if (!r.ok) notify({ tone: "bad", title: "지우지 못함", text: RECIPE_ERROR[r.error] ?? r.error }); }} />
+            if (!r.ok) notify({ tone: "bad", title: "지울 수 없었음", text: RECIPE_ERROR[r.error] ?? r.error }); }} />
       )}
       {askLeave && (
-        <SimpleConfirm title="저장 안 함" ok="버리고 나가기" danger text="저장하지 않은 변경이 있습니다. 버릴까요?"
+        <SimpleConfirm title="저장하지 않음" ok="버리고 나가기" danger text="저장하지 않은 변경이 있습니다. 버릴까요?"
           onCancel={() => setAskLeave(null)} onOk={() => { const go = askLeave; setAskLeave(null); go(); }} />
       )}
     </Card>
@@ -361,7 +362,7 @@ function PcRowForm({ b, row, readOnly, onRow }: { b: Ch12Bundle | null; row: Row
             range={{ min: rg[f.key]?.min ?? null, max: rg[f.key]?.max ?? null, unit: f.unit }} />
         ))}
       </div>
-      <p className={`${FS.small} text-[#5B6470]`}>{pcRowLine(row)} — 운전 탭 플라즈마 클리닝 칸에서 골라 불러오기·시작</p>
+      <p className={`${FS.small} text-[#5B6470]`}>{pcRowLine(row)}. 운전 탭 {PLACE.pc} 칸에서 골라 불러오고 시작합니다.</p>
     </div>
   );
 }

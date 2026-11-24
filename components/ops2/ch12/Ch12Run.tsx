@@ -29,7 +29,7 @@ import {
   KINDS, blockControl, blockLabel, chArgs, chamberState, clockOrDash, engineOf, hasKind, isRunning, pickKind, short, startedUpto, stateInfo,
 } from "./logic";
 import { asChk, type Ch12Bundle, type Ch12State } from "./types";
-import { blockName, fieldName, fieldTip, fieldTipOf, ownerName, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
+import { CARD, blockName, commandName, fieldName, fieldTip, fieldTipOf, ownerName, placeName, reasonTip, toTerms12 } from "@/lib/ops2/ch12/terms";
 import type { Row } from "@/lib/ops2/ch12/recipe";
 import { fmtKst } from "@/lib/ops2/time";
 
@@ -102,7 +102,7 @@ function KeyTile({ d, bundle, snap, ch }: { d: KeyDef; bundle: Ch12Bundle | null
       </div>
       <div className="mt-1"><Val text={txt.text} unit={unit} size="big" alt={txt.alt} altWarn={txt.warn} /></div>
       {d.bar ? <div className="mt-1"><RangeBar value={v} target={t} band={null} max={max} label={`${name} 막대`} /></div>
-        : <p className={`mt-1 ${FS.small} text-[#8A929D]`}>로그 값 — 막대 없음</p>}
+        : <p className={`mt-1 ${FS.small} text-[#8A929D]`}>로그 눈금 값이라 막대 없음</p>}
     </Tile>
   );
 }
@@ -156,25 +156,25 @@ function Seq({ bundle, st, ch, lock, onAsk, onEditSeq, label }: {
   const key = (k: string) => `${k}@${ch}`;
   const ask = (a: Ask) => onAsk({ ...a, key: a.key ?? key(a.kind) });
   return (
-    <Card title={<><ListOrdered size={15} /> 공정 순서</>} right={running && <span className={`${FS.small} text-[#5B6470]`}>시작한 블록 {upto}/{blocks.length}</span>}>
+    <Card title={<><ListOrdered size={15} /> {CARD.seq}</>} right={running && <span className={`${FS.small} text-[#5B6470]`}>시작한 단계 {upto}/{blocks.length}</span>}>
       <div className="mb-2 flex flex-wrap gap-2">
         {paused ? (
           <Btn kind="primary" lock={lock(kResume, key(kResume)) ?? (running ? null : "공정 중이 아님")}
             onClick={() => ask({ kind: kResume, label: `${label} 재개`, args: chArgs(bundle, kResume, ch, { on: false }) })}><Play size={14} /> 재개</Btn>
         ) : (
-          <Btn lock={lock(kPause, key(kPause)) ?? (!running ? "공정 중이 아님" : !ctl.pause ? ctl.why || "멈출 수 없는 블록" : null)}
+          <Btn lock={lock(kPause, key(kPause)) ?? (!running ? "공정 중이 아님" : !ctl.pause ? ctl.why || "멈출 수 없는 단계" : null)}
             onClick={() => ask({ kind: kPause, label: `${label} 일시정지`, detail: bname, args: chArgs(bundle, kPause, ch, { on: true }),
-              lines: [ctl.pauseText ? `이 블록에서 일시정지: ${ctl.pauseText}` : "지금 블록을 멈춥니다"] })}><Pause size={14} /> 일시정지</Btn>
+              lines: [ctl.pauseText ? `이 단계에서 일시정지: ${toTerms12(ctl.pauseText)}` : "지금 단계를 멈춥니다."] })}><Pause size={14} /> 일시정지</Btn>
         )}
-        <Btn lock={lock(kSkip, key(kSkip)) ?? (!running ? "공정 중이 아님" : !ctl.skip ? ctl.why || "건너뛸 수 없는 블록" : null)}
-          onClick={() => ask({ kind: kSkip, label: `${label} 블록 건너뛰기`, detail: bname, red: true, args: chArgs(bundle, kSkip, ch),
-            lines: [`지금 블록 ${step?.no ?? "-"} ${bname} 을(를) 끝내고 다음 블록으로`, `정리: ${ctl.def?.skipCleanup?.join(", ") || "없음"}`] })}>
+        <Btn lock={lock(kSkip, key(kSkip)) ?? (!running ? "공정 중이 아님" : !ctl.skip ? ctl.why || "건너뛸 수 없는 단계" : null)}
+          onClick={() => ask({ kind: kSkip, label: `${label} ${commandName(bundle, kSkip)}`, detail: bname, red: true, args: chArgs(bundle, kSkip, ch),
+            lines: [`지금 단계 ${step?.no ?? "-"} ${bname} 을(를) 끝내고 다음 단계로 갑니다.`, `정리: ${ctl.def?.skipCleanup?.map(toTerms12).join(", ") || "없음"}`] })}>
           <SkipForward size={14} /> 건너뛰기
         </Btn>
         <Btn lock={lock(kEdit, key(kEdit)) ?? (!running ? "공정 중이 아님" : null)} onClick={onEditSeq}
-          title="아직 시작 안 한 블록만 추가·삭제·순서 변경"><ListOrdered size={14} /> 시퀀스 편집</Btn>
+          title="아직 시작하지 않은 단계만 넣고 빼고 옮길 수 있습니다."><ListOrdered size={14} /> {commandName(bundle, kEdit)}</Btn>
       </div>
-      {!blocks.length ? <Empty>{running ? "블록 목록을 아직 받지 못했습니다" : "공정 중이 아닙니다 — 시작하면 블록 순서가 보입니다"}</Empty> : (
+      {!blocks.length ? <Empty>{running ? "단계 목록을 받는 중입니다" : "공정을 시작하면 단계 순서가 보입니다"}</Empty> : (
         <ol className="max-h-72 space-y-1 overflow-y-auto pr-1">
           {blocks.map((b, i) => {
             const done = running && i < cur, now = running && i === cur;
@@ -220,7 +220,7 @@ function NextRecipe({ bundle, ch, recipes, getRecipe, lock, onAsk, label }: {
   const item = list.find((r) => r.id === id);
   const rows = (full && full.id === id ? (full.rows as Row[]).filter(hasRowContent) : []);
   const p = full && full.id === id ? loadPayload(rows, full.name) : null;
-  const why = !id ? "레시피를 고르세요" : !p ? "레시피를 읽는 중" : item?.check?.errors ? `웹 검사 오류 ${item.check.errors}개 — 레시피 탭에서 고친 뒤` : !rows.length ? "행 없음" : p.why || null;
+  const why = !id ? "레시피를 고르세요" : !p ? "레시피를 읽는 중" : item?.check?.errors ? `웹 검사 오류 ${item.check.errors}개(레시피 탭에서 고치세요)` : !rows.length ? "행 없음" : p.why || null;
   return (
     <div className="flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-3">
       <select value={id} onChange={(e) => { setId(e.target.value); setFull(null); }} aria-label={`${label} 공정 레시피 고르기`}
@@ -230,8 +230,8 @@ function NextRecipe({ bundle, ch, recipes, getRecipe, lock, onAsk, label }: {
       </select>
       <Btn kind="primary" lock={lock(kLoad, `${kLoad}@${ch}`) ?? why}
         onClick={() => p && full && onAsk({ kind: kLoad, key: `${kLoad}@${ch}`, label: `${label} 레시피 적재`, detail: `'${full.name}'`,
-          args: chArgs(bundle, kLoad, ch, p.args), lines: [`${rows.length}행`, ...rows.slice(0, 3).map((r) => (Array.isArray(r.blocks) ? `블록 ${(r.blocks as unknown[]).length}개` : rowLine(r)))],
-          note: "장비에 행 목록을 올립니다(장비가 다시 검사). 시작은 '공정 시작'." })}>
+          args: chArgs(bundle, kLoad, ch, p.args), lines: [`${rows.length}행`, ...rows.slice(0, 3).map((r) => (Array.isArray(r.blocks) ? `단계 ${(r.blocks as unknown[]).length}개` : rowLine(r)))],
+          note: "장비에 행 목록을 올리고 장비가 다시 검사합니다. 시작은 '공정 시작'으로 합니다." })}>
         <Upload size={14} /> 적재
       </Btn>
     </div>
@@ -291,8 +291,8 @@ export function ChamberRun(p: ChamberProps) {
             </p>
             {running && step && (
               <p className={`${FS.body} text-[#1B1F24]`}>
-                <span className="tabular-nums text-[#5B6470]">블록 {step.no ?? "-"}/{step.total ?? "-"}</span> <b>{blockLabel(bundle, step.type)}</b>
-                {typeof step.elapsedS === "number" && <span className="text-[#5B6470]"> · 블록 경과 {clockOrDash(step.elapsedS)}</span>}
+                <span className="tabular-nums text-[#5B6470]">단계 {step.no ?? "-"}/{step.total ?? "-"}</span> <b>{blockLabel(bundle, step.type)}</b>
+                {typeof step.elapsedS === "number" && <span className="text-[#5B6470]"> · 단계 경과 {clockOrDash(step.elapsedS)}</span>}
               </p>
             )}
             {/* 지금 동작(W-19 ④) — 장비 묶음 16 의 화면 이름(stepLabel — 'MV 열기'·'RF Pulse 켜기 120 W'). v1 스텝 문구(엔진 text)는 상세 보기에서만 */}
@@ -311,9 +311,9 @@ export function ChamberRun(p: ChamberProps) {
             {detail && cs?.runId && <p className={`font-mono ${FS.small} text-[#8A929D]`}>run {cs.runId}</p>}
           </div>
           <div className="grid grid-cols-2 gap-x-4 text-right">
-            <p><span className={`block ${FS.small} text-[#5B6470]`}>남은 시간(블록)</span>
+            <p title="지금 단계가 끝날 때까지 남은 시간입니다."><span className={`block ${FS.small} text-[#5B6470]`}>단계 남은 시간</span>
               <span className={`${FS.big} font-bold text-[#133A7C]`}>{clockOrDash(cs?.remainS ?? step?.remainS)}</span></p>
-            <p title="공정 끝까지 — 장비가 확정하기 전에는 '—'"><span className={`block ${FS.small} text-[#5B6470]`}>ETA(공정 끝까지)</span>
+            <p title={fieldTipOf(bundle, `${ch}.proc.eta_remaining_s`, detail) ?? "공정이 끝날 때까지 남은 예상 시간입니다."}><span className={`block ${FS.small} text-[#5B6470]`}>공정 끝까지</span>
               <span className={`${FS.big} font-bold text-[#133A7C]`}>{clockOrDash(eta)}</span>
               <span className={`block ${FS.small} text-[#5B6470]`}>{etaAt ? `끝 예정 ${fmtKst(etaAt).slice(-8, -3)}` : running ? "확정 전" : ""}</span></p>
           </div>
@@ -321,13 +321,13 @@ export function ChamberRun(p: ChamberProps) {
         {alarms.length > 0 && <div className="mt-2 flex flex-wrap gap-1.5">{alarms.map((a) => <Chip key={a.ruleId} tone="alarm" title={a.tip}>{a.text}</Chip>)}</div>}
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Btn size="lg" kind="danger" lock={lock(kStop, key(kStop))} onClick={() => ask({ kind: kStop, label: `${label} STOP`, stop: true,
-            args: chArgs(bundle, kStop, ch), note: `${label} 공정을 정지 순서대로 멈춥니다(끝날 때 파워 끄기는 빠지지 않습니다). 다른 챔버는 그대로입니다.` })}>
+            args: chArgs(bundle, kStop, ch), note: `${label} 공정을 정지 순서대로 멈춥니다. 다른 챔버는 그대로입니다.` })}>
             <Square size={14} /> {label} STOP
           </Btn>
           {!running && hasKind(bundle, KINDS.start) && (
             <Btn size="lg" kind="dangerSolid" lock={lock(kStart, key(kStart))} onClick={() => ask({ kind: kStart, label: `${label} 공정 시작`, red: true,
-              args: chArgs(bundle, kStart, ch), lines: [eng?.recipe_name ? `적재된 '${String(eng.recipe_name)}' 을(를) 시작합니다` : "적재된 레시피가 없으면 장비가 거부합니다"],
-              note: "공정을 시작합니다 — 가스·파워·셔터가 움직입니다." })}>
+              args: chArgs(bundle, kStart, ch), lines: [eng?.recipe_name ? `적재된 '${String(eng.recipe_name)}' 을(를) 시작합니다.` : "적재된 레시피가 없으면 장비가 거부합니다."],
+              note: "공정을 시작합니다. 가스·파워·셔터가 움직입니다." })}>
               <Play size={14} /> 공정 시작
             </Btn>
           )}
@@ -355,7 +355,7 @@ export function ChamberRun(p: ChamberProps) {
       <KeyValues bundle={bundle} st={st} ch={ch} running={running} />
 
       <Chk2Trend trend={p.trend} equipment={p.equipment} runId={cs?.runId ?? null} local={p.local} nowMs={nowMs}
-        defs={trendDefs(bundle, ch)} title={`추세 — ${label}`} />
+        defs={trendDefs(bundle, ch)} title={`${label} ${CARD.trend}`} />
 
       <div className="grid grid-cols-1 gap-3">
         {blocks.map((b) => {

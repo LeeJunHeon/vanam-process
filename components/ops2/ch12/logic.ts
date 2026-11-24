@@ -106,11 +106,11 @@ export function blockControl(b: Ch12Bundle | null, cs: ChamberState | null): {
   const step = cs?.step;
   const def = blockDefOf(b, step?.type);
   const auto = !!step && typeof step.no === "number" && typeof step.total === "number" && step.no > step.total;
-  if (!def) return { def, skip: false, pause: false, auto, why: step?.type ? "정의 없는 블록" : "지금 블록 없음", pauseText: "" };
-  if (auto) return { def, skip: false, pause: false, auto, why: "자동 끝 정지 — 건너뛰기·일시정지 없음", pauseText: "" };
+  if (!def) return { def, skip: false, pause: false, auto, why: step?.type ? "장비 정보에 없는 단계" : "지금 단계 없음", pauseText: "" };
+  if (auto) return { def, skip: false, pause: false, auto, why: "정상 끝 정지라 건너뛰기·일시정지 없음", pauseText: "" };
   return {
     def, auto, skip: def.skippable, pause: def.pausable, pauseText: def.pause || "",
-    why: [!def.skippable && "건너뛸 수 없는 블록", !def.pausable && "멈출 수 없는 블록"].filter(Boolean).join(" · "),
+    why: [!def.skippable && "건너뛸 수 없는 단계", !def.pausable && "멈출 수 없는 단계"].filter(Boolean).join(" · "),
   };
 }
 
@@ -260,11 +260,11 @@ export type LockCtx = {
 /** 잠금 이유(없으면 null) — 로그인 끊김 → 권한(노트북은 장비가 이 화면에서 받는 명령 hello.commandKinds) → bench(benchOk 아닌 명령) →
  *  정지 쪽(연결 또는 웹 온라인이면 됨) → 결과 기다리는 중 → 장비 끊김 → PLC 값 오래됨. 마지막 판단은 장비 */
 export function lockReason(c: LockCtx, kind: string, key: string = kind): string | null {
-  if (c.authLost) return "로그인이 끊김 — 새로고침하세요";
+  if (c.authLost) return "로그인이 끊겨 새로고침해야 함";
   if (!c.perms) return "권한 정보를 읽는 중";
-  if (c.local && !c.perms.kinds.includes(kind)) return "노트북 화면에서 받지 않는 조작 — 웹에서";
-  if (!c.perms.canOperate || !c.perms.kinds.includes(kind)) return "권한 없음 — 장비 담당자·관리자만";
-  if (c.bench && !c.benchOk(kind)) return "읽기 전용(bench) — 장비로 보내는 조작은 잠김";
+  if (c.local && !c.perms.kinds.includes(kind)) return "노트북 화면에서 받지 않는 조작이라 웹에서 해야 함";
+  if (!c.perms.canOperate || !c.perms.kinds.includes(kind)) return "권한 없음(장비 담당자·관리자만)";
+  if (c.bench && !c.benchOk(kind)) return "읽기 전용이라 잠김";
   if (STOP_KINDS12.includes(kind)) return c.connected || c.webOnline ? null : "장비 끊김";
   if (c.inflight(key)) return "결과를 기다리는 중";
   if (!c.connected) return c.local && !c.streamUp ? "노트북 프로그램 연결 끊김" : "장비 끊김";

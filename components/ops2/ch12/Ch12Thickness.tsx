@@ -129,7 +129,7 @@ export function materialsCollect(rows: string[][]) {
 }
 
 export const deleteConfirmText = (names: string[]) =>
-  `Factor 설정에서 쓰는 재료입니다: ${names.join(", ")}\n지우면 그 건은 '재료 목록에 없음'이 되어 Thickness 모드 시작이 거부됩니다(E845).\n지울까요?`;
+  [`Factor 설정에서 쓰는 재료입니다: ${names.join(", ")}`, "지우면 그 건은 두께 기준 공정을 시작할 수 없습니다.", "지울까요?"].join("\n");
 
 /** 사건 thickness/window 중 req 가 같은 마지막 것 */
 export function windowEvent(feed: FeedItem[], req: string): Windows | null {
