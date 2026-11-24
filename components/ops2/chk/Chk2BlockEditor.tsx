@@ -58,7 +58,7 @@ export function index(list: EBlock[], prefix = "", parent: string | null = null,
 
 // ───────────── 표시 도움 ─────────────
 const USE_LABEL: [keyof Uses, string][] = [
-  ["dc", "DC"], ["rf", "RF"], ["rfp", "RF Pulse"], ["heater", "히터"], ["ig", "이온 게이지"], ["ar", "Ar"], ["o2", "O₂"],
+  ["dc", "DC"], ["rf", "RF"], ["rfp", "RF Pulse"], ["heater", "히터"], ["ig", "Ion Gauge"], ["ar", "Ar"], ["o2", "O₂"],
 ];
 export const usesText = (u: Uses | null) => (u ? USE_LABEL.filter(([k]) => u[k]).map(([, l]) => l).join("·") || "없음" : "-");
 
@@ -206,7 +206,7 @@ function ParamField({ p, d, params, env, bundle, error, readOnly, set }: {
           {steps.map((s) => {
             const keep = env.mustKeep.includes(s.no);
             return (
-              <label key={s.no} title={`${s.desc ?? ""}${keep ? "(파워 끄기 단계는 뺄 수 없음)" : ""}`}
+              <label key={s.no} title={`${s.desc ?? ""}${keep ? " · 파워 끄기는 뺄 수 없습니다." : ""}`}
                 className={`flex items-center gap-1 ${FS.body} ${keep ? "text-gray-300" : "text-gray-700"}`}>
                 <input type="checkbox" disabled={readOnly || (keep && !cur.includes(s.no))} checked={cur.includes(s.no)}
                   onChange={(ev) => {

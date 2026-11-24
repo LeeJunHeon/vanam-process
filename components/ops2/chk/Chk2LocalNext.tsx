@@ -35,7 +35,7 @@ export default function Chk2LocalNext({ bundle, st, lock, onAsk }: {
 
   const rowWhy = (i: number): string | null => {
     const rc = check?.rows[i];
-    if (!env || !rc) return "장비 정의를 아직 받지 못해 검사할 수 없음";
+    if (!env || !rc) return "장비 정보를 받는 중이라 검사할 수 없음";
     if (rc.kind === "delay") return "대기 행은 바로 시작할 수 없음";
     if (rc.kind === "blocks") {
       if (rc.errors.length) return `검사 오류 ${rc.errors.length}개를 고친 뒤 시작할 수 있음`;
@@ -51,9 +51,9 @@ export default function Chk2LocalNext({ bundle, st, lock, onAsk }: {
     const data = rows[i]?.data;
     if (!data) return;
     if (isBlockRow(data)) {
-      const name = typeof data.process_name === "string" && data.process_name ? data.process_name : "노트북 블록 공정";
-      onAsk({ kind: "PROCESS_START", label: "블록 공정 바로 시작", detail: `'${name}'`, args: { blocks: data.blocks, name }, red: true,
-              lines: blockRowLines(data, check?.rows[i] ?? null), note: "공정을 시작합니다. 가스·파워·셔터가 움직입니다(블록 순서 그대로)." });
+      const name = typeof data.process_name === "string" && data.process_name ? data.process_name : "노트북 공정";
+      onAsk({ kind: "PROCESS_START", label: "공정 바로 시작", detail: `'${name}'`, args: { blocks: data.blocks, name }, red: true,
+              lines: blockRowLines(data, check?.rows[i] ?? null), note: "공정을 시작합니다. 가스·파워·셔터가 움직입니다." });
       return;
     }
     const row = manualRow(data);
@@ -101,9 +101,9 @@ export default function Chk2LocalNext({ bundle, st, lock, onAsk }: {
               <span className="ml-auto"><Btn size="sm" kind="ghost" onClick={() => setOpen(false)}><ChevronUp size={13} /> 접기</Btn></span>
             </div>
             <p className={`${FS.small} text-[#5B6470]`}>
-              가스·압력·파워·시간을 넣고 그 줄의 시작을 누릅니다. 저장된 레시피를 고르거나 고치는 일은 웹 화면에서 합니다.
+              값을 넣고 그 줄의 시작을 누르세요. 저장된 레시피는 웹에서 고릅니다.
             </p>
-            {!env && <Issue level="warn">장비 정의를 아직 받지 못했습니다.</Issue>}
+            {!env && <Issue level="warn">장비 정보를 받는 중입니다.</Issue>}
             <ProcessEditor cols={bundle?.recipe?.processColumns ?? []} rows={rows} check={touched ? check : null} env={env?.blocks ?? null} bundle={bundle}
               readOnly={false} reveal sel={sel ?? rows[0]?.uid ?? null} onSel={setSel} onRows={(f) => { setTouched(true); setRows((l) => f(l)); }}
               rowStartWhy={rowWhy} onStartRow={askRow} />

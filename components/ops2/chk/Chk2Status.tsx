@@ -17,21 +17,24 @@ import { paramValue } from "./logic";
 import { HEATER_OWNER, GAS_STATE, RUN_RESULT, stateLabel, type Bundle, type RunBlock, type RunRow, type StateData } from "./types";
 import { reasonText } from "./logView";
 import { byWord } from "@/lib/ops2/chk/plain";
+import { MODE_NAME, fieldName } from "@/lib/ops2/chk/terms";
 
-const LEFT_LABEL: Record<string, string> = {
-  filament: "이온 게이지 필라멘트", ms: "Main 셔터", heater: "히터", mfc_valve: "MFC 밸브", ar: "Ar 유량", o2: "O₂ 유량",
-  s1: "Gun1 셔터", s2: "Gun2 셔터", ar_valve: "Ar 차단밸브", o2_valve: "O₂ 차단밸브",
+// 지난 공정이 남긴 출력(state.left 키) → 이름은 묶음 스냅샷 필드에서(terms.fieldName — 옛 묶음이면 용어표 이름)
+const LEFT_COLUMN: Record<string, string> = {
+  filament: "ig.filament", ms: "plc.ms", s1: "plc.s1", s2: "plc.s2", ar_valve: "plc.ar_valve", o2_valve: "plc.o2_valve",
+  ar: "mfc.ar_sccm", o2: "mfc.o2_sccm",
 };
+const LEFT_NAME: Record<string, string> = { heater: "히터", mfc_valve: "MFC 밸브" };
 const STOPPING_LABEL: Record<string, string> = {
   stop: "STOP 정지 순서", row_end: "행 끝 정지", end_stop: "정상 끝 정지", all_stop: "ALL STOP", abort: "이상 중단 정지",
 };
 
-function leftText(left: Record<string, unknown>): string {
+function leftText(bundle: Bundle | null, left: Record<string, unknown>): string {
   return Object.entries(left).map(([k, v]) => {
-    const name = LEFT_LABEL[k] ?? k;
+    const name = LEFT_COLUMN[k] ? fieldName(bundle, LEFT_COLUMN[k]) : LEFT_NAME[k] ?? k;
     if (v && typeof v === "object" && "target" in v) {
       const t = (v as { target: unknown }).target;
-      return `${name}(목표 ${String(t ?? "-")}${k === "heater" ? " °C" : ""})`;
+      return `${name} 목표 ${String(t ?? "-")}${k === "heater" ? " °C" : ""}`;
     }
     if (typeof v === "number") return `${name} ${v}`;
     return name;
@@ -49,14 +52,12 @@ export function StopButtons({ lock, onAsk, small }: { lock: LockFn; onAsk: (a: A
         onClick={() => onAsk({ kind: "BUZZ_STOP", label: "부저 정지", stop: true, note: "울리는 부저를 끕니다." })}>
         <BellOff size={14} /> 부저 정지
       </Btn>
-      <Btn size={size} kind="danger" lock={lock("PROCESS_STOP")}
-        onClick={() => onAsk({ kind: "PROCESS_STOP", label: "공정 STOP", stop: true,
-                               note: "진행 중인 공정을 정지 순서대로 멈춥니다. 공정이 없으면 지난 공정이 남긴 출력만 정리합니다." })}>
+      <Btn size={size} kind="danger" lock={lock("PROCESS_STOP")} title="공정을 정지 순서대로 멈춥니다."
+        onClick={() => onAsk({ kind: "PROCESS_STOP", label: "공정 STOP", stop: true, note: "공정을 정지 순서대로 멈춥니다." })}>
         <Square size={14} /> STOP
       </Btn>
-      <Btn size={size} kind="dangerSolid" lock={lock("ALL_STOP")}
-        onClick={() => onAsk({ kind: "ALL_STOP", label: "ALL STOP", stop: true,
-                               note: "공정과 출력을 모두 끕니다(공정 여부와 상관없이 펌프·밸브 코일, 히터, 파워, 가스)." })}>
+      <Btn size={size} kind="dangerSolid" lock={lock("ALL_STOP")} title="펌프·밸브까지 모두 끕니다."
+        onClick={() => onAsk({ kind: "ALL_STOP", label: "ALL STOP", stop: true, note: "펌프·밸브까지 모두 끕니다." })}>
         <OctagonX size={14} /> ALL STOP
       </Btn>
     </div>
@@ -80,7 +81,7 @@ export function StatusBar({ bundle, st, connected, lock, onAsk }: {
       </b>
       {st?.paused && <Chip tone="warn" icon={<PauseCircle size={11} />}>일시정지</Chip>}
       {st?.run?.manual && <Chip tone="dark">{st.run.manual.label || "수동 조작 중"}</Chip>}
-      {step && <span className={`${FS.small} text-[#5B6470]`}>블록 {step.no}/{step.total}</span>}
+      {step && <span className={`${FS.small} text-[#5B6470]`}>단계 {step.no}/{step.total}</span>}
       {!st?.run?.manual && typeof r === "number" && r >= 0 && <span className={`${FS.card} font-bold tabular-nums text-[#133A7C]`}>남은 {fmtClock(r)}</span>}
       <span className="ml-auto"><StopButtons lock={lock} onAsk={onAsk} small /></span>
     </div>
@@ -134,9 +135,9 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
         <b className={`${FS.card} text-[#1B1F24]`}>{label || equipment}</b>
         {label && <span className={`font-mono ${FS.small} text-[#5B6470]`}>{equipment}</span>}
         <Chip tone={conn.tone}>{conn.label}</Chip>
-        {mode === "bench" && <Chip tone="dark" icon={<Lock size={11} />}>읽기 전용(bench)</Chip>}
-        {mode === "sim" && <Chip tone="info">SIM(모의 장비)</Chip>}
-        {mode === "run" && <Chip>실제 운전</Chip>}
+        {mode === "bench" && <Chip tone="dark" icon={<Lock size={11} />}>{MODE_NAME.bench}</Chip>}
+        {mode === "sim" && <Chip tone="info">{MODE_NAME.sim}</Chip>}
+        {mode === "run" && <Chip>{MODE_NAME.run}</Chip>}
         {extra && <span className="ml-auto flex items-center gap-2">{extra}</span>}
       </div>
 
@@ -156,7 +157,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
           )}
           {active && st && !manual && (
             <p className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 ${FS.body} text-[#1B1F24]`}>
-              {step && <span className="tabular-nums text-[#5B6470]">블록 {step.no}/{step.total}</span>}
+              {step && <span className="tabular-nums text-[#5B6470]">단계 {step.no}/{step.total}</span>}
               <b>{blockTitle(bundle, st, v1Row)}</b>
               {target && <span className="text-[#5B6470]">{target}</span>}
               {progText && <span className="font-semibold tabular-nums text-[#133A7C]">{progText}</span>}
@@ -175,7 +176,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
 
       {active && manual && (
         <p className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 ${FS.body} text-[#5B6470]`}>
-          <b className="text-[#1B1F24]">수동 조작 중{manual.waiting ? " · 다음 조작을 기다림" : ""}</b>
+          <b className="text-[#1B1F24]">수동 조작 중{manual.waiting ? " · 다음 조작 대기" : ""}</b>
           {startedMs !== null && <span>시작 <b className="tabular-nums text-[#1B1F24]">{hm(new Date(startedMs))}</b></span>}
           {elapsedS !== null && <span>경과 <b className="tabular-nums text-[#1B1F24]">{fmtDur(elapsedS)}</b></span>}
           <span>켜져 있는 출력 <b className="text-[#1B1F24]">{outs.length ? outs.join(" · ") : "없음"}</b></span>
@@ -210,14 +211,14 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
           )}
           {hr && (
             <p className={`${FS.body} text-[#5B6470]`}>
-              히터 레시피 <b className="text-[#1B1F24]">{hr.name || "이름 없음"}</b> · 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"}
+              히터 레시피 <b className="text-[#1B1F24]">{hr.name || "이름 없음"}</b> · 단계 {hr.step ?? "-"}/{hr.steps ?? "-"}
               {hr.held && <Chip tone="warn" className="ml-1.5" icon={<PauseCircle size={11} />}>일시정지</Chip>}
               {detail && hr.state ? <span className="ml-1 font-mono text-[#8A929D]">{hr.state}</span> : null}
             </p>
           )}
           {(st?.heater?.owner || (st?.heater?.gas && st.heater.gas !== "IDLE")) && !hr && (
             <p className={`${FS.body} text-[#5B6470]`}>
-              {st?.heater?.owner && `히터: ${HEATER_OWNER[st.heater.owner] ?? st.heater.owner} 소유`}
+              {st?.heater?.owner && `히터 사용: ${HEATER_OWNER[st.heater.owner] ?? st.heater.owner}`}
               {st?.heater?.handedOver && " · 공정에서 넘겨받음"}
               {st?.heater?.gas && st.heater.gas !== "IDLE" && ` · ${GAS_STATE[st.heater.gas] ?? st.heater.gas}`}
             </p>
@@ -232,14 +233,14 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
             <div className="flex flex-wrap gap-1.5">
               {alarms.map((a) => (
                 <Chip key={a.ruleId} tone="alarm" title={`${a.ruleId}${a.since ? ` · 시작 ${fmtKst(a.since)}` : ""}`}>
-                  {reasonText(bundle, a.code, "안전 규칙 발동")}
+                  {reasonText(bundle, a.code, "알람")}
                   {detail && <span className="font-mono font-normal">{a.ruleId}{a.code && ` · ${a.code}`}</span>}
                 </Chip>
               ))}
             </div>
           )}
           {Object.keys(left).length > 0 && (
-            <Issue level="warn"><b>지난 공정이 남긴 출력</b>: {leftText(left)} 켜져 있음. STOP 으로 정리하세요</Issue>
+            <Issue level="warn"><b>지난 공정이 남긴 출력</b>: {leftText(bundle, left)} 켜져 있음. STOP 으로 정리하세요</Issue>
           )}
         </div>
       )}

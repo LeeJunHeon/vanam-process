@@ -22,7 +22,7 @@ import { blockEnvOf, checkBlocks, expandBlocks, pulseEdgeViolation, usesOf, type
 export { pyFixed, pyFloatRepr, pyG, pyNum, pyRound, pyTruthy } from "./py";
 
 /** 이 검사가 맞춘 묶음 버전(골든과 같음) — 묶음 version 이 다르면 화면이 "장비 판단만 믿을 것" 안내 */
-export const GOLDEN_EXPORT_VERSION = 20;
+export const GOLDEN_EXPORT_VERSION = 21;
 /** 챔버K recipe.DELAY_RE.pattern(IGNORECASE) — 골든 시험이 묶음 delayPattern 과 같은지 본다 */
 export const DELAY_PATTERN = String.raw`^\s*delay\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$`;
 const DELAY_RE = new RegExp(DELAY_PATTERN, "i");
@@ -306,7 +306,7 @@ export function templateBlocks(p: Record<string, unknown>, cfg: Cfg, igEnabled: 
   out.push(pressure(4, null, "SP4", "GAS_STABILIZE", false, !spFromDevice(cfg, 4)));
   out.push(B("wait", `압력 안정화 대기(${stab}초)`, "GAS_STABILIZE", { sec: stab, watch: null }));
   const guns = [["g1", "use_g1"], ["g2", "use_g2"]].filter(([, k]) => pyTruthy(p[k])).map(([g]) => g);
-  if (guns.length) out.push(B("shutter", "건 셔터 열기", "GUN_SHUTTER", { action: "open", targets: guns }));
+  if (guns.length) out.push(B("shutter", "Gun 셔터 열기", "GUN_SHUTTER", { action: "open", targets: guns }));
   const dcW = fl(p.dc_power), rfW = fl(p.rf_power);
   const rfpW = pyTruthy(p.use_rf_pulse) ? fl(p.rf_pulse_power) : 0.0;
   const fhz = p.rf_pulse_freq_hz;
@@ -410,7 +410,7 @@ export function checkBlockRow(row: Row, env: CheckEnv): Omit<RowCheck, "kind"> {
     return { ...none, errors: ["블록 행은 process_name(문자열)·blocks 만"], warnings: [] };
   }
   const be = env.blocks;
-  if (!be) return { ...none, errors: [], warnings: ["블록 공정: 이 장비 정의에는 블록 규칙 표가 없어 웹 검사 없음(장비가 검사)"] };
+  if (!be) return { ...none, errors: [], warnings: ["블록 공정: 이 장비 정보에는 블록 규칙 표가 없어 웹 검사 없음(장비가 검사)"] };
   const r = checkBlocks(row.blocks, be);
   if (!r.clean) return { ...none, errors: r.errors, warnings: r.warnings };
   return {

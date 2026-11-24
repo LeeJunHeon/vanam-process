@@ -14,6 +14,7 @@ import { expectedTime } from "@/lib/ops2/chk/blocks";
 import { fmtKst } from "@/lib/ops2/time";
 import { FS, Btn, Card, Chip, Empty, KV, RangeBar, Tile, Val, type Ask } from "./kit";
 import { StateTag, wordsOf } from "./StateTag";
+import { CARD, fieldName, fieldTipOf } from "@/lib/ops2/chk/terms";
 import { DeviceGrid } from "./Chk2Devices";
 import Chk2Seq from "./Chk2Seq";
 import Chk2Trend from "./Chk2Trend";
@@ -47,7 +48,7 @@ const KEYS: KeyDef[] = [
   { key: "rf", label: "RF Power", value: "rf.fwd_w", target: "rf.set_w", limit: () => null },
   { key: "rfp", label: "RF Pulse", value: "rfp.fwd_w", target: "rfp.set_w", limit: () => null },
   { key: "heater", label: "히터 TC1", value: "heater.pv", target: "heater.sv", limit: () => null },
-  { key: "ig", label: "이온 게이지", value: "ig.ion_torr", target: null, limit: () => null },
+  { key: "ig", label: CARD.ig, value: "ig.ion_torr", target: null, limit: () => null },
 ];
 const LIMIT_PARAM: Record<string, string> = { dc: "DC_MAX_POWER", rf: "RF_MAX_POWER", rfp: "RFPULSE_MAX_POWER", heater: "HEATER_MAX_TEMP" };
 
@@ -102,7 +103,7 @@ function KeyValues({ bundle, st, blocks }: { bundle: Bundle | null; st: StateDat
           {on.map((d) => <KeyTile key={d.key} d={d} bundle={bundle} snap={snap} />)}
         </div>
       ) : <Empty>이번 공정이 쓰는 장비 값을 아직 모릅니다</Empty>}
-      <p className={`mt-2 ${FS.small} text-[#5B6470]`}>막대: 회색 띠 = 허용 범위(장비 판정과 같은 식, 모르면 없음) · ▲ = 목표 · 세로선 = 지금</p>
+      <p className={`mt-2 ${FS.small} text-[#5B6470]`} title="허용 범위는 장비 판정과 같은 식으로 그립니다. 모르면 띠가 없습니다.">회색 = 허용 범위 · ▲ 목표 · │ 현재</p>
       {off.length > 0 && (
         <p className={`mt-1 ${FS.small} text-[#5B6470]`}>
           이번 공정에서 쓰지 않는 장비: {off.map((d) => {
@@ -118,9 +119,10 @@ function KeyValues({ bundle, st, blocks }: { bundle: Bundle | null; st: StateDat
 
 // ───────────── 장비 상태 목록 ─────────────
 function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
-  const lab = (n: string) => fieldOf(bundle, `plc.${n}`)?.label ?? n;
-  const box = (n: string, label?: string) => <StateTag key={n} on={snap?.[`plc.${n}`] as boolean | undefined} label={label ?? lab(n)} words={wordsOf(n)} />;
-  const lamp = (n: string, label: string) => box(n, fieldOf(bundle, `plc.${n}`)?.label ?? label);
+  const { detail } = useChk2Mode();
+  // 이름은 묶음 스냅샷 필드(terms.fieldName — 옛 묶음이면 용어표 이름), 마우스 설명은 help
+  const box = (n: string) => <StateTag key={n} on={snap?.[`plc.${n}`] as boolean | undefined} label={fieldName(bundle, `plc.${n}`)} words={wordsOf(n)}
+    title={fieldTipOf(bundle, `plc.${n}`, detail)} />;
   const group = (title: string, items: ReactNode[]) => (
     <div>
       <p className={`mb-1 ${FS.small} font-semibold text-[#5B6470]`}>{title}</p>
@@ -130,11 +132,10 @@ function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
   return (
     <Card title="장비 상태">
       <div className="space-y-3">
-        {group("진공", [box("rotary", "Rotary"), box("turbo", "Turbo"), box("mv", "MV"), box("fv", "FV"), box("rv", "RV"), box("vent", "Vent")])}
-        {group("가스 차단밸브", [box("ar_valve", "Ar"), box("o2_valve", "O₂")])}
-        {group("셔터", [box("ms", "Main"), box("s1", "Gun1"), box("s2", "Gun2")])}
-        {group("안전·유틸리티", [lamp("air", "Air"), lamp("g1", "G1"), lamp("g2", "G2"), lamp("atm", "ATM"), lamp("water", "Water"),
-          box("mv_interlock", "MV 인터록"), box("door_up", "도어 올림"), box("door_down", "도어 내림")])}
+        {group(CARD.vacuum, ["rotary", "turbo", "mv", "fv", "rv", "vent"].map(box))}
+        {group(CARD.gasValves, ["ar_valve", "o2_valve"].map(box))}
+        {group(CARD.shutters, ["ms", "s1", "s2"].map(box))}
+        {group(CARD.interlock, ["air", "g1", "g2", "atm", "water", "mv_interlock", "door_up", "door_down"].map(box))}
       </div>
     </Card>
   );
@@ -152,7 +153,7 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
       </p>
       {alarms.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">
-          {alarms.map((a) => <Chip key={a.ruleId} tone="alarm">{reasonText(bundle, a.code, "안전 규칙 발동")}</Chip>)}
+          {alarms.map((a) => <Chip key={a.ruleId} tone="alarm">{reasonText(bundle, a.code, "알람")}</Chip>)}
         </div>
       )}
       {lines.length ? (
@@ -160,13 +161,14 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
           {lines.map((r) => (
             <li key={r.e.id} className={`${FS.body} leading-snug`} title={r.desc}>
               <span className={`mr-1.5 tabular-nums text-[#5B6470] ${FS.small}`}>{whenText(r.e.ts)}</span>
+              <span className={`mr-1.5 text-[#5B6470] ${FS.small}`}>{r.source}</span>
               {r.level === "warn" ? <Chip tone="warn">{r.kind}</Chip> : r.level === "error" || r.level === "critical"
                 ? <Chip tone="alarm">{r.kind}</Chip> : <b className="text-[#1B1F24]">{r.kind}</b>}
               <span className={`ml-1 ${r.level === "warn" ? "text-[#B54708]" : r.level === "error" || r.level === "critical" ? "text-[#B42318]" : "text-[#5B6470]"}`}>{r.text}</span>
             </li>
           ))}
         </ul>
-      ) : <Empty>최근 사건이 없습니다</Empty>}
+      ) : <Empty>최근 기록 없음</Empty>}
     </Card>
   );
 }
@@ -214,8 +216,8 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   const t = exp.length ? expectedTime(exp) : null;
   const steps = exp.reduce((n, b) => n + b.steps.filter((s) => !s.internal).length, 0);
   const first = full?.rows.find((r) => r && Object.keys(r).length && !("blocks" in r)) as Row | undefined;
-  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정의를 기다리는 중" : chk?.errors ? `검사 오류 ${chk.errors}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("RECIPE_LOAD");
-  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정의를 기다리는 중" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("HEATER_RECIPE_RUN");
+  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정보를 받는 중" : chk?.errors ? `검사 오류 ${chk.errors}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("RECIPE_LOAD");
+  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정보를 받는 중" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("HEATER_RECIPE_RUN");
   const loadedWeb = loaded?.name ? list.find((r) => r.kind === "process" && r.name === loaded.name) : undefined;
 
   const askStart = async () => {
@@ -291,7 +293,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
 
         <div className="flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-3">
           <span className={`${FS.body} font-semibold text-[#1B1F24]`}>히터 레시피</span>
-          {hr ? <span className={`${FS.body} text-[#5B6470]`}>실행 중 <b className="text-[#1B1F24]">{hr.name}</b> · 스텝 {hr.step ?? "-"}/{hr.steps ?? "-"} · 조작은 히터 카드에서</span> : (
+          {hr ? <span className={`${FS.body} text-[#5B6470]`}>실행 중 <b className="text-[#1B1F24]">{hr.name}</b> · 단계 {hr.step ?? "-"}/{hr.steps ?? "-"} · 조작은 히터 카드에서</span> : (
             <>
               <select value={hid} onChange={(e) => { setHid(e.target.value); if (!e.target.value) setHfull(null); }} aria-label="히터 레시피 고르기" className={sel}>
                 <option value="">히터 레시피 고르기…</option>
@@ -300,7 +302,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
               <Btn kind="dangerSolid" lock={runLock}
                 onClick={() => hfull && onAsk({ kind: "HEATER_RECIPE_RUN", label: "히터 레시피 실행", detail: `'${hfull.name}'`,
                   args: { name: hfull.name, steps: hfull.rows, gas: hfull.gas }, red: true,
-                  lines: heaterLines(hfull.name, hfull.rows as Row[], hfull.gas as Row | null), note: "히터를 켜고 스텝대로 온도를 올립니다." })}>
+                  lines: heaterLines(hfull.name, hfull.rows as Row[], hfull.gas as Row | null), note: "히터를 켜고 단계대로 온도를 올립니다." })}>
                 <Flame size={14} /> 실행
               </Btn>
             </>
@@ -331,7 +333,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
           <KeyValues bundle={bundle} st={st} blocks={runBlocks} />
           <Chk2Trend trend={trend} equipment={equipment} runId={st?.runId ?? null} local={local} nowMs={nowMs}
             pressureTarget={pressureTargetCol(snap, bundle)} />
-          <Chk2Adjust bundle={bundle} st={st} skewMs={skewMs} canKey={canKey} onAsk={onAsk} />
+          <Chk2Adjust bundle={bundle} st={st} skewMs={skewMs} canKey={canKey} onAsk={onAsk} plain />
         </div>
         <div className="grid min-w-0 items-start gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">
           <DeviceStates bundle={bundle} snap={snap} />

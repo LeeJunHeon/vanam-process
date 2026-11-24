@@ -33,6 +33,9 @@ function cleanKey(xs: unknown[], env: BlockEnv): string {
 /** 장비 묶음이 기준 목록(editBase)을 주는 판 */
 const EDIT_BASE_VERSION = 14;
 
+/** 장비 블록 정의의 건너뛰기·일시정지 글 — 운전 화면에서는 '단계'(W-17) */
+const step = (t?: string | null) => (t ?? "").replace(/블록/g, "단계");
+
 /** 블록 하나 이름(이름표가 있으면 같이) */
 const nameOf = (b: Bundle | null, x: { type: string; label?: string }) =>
   x.type === "delay" ? "딜레이 행" : `${blockName(b, x.type)}${x.label && x.label !== blockName(b, x.type) && !/^[\d.#]+$/.test(x.label) ? ` · ${x.label}` : ""}`;
@@ -71,24 +74,24 @@ function SeqItem({ b, bundle, st, current, lock, onAsk, revision, pauseMax }: {
               {paused ? (
                 <Btn size="sm" kind="primary" lock={lock("PROCESS_RESUME")}
                   onClick={() => onAsk({ kind: "PROCESS_RESUME", label: "일시정지 재개", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
-                    args: { revision }, note: "멈춘 블록을 이어서 합니다(메인은 셔터를 다시 열고, 도달 대기는 안정 유지 시간을 처음부터)." })}>
+                    args: { revision }, note: "멈춘 단계를 이어서 합니다." })}>
                   <Play size={13} /> 재개
                 </Btn>
               ) : b.pause ? (
                 <Btn size="sm" lock={lock("PROCESS_PAUSE")}
-                  onClick={() => onAsk({ kind: "PROCESS_PAUSE", label: "블록 일시정지", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
-                    args: { no: b.no, revision }, lines: [`${name}: ${b.pauseText ?? ""}`],
+                  onClick={() => onAsk({ kind: "PROCESS_PAUSE", label: "단계 일시정지", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
+                    args: { no: b.no, revision }, lines: [`${name}: ${step(b.pauseText)}`],
                     note: pauseMax > 0 ? `한도 ${fmtDur(pauseMax)}를 넘으면 정지 순서로 갑니다(5분 전 경고).` : "한도 없음(설정의 일시정지 한도가 0)." })}>
                   <PauseCircle size={13} /> 일시정지
                 </Btn>
-              ) : <span className={`${FS.small} text-[#5B6470]`}>일시정지할 수 없음: {b.pauseText || "이 블록은 멈출 수 없음"}</span>}
+              ) : <span className={`${FS.small} text-[#5B6470]`}>일시정지할 수 없음: {step(b.pauseText) || "이 단계는 멈출 수 없음"}</span>}
               {b.skip ? (
                 <Btn size="sm" lock={lock("PROCESS_SKIP")}
-                  onClick={() => onAsk({ kind: "PROCESS_SKIP", label: "블록 건너뛰기", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
-                    args: { no: b.no, revision }, lines: [`${name}: ${b.skipText ?? ""}`], red: true })}>
+                  onClick={() => onAsk({ kind: "PROCESS_SKIP", label: "단계 건너뛰기", detail: `${b.no === "delay" ? "" : `${b.no} `}${name}`,
+                    args: { no: b.no, revision }, lines: [`${name}: ${step(b.skipText)}`], red: true })}>
                   <SkipForward size={13} /> 건너뛰기
                 </Btn>
-              ) : !paused && <span className={`${FS.small} text-[#5B6470]`}>건너뛸 수 없음: {b.skipText || "이 블록은 건너뛸 수 없음"}</span>}
+              ) : !paused && <span className={`${FS.small} text-[#5B6470]`}>건너뛸 수 없음: {step(b.skipText) || "이 단계는 건너뛸 수 없음"}</span>}
             </div>
           )}
         </div>
@@ -107,7 +110,7 @@ function SeqEditor({ bundle, base, baseRev, revision, lockTop, runBlocks, lock, 
   const json = useMemo(() => tree.map(toJson), [tree]);
   const chk = useMemo(() => (env?.blocks ? checkBlocks(json, env.blocks) : null), [json, env]);
   const startedSame = !env?.blocks || cleanKey(json.slice(0, lockTop), env.blocks) === cleanKey(base.slice(0, lockTop), env.blocks);
-  const errors = [...(chk?.errors ?? []), ...(startedSame ? [] : ["시작했거나 끝난 블록과 그 앞 순서는 그대로여야 함"])];
+  const errors = [...(chk?.errors ?? []), ...(startedSame ? [] : ["시작했거나 끝난 단계와 그 앞 순서는 그대로여야 함"])];
   const changes = (() => {
     const out: string[] = [];
     const n = Math.max(json.length, base.length);
@@ -127,7 +130,7 @@ function SeqEditor({ bundle, base, baseRev, revision, lockTop, runBlocks, lock, 
     const r = xs[xs.length - 1];
     return `${RESULT[r.status] ?? r.status}`;
   };
-  if (!env?.blocks) return <Empty>이 장비 정의에는 블록 정의가 없어 순서를 고칠 수 없습니다.</Empty>;
+  if (!env?.blocks) return <Empty>장비 프로그램을 최신으로 올리면 순서를 고칠 수 있습니다.</Empty>;
   return (
     <div className="space-y-3">
       {stale && (
@@ -155,8 +158,8 @@ function SeqEditor({ bundle, base, baseRev, revision, lockTop, runBlocks, lock, 
           <Btn kind="primary" size="lg" lock={stale ? "다른 곳에서 순서가 바뀌어 다시 불러와야 함" : errors.length ? "검사 오류를 고친 뒤" : !changes.length ? "바뀐 것이 없음" : lock("PROCESS_EDIT")}
             onClick={() => onAsk({ kind: "PROCESS_EDIT", label: "순서 고치기", detail: `판 ${baseRev} → ${baseRev + 1}`,
               args: { revision: baseRev, blocks: json }, red: true,
-              lines: [`맨 위 블록 ${base.length}개 → ${json.length}개`, ...changes.slice(0, 8), ...(changes.length > 8 ? [`외 ${changes.length - 8}개`] : [])],
-              note: "시작했거나 끝난 블록은 그대로 두고, 아직 시작하지 않은 블록을 새 목록으로 바꿉니다(장비가 다시 검사)." })}>
+              lines: [`단계 ${base.length}개 → ${json.length}개`, ...changes.slice(0, 8), ...(changes.length > 8 ? [`외 ${changes.length - 8}개`] : [])],
+              note: "아직 시작하지 않은 단계만 새 순서로 바꿉니다. 장비가 다시 검사합니다." })}>
             적용
           </Btn>
         </span>
@@ -170,6 +173,7 @@ export default function Chk2Seq({ bundle, st, runBlocks, editBase, lock, onAsk, 
   lock: LockFn; onAsk: (a: Ask) => void; local: boolean;
   onWide?: (wide: boolean) => void;               // 순서 고치기 중에는 넓게(부르는 쪽 격자)
 }) {
+  const { detail } = useChk2Mode();
   const [editing, setEditingState] = useState(false);
   const setEditing = (v: boolean) => { setEditingState(v); onWide?.(v); };
   const [stopOpen, setStopOpen] = useState(false);
@@ -202,15 +206,16 @@ export default function Chk2Seq({ bundle, st, runBlocks, editBase, lock, onAsk, 
   // 노트북은 노트북 조작을 열었을 때만(묶음 18 — hello.commandKinds 에 PROCESS_EDIT), 수동 조작은 블록을 하나씩이라 순서가 없다
   const { webOnly } = useChk2Mode();
   const editLock = local && webOnly("PROCESS_EDIT") ? "순서 고치기는 웹에서만 할 수 있음" : st?.run?.manual ? "수동 조작에는 고칠 순서가 없음"
-    : !blocks ? "블록 목록을 받는 중" : curNo === "delay" ? "딜레이 행은 고칠 블록이 없음"
+    : !blocks ? "단계 목록을 받는 중" : curNo === "delay" ? "딜레이 행은 고칠 단계가 없음"
     : st?.stopping ? "정지 순서 중"
-    : oldBundle ? `장비 정의 v${bundle?.version} 은 순서 고치기 기준 목록을 주지 않아 장비 프로그램을 올린 뒤 할 수 있음(묶음 ${EDIT_BASE_VERSION}부터)`
+    : oldBundle ? "장비 프로그램을 최신으로 올리면 할 수 있음"
     : !eb ? "장비의 기준 목록을 받는 중(판이 바뀔 때·10초마다 보냄)" : lock("PROCESS_EDIT");
 
   return (
     <Card title={<><ListOrdered size={15} /> 공정 순서</>}
       right={<span className="flex items-center gap-2">
-        {revision > 0 && <Chip>판 {revision}</Chip>}
+        {revision > 1 && <Chip>순서 고침 {revision - 1}회</Chip>}
+        {detail && revision > 0 && <Chip>판 {revision}</Chip>}
         {!editing && <Btn size="sm" lock={editLock} onClick={() => { setEditing(true); loadBase(); }}>순서 고치기</Btn>}
       </span>}>
       {editing ? (
@@ -225,7 +230,7 @@ export default function Chk2Seq({ bundle, st, runBlocks, editBase, lock, onAsk, 
           </div>
         )
       ) : !blocks ? (
-        <Empty>블록 목록을 받는 중… 장비가 바뀔 때·10초마다 보냅니다</Empty>
+        <Empty>단계 목록을 받는 중…</Empty>
       ) : (
         <ol className="space-y-1.5">
           {blocks.map((b, i) => (
@@ -241,7 +246,7 @@ export default function Chk2Seq({ bundle, st, runBlocks, editBase, lock, onAsk, 
         {stopOpen && (
           <ol className={`mt-1 space-y-0.5 ${FS.small} text-[#5B6470]`}>
             {(bundle?.stopSequence?.steps ?? []).map((s) => <li key={s.no}>{s.no}. {s.label || s.desc || s.act}</li>)}
-            {!bundle?.stopSequence?.steps?.length && <li>장비 정의에 정지 순서가 없습니다</li>}
+            {!bundle?.stopSequence?.steps?.length && <li>장비 정보에 정지 순서가 없습니다</li>}
           </ol>
         )}
       </div>

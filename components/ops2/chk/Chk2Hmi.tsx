@@ -17,6 +17,8 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { AlertTriangle, Lock } from "lucide-react";
 import { Btn, Card, FS, FSPX, T, type Ask } from "./kit";
 import { StateTag } from "./StateTag";
+import { CARD, buttonName, fieldName, fieldTipOf } from "@/lib/ops2/chk/terms";
+import { useChk2Mode } from "./mode";
 import { enumLabel, fieldText } from "./text";
 import type { Bundle, FieldDef, Link } from "./types";
 
@@ -68,7 +70,9 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
   const raw = (t: string) => snap?.[`plc.${btn(t)?.addr ?? t}`];
   const on = (t: string) => plcOk && raw(t) === true;
   const wait = (t: string) => plcOk && pending[t] !== undefined && pending[t] !== (raw(t) === true);
-  const why = (t: string) => (viewOnly ? "보기만 가능(PLC 버튼은 웹에서)" : !btn(t) ? "장비 정의에 없는 버튼" : lockOf(t));
+  const { detail } = useChk2Mode();
+  const nm = (col: string) => fieldName(bundle, col);
+  const why = (t: string) => (viewOnly ? "보기만 가능 · PLC 버튼은 웹에서" : !btn(t) ? "장비 정보에 없는 버튼" : lockOf(t));
   const press = (t: string) => {
     const b = btn(t);
     if (!b || why(t)) return;
@@ -90,7 +94,7 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
       <g role="button" tabIndex={w ? -1 : 0} aria-disabled={!!w} aria-label={`${label} — ${state}${w ? ` (잠김: ${w})` : " · 눌러서 바꾸기"}`}
         onClick={() => press(t)} onKeyDown={keys(t)} style={{ cursor: w ? "default" : "pointer", outline: "none" }}
         className={w ? "" : "[&:focus-visible>.ring]:opacity-100 [&:hover>.ring]:opacity-100"}>
-        <title>{`${btn(t)?.label ?? label} · ${state}${w ? ` · 잠김: ${w}` : ""}`}</title>
+        <title>{[w ? `잠김: ${w}` : "", fieldTipOf(bundle, `plc.${btn(t)?.addr ?? t}`, detail) ?? ""].filter(Boolean).join(" · ") || buttonName(bundle, t)}</title>
         {children}
       </g>
     );
@@ -144,7 +148,7 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
   );
   /** 도어 버튼 — 사각 안에 이름만(켜지면 진회색 채움). 상태 글은 '도어' 이름 아래 한 곳 */
   const door = (t: string, x: number, y: number, name: string) => (
-    node(t, `도어 ${name}`, "run", <>
+    node(t, `${CARD.door} ${name}`, "run", <>
       <rect className="ring" x={x - 4} y={y - 4} width={118} height={48} rx={10} fill="none" stroke={T.primary} strokeWidth={2} opacity={0} />
       <rect x={x} y={y} width={110} height={40} rx={8} fill={fill(t)} stroke={stroke(t)} strokeWidth={2} strokeDasharray={dash(t)} />
       <text x={x + 55} y={y + 20 + px(5)} textAnchor="middle" fontSize={px(FSPX.body)} fontWeight={700} fill={ink(t)} fontFamily={FONT}>{name}</text>
@@ -256,10 +260,10 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
               {label(660, CT + 51 + px(5), "Gun2")}
               {shutter("s1", 455, CT + 82, 90, "S1")}
               {shutter("s2", 615, CT + 82, 90, "S2")}
-              {shutter("ms", 470, CT + 132, 220, "Main 셔터")}
+              {shutter("ms", 470, CT + 132, 220, nm("plc.ms"))}
               {/* 기판 히터 자리 — TC1 · TC2 같은 크기로 나란히(목표는 각각 아래 작게 — TC2 아래는 SV2) · 편차(TC2 단독 제어) · 제어 방식 */}
               <rect x={425} y={HY} width={310} height={CB - 8 - HY} rx={8} fill="#F5F6F8" stroke={T.border} />
-              {label(437, HY + px(20), "기판 히터", "start")}
+              {label(437, HY + px(20), CARD.heater, "start")}
               {tcCell(437, HY + px(20), "TC1", tc2Only ? "기록" : "", tc1,
                 hSv.unit ? `목표 ${hSv.text} ${hSv.unit}` : "")}
               {tcCell(585, HY + px(20), "TC2", "", tc2,
@@ -288,30 +292,30 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
               {/* 이온 게이지 — 오른쪽 벽에 붙은 게이지 기호 → 상자 */}
               <circle cx={CR + 14} cy={330} r={14} fill="#FFFFFF" stroke={T.on} strokeWidth={2} />
               <text x={CR + 14} y={330 + px(4)} textAnchor="middle" fontSize={px(FSPX.small)} fontWeight={700} fill={T.text} fontFamily={FONT}>IG</text>
-              {box(800 + P / 2, 330 - IGH / 2, 220, IGH, "이온 게이지", <>
-                {kv(812 + P / 2, 1008 + P / 2, 330 - IGH / 2 + 8 + px(14) + px(26), "이온", "ig.ion_torr")}
-                {kv(812 + P / 2, 1008 + P / 2, 330 - IGH / 2 + 8 + px(14) + px(50), "A", "ig.a_torr")}
-                {kv(812 + P / 2, 1008 + P / 2, 330 - IGH / 2 + 8 + px(14) + px(74), "B", "ig.b_torr")}
+              {box(800 + P / 2, 330 - IGH / 2, 220, IGH, CARD.ig, <>
+                {kv(812 + P / 2, 1008 + P / 2, 330 - IGH / 2 + 8 + px(14) + px(26), "압력", "ig.ion_torr")}
+                {kv(812 + P / 2, 1008 + P / 2, 330 - IGH / 2 + 8 + px(14) + px(50), nm("ig.a_torr"), "ig.a_torr")}
+                {kv(812 + P / 2, 1008 + P / 2, 330 - IGH / 2 + 8 + px(14) + px(74), nm("ig.b_torr"), "ig.b_torr")}
               </>)}
-              {/* 도어 — 이름·상태 글 한 곳 + 버튼 둘 */}
-              <text x={CL} y={22 + px(6)} fontSize={px(FSPX.body)} fontWeight={700} fill={T.text} fontFamily={FONT}>도어</text>
+              {/* Door — 이름·상태 글 한 곳 + 버튼 둘 */}
+              <text x={CL} y={22 + px(6)} fontSize={px(FSPX.body)} fontWeight={700} fill={T.text} fontFamily={FONT}>{CARD.door}</text>
               <text x={CL} y={22 + px(6) + px(16)} fontSize={px(FSPX.small)} fill={T.muted} fontFamily={FONT}>{doorWord}</text>
               {door("door_up", 520, 10, "올림")}
               {door("door_down", 650, 10, "내림")}
               {/* 가스 */}
               {mfcBox(30 - P, 108, "Ar", "mfc.ar_sccm", "mfc.ar_set")}
-              {valve("ar_valve", 310 - P / 2, 140, "Ar 밸브")}
+              {valve("ar_valve", 310 - P / 2, 140, nm("plc.ar_valve"))}
               {mfcBox(30 - P, 198, "O₂", "mfc.o2_sccm", "mfc.o2_set")}
-              {valve("o2_valve", 310 - P / 2, 230, "O₂ 밸브")}
+              {valve("o2_valve", 310 - P / 2, 230, nm("plc.o2_valve"))}
               {/* Vent */}
-              {valve("vent", 830 + P / 2, 140, "Vent")}
+              {valve("vent", 830 + P / 2, 140, nm("plc.vent"))}
               {small(908 + P, 140 + px(4), "대기", "start")}
               {/* 배기 */}
-              {valve("mv", MVX, 440, "MV", true, "right")}
-              {pump("turbo", MVX, PY, "Turbo")}
-              {valve("fv", 580, PY, "FV", false, "above")}
-              {valve("rv", RVX, 440, "RV", true, "right")}
-              {pump("rotary", 820, PY, "Rotary")}
+              {valve("mv", MVX, 440, nm("plc.mv"), true, "right")}
+              {pump("turbo", MVX, PY, nm("plc.turbo"))}
+              {valve("fv", 580, PY, nm("plc.fv"), false, "above")}
+              {valve("rv", RVX, 440, nm("plc.rv"), true, "right")}
+              {pump("rotary", 820, PY, nm("plc.rotary"))}
             </svg>
           </div>
           <ValuePanel bundle={bundle} snap={snap} links={links} plcOk={plcOk} ion={{ on: on("ion"), wait: wait("ion"), lock: why("ion"), press: () => press("ion") }} />
@@ -322,7 +326,7 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
   );
 }
 
-/** 오른쪽 세로 '값' 패널 — 파워 · 유틸리티 · 이오나이저 · MV 인터록 */
+/** 오른쪽 세로 '값' 패널 — 파워 · 인터락(Air·G1·G2·ATM·Water·MV 인터락) · Ionizer */
 function ValuePanel({ bundle, snap, links, plcOk, ion }: {
   bundle: Bundle | null; snap?: Record<string, unknown>; links?: Record<string, Link>; plcOk: boolean;
   ion: { on: boolean; wait: boolean; lock: string | null; press: () => void };
@@ -330,6 +334,10 @@ function ValuePanel({ bundle, snap, links, plcOk, ion }: {
   const fieldOf = (col: string): FieldDef | undefined => bundle?.snapshot?.blocks?.flatMap((b) => b.fields).find((f) => f.column === col);
   const blockLabel = (n: string, l: string) => bundle?.snapshot?.blocks?.find((b) => b.name === n)?.label ?? l;
   const plc = (k: string) => (plcOk ? snap?.[`plc.${k}`] === true : null);
+  const { detail } = useChk2Mode();
+  const tag = (k: string, words?: "detect", alert?: boolean) => (
+    <StateTag key={k} on={plc(k)} label={fieldName(bundle, `plc.${k}`)} words={words} alert={alert} title={fieldTipOf(bundle, `plc.${k}`, detail)} />
+  );
   /** 파워 한 줄 — 출력이 켜져 있으면 "켜짐 n W", 꺼져 있으면 "꺼짐"(값 없이), 출력 상태를 모르면 값만. 쓰지 않는 장비는 이유 한 줄 */
   const power = (name: "dc" | "rf" | "rfp", valueCol: string, outCol: string, l: string) => {
     const off = links?.[name]?.q === "off";
@@ -342,7 +350,7 @@ function ValuePanel({ bundle, snap, links, plcOk, ion }: {
     return (
       <div className="flex min-h-[26px] items-baseline justify-between gap-2">
         <span className="min-w-0 truncate font-semibold text-[#1B1F24]">{blockLabel(name, l)}</span>
-        {off ? <span className={`${FS.small} text-[#5B6470]`}>사용하지 않음(장비 설정에서 꺼짐)</span>
+        {off ? <span className={`${FS.small} text-[#5B6470]`} title="장비 설정에서 꺼져 있습니다.">사용하지 않음</span>
           : out === undefined ? val
           : out === true ? <span className="flex shrink-0 items-baseline gap-1.5"><b className="text-[#1B1F24]">켜짐</b>{val}</span>
           : <span className="text-[#5B6470]">꺼짐</span>}
@@ -351,7 +359,7 @@ function ValuePanel({ bundle, snap, links, plcOk, ion }: {
   };
   // RF 출력은 묶음 19 rf.out_on(D40 > 0 또는 순방향 ≥ 5 W), 옛 묶음은 지금처럼 DAC 출력 허용 비트
   const rfOut = snap?.["rf.out_on"] !== undefined ? "rf.out_on" : "rf.dac_enable";
-  const lamps: [string, string][] = [["air", "Air"], ["g1", "G1"], ["g2", "G2"], ["atm", "ATM"], ["water", "냉각수"]];
+  const lamps = ["air", "g1", "g2", "atm", "water"];
   const sec = (title: string, children: ReactNode) => (
     <div className="min-w-0 @[1100px]:border-t @[1100px]:border-[#E3E6EA] @[1100px]:pt-3 @[1100px]:first:border-t-0 @[1100px]:first:pt-0">
       <p className={`mb-1.5 font-bold text-[#1B1F24] ${FS.body}`}>{title}</p>
@@ -365,23 +373,22 @@ function ValuePanel({ bundle, snap, links, plcOk, ion }: {
         {power("rf", "rf.fwd_w", rfOut, "RF Power")}
         {power("rfp", "rfp.fwd_w", "rfp.out_on", "RF Pulse")}
       </>)}
-      {sec("유틸리티", (
+      {sec(CARD.interlock, (
         <div className="grid grid-cols-1 gap-y-1.5">
-          {lamps.map(([k, l]) => <StateTag key={k} on={plc(k)} label={fieldOf(`plc.${k}`)?.label ?? l} words="detect" />)}
+          {lamps.map((k) => tag(k, "detect"))}
+          {tag("mv_interlock")}
         </div>
       ))}
-      {sec("이오나이저", <>
+      {sec(fieldName(bundle, "plc.ion_remote_on"), <>
         <Btn size="md" lock={ion.lock} onClick={ion.press} className="mb-2 w-full">
-          {ion.on ? "이오나이저 끄기" : "이오나이저 켜기"}{ion.wait && " · 전환 중"}
+          {fieldName(bundle, "plc.ion_remote_on")} {ion.on ? "끄기" : "켜기"}{ion.wait && " · 전환 중"}
         </Btn>
         <div className="grid grid-cols-1 gap-y-1.5">
-          <StateTag on={plc("ion_remote_on")} label="켜기 출력" />
-          <StateTag on={plc("ion_run")} label="구동" />
-          <StateTag on={plc("ion_lamp")} label="점등" />
-          <StateTag on={plc("ion_ot")} label="수명 초과" alert />
+          {tag("ion_run")}
+          {tag("ion_lamp")}
+          {tag("ion_ot", undefined, true)}
         </div>
       </>)}
-      {sec("인터록", <StateTag on={plc("mv_interlock")} label={fieldOf("plc.mv_interlock")?.label ?? "MV 인터록"} />)}
     </aside>
   );
 }

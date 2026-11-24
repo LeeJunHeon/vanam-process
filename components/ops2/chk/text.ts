@@ -3,6 +3,7 @@
 import type { BlockDef as BDef, BParamDef } from "@/lib/ops2/chk/blocks";
 import type { ColDef } from "@/lib/ops2/chk/recipe";
 import { byWord, genericEventName, isCode, stripCodes } from "@/lib/ops2/chk/plain";
+import { SOURCE_NAME as TERM_SOURCE } from "@/lib/ops2/chk/terms";
 import { CMD_STATUS, RUN_RESULT, commandLabel, fmtValue, reasonLabel, stateLabel, type Bundle, type FieldDef } from "./types";
 
 type Obj = Record<string, unknown>;
@@ -123,6 +124,7 @@ export function runTitle(r: { name: string | null; recipeName: string | null; st
 // ───────────── 로그(사건) ─────────────
 export type FeedLike = { type: string; data: Obj };
 export type LogLine = { level: string; kind: string; text: string; raw: string; main: boolean; source?: string;
+  fromMessage?: boolean;   // W-17 plain — 사유 이름도 웹 글도 없어 장비 문장(message)에서 만든 내용
   desc?: string;     // desc: 사건 종류의 뜻(묶음 19 eventKinds[].desc) — 있을 때만 마우스 설명
   code?: string };   // code: 사건 코드·규칙 번호만(raw 에서 문구를 뺀 것 — 상세 보기 끝에 작게)
 
@@ -148,14 +150,32 @@ export function adjustLine(b: Bundle | null, d: Obj): string {
 export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; blockType?: string | null }): LogLine {
   const line = logLine0(b, e);
   if (!o?.plain) return line;
+  // W-17 평소 보기 한 줄 = 출처(source) | 이름(kind) | 내용(text) — 빈 칸 없이, 같은 말 두 번 없이, 장비 문장(message)은 마지막 수단
   const d = e.data;
-  if (e.type === "run_start") {
-    return { ...line, text: `${runTitle({ name: s(d.name) || null, recipeName: s(d.recipeName) || null }) || "공정"}${byWord(d.by) ? ` · ${byWord(d.by)}` : ""}` };
-  }
   const rl = (c: string) => { const x = reasonLabel(b, c); return x !== c && !isCode(x) ? x : ""; };
+  const rh = (c: unknown) => (c ? b?.reasons?.find((x) => x.code === c)?.help || undefined : undefined);   // 사유 help(묶음 21)
+  const dedupe = (name: string, t: string) => {
+    let x = t.replace(/블록/g, "단계").trim();
+    if (x === name) return "";
+    if (name && x.startsWith(`${name} `)) x = x.slice(name.length + 1);
+    return x.replace(/^[:·]\s*/, "").replace(/: /g, " ").trim();
+  };
+  if (e.type === "run_start") {
+    const manual = d.manual === true;
+    const title = runTitle({ name: s(d.name) || null, recipeName: s(d.recipeName) || null }) || "공정";
+    const who = byWord(d.by);
+    return { ...line, source: manual ? "수동 조작" : "공정",
+             text: [manual && /^수동 조작/.test(title) ? "" : title, who].filter(Boolean).join(" · ") };
+  }
   if (e.type === "run_end") {
     const r = s(d.result), why = d.reasonCode ? rl(s(d.reasonCode)) : "";
-    return { ...line, text: `${RUN_RESULT[r] ?? r}${why ? ` · ${why}` : ""}`, code: d.reasonCode ? s(d.reasonCode) : undefined };
+    const sm = isObj(d.summary) ? d.summary : {};
+    const manual = d.manual === true || sm.manual === true;
+    // 사유 이름이 종류 이름과 겹치면(수동 조작 끝 · 수동 조작 끝내기) 사유는 빼고 결과만
+    const stem = line.kind.replace(/ (끝|중단)$/, "");
+    const why2 = why && !why.startsWith(stem) ? why : "";
+    return { ...line, source: manual ? "수동 조작" : "공정", text: dedupe(line.kind, `${RUN_RESULT[r] ?? r}${why2 ? ` · ${why2}` : ""}`),
+             code: d.reasonCode ? s(d.reasonCode) : undefined, desc: rh(d.reasonCode) ?? line.desc };
   }
   if (e.type === "cmd_result") {
     // 묶음 19 이하의 수동 조작 이름("수동 조작: 블록 하나 실행")은 앞말만 — 묶음 20 은 "수동 조작"
@@ -163,29 +183,52 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     const what = isCode(lab) ? "명령" : lab;
     const bt = o.blockType ? blockName(b, o.blockType) : "";
     const why = d.reasonCode ? rl(s(d.reasonCode)) : "";
-    return { ...line, text: `${what}${bt && !isCode(bt) ? `(${bt})` : ""} ${CMD_STATUS[s(d.status)] ?? "결과"}${why ? ` · ${why}` : ""}`,
-             code: `${s(d.kind)}${d.reasonCode ? ` ${s(d.reasonCode)}` : ""}` };
+    const src = s(d.source);
+    return { ...line, source: src === "local" || src === "hmi" ? "노트북" : src === "web" ? "웹" : "장비",
+             text: `${what}${bt && !isCode(bt) ? `(${bt})` : ""} ${CMD_STATUS[s(d.status)] ?? "결과"}${why ? ` · ${why}` : ""}`,
+             code: `${s(d.kind)}${d.reasonCode ? ` ${s(d.reasonCode)}` : ""}`, desc: rh(d.reasonCode) ?? line.desc };
   }
   if (e.type === "config_ack") {
     const why = d.reasonCode ? rl(s(d.reasonCode)) : "";
-    return { ...line, text: `설정 버전 ${s(d.version)} ${({ applied: "적용됨", rejected: "거부", pending_idle: "대기(공정 끝나면)", pending_restart: "대기(재시작 때)" } as Record<string, string>)[s(d.status)] ?? "결과"}${why ? ` · ${why}` : ""}`,
-             code: d.reasonCode ? s(d.reasonCode) : undefined };
+    const st = ({ applied: "적용됨", rejected: "거부", pending_idle: "공정 끝나면 적용", pending_restart: "재시작 때 적용" } as Record<string, string>)[s(d.status)] ?? "결과";
+    return { ...line, source: "설정", text: `설정 버전 ${s(d.version)} ${st}${why ? ` · ${why}` : ""}`, code: d.reasonCode ? s(d.reasonCode) : undefined };
   }
   // event
   const c = isObj(d.context) ? d.context : {};
-  const source = s(c.source), kind = s(c.kind), code = s(d.code);
+  const cd = isObj(c.data) ? c.data : {};
+  const source = s(c.source), kind = s(c.kind), code = s(d.code), level = s(d.level) || "info";
   const named = !!b?.eventKinds?.some((x) => x.source === source && x.kind === kind);
-  const kindName = named && !isCode(line.kind) ? line.kind : rl(code) || genericEventName(source, code, (x) => sourceLabel(b, x));
-  let text = stripCodes(line.text.split(" — ").filter((t) => t && t !== kindName).join(". ")).replace(/노트북 · 노트북/g, "노트북");
-  // 정지 순서 끝 — 장비 글 "1:ok, 2:not_needed, …" 은 단계 수로("13단계 · 실행 9 · 필요 없음 4")
+  // 이름이 없는 사건(옛 묶음·옛 기록)은 출처 칸이 장비를 말하므로 이름은 '기록'(한 줄에 같은 말 두 번 없이)
+  let name = named && !isCode(line.kind) ? line.kind : rl(code) || "기록";
+  if (source === "safety" && kind === "fired") name = level === "error" || level === "critical" ? "알람" : level === "warn" ? "경고" : "안내";
+  if (source === "safety" && kind === "released") name = "해제";
+  // 내용 — 사유 이름 > 웹이 값으로 만든 글 > (둘 다 없을 때만) 장비 문장에서 코드·주소를 뺀 글
+  const webMade = code === "PROCESS_ADJUST" || (source === "process" && (
+    (kind === "state" && cd.from !== undefined) || (kind === "block" && !!cd.type) || kind === "manual"
+    || ["skip", "pause", "resume", "edit", "pause_long"].includes(kind)));
   const steps = [...s(d.message).matchAll(/(\d+):([a-z_]+)/g)].map((m) => m[2]);
+  let text = "", fromMessage = false;
   if (source === "safety" && kind === "seq_done" && steps.length) {
+    // 정지 순서 끝 — 장비 글 "1:ok, 2:not_needed, …" 은 단계 수로
     const n = (k: string) => steps.filter((x) => x === k).length;
     const other = steps.length - n("ok") - n("not_needed");
     text = `${steps.length}단계 · 실행 ${n("ok")}${n("not_needed") ? ` · 필요 없음 ${n("not_needed")}` : ""}${other ? ` · 그 밖 ${other}` : ""}`;
+  } else if (webMade) {
+    text = stripCodes(line.text).replace(/노트북 · 노트북/g, "노트북");
+  } else if (rl(code) && rl(code) !== name) {
+    text = rl(code);
+  } else if (!rl(code)) {
+    text = stripCodes(s(d.message).replace(/\s+/g, " ").replace(/\s+—\s+/g, ". ")).replace(/\b[MPD]0?\d{4,5}\b|\bD\d{2,3}\b/g, "").replace(/\(\s*\)/g, "").trim();
+    fromMessage = !!text;
   }
-  return { ...line, kind: kindName, text, source: line.source && line.source !== source ? line.source
-    : source || code ? genericEventName(source, code).replace(/ 기록$/, "").replace(/^장비$/, "") || undefined : undefined };
+  return { ...line, kind: name, text: dedupe(name, text), fromMessage, desc: (rl(code) ? rh(code) : undefined) ?? line.desc,
+           source: sourceName(source) || genericEventName(source, code).replace(/ 기록$/, "") || "장비" };
+
+  function sourceName(src: string): string {
+    if (!src) return "";
+    const l = sourceLabel(b, src);
+    return l && l !== src && l !== "안전 규칙" && !/이온 게이지/.test(l) ? l : TERM_SOURCE[src] ?? l;
+  }
 }
 
 function logLine0(b: Bundle | null, e: FeedLike): LogLine {

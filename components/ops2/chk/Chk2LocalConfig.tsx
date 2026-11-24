@@ -42,7 +42,7 @@ export default function Chk2LocalConfig({ bundle, st }: { bundle: Bundle | null;
         <p className={`${FS.body} text-[#5B6470]`}>
           설정 버전 <b className="text-[#1B1F24]">{st?.configVersion ?? "-"}</b> · 보기만 합니다. 설정을 바꾸려면 웹 화면에서 관리자로 로그인하세요.
         </p>
-        {!params.length ? <Issue level="warn">장비 정의를 아직 받지 못했습니다.</Issue> : (
+        {!params.length ? <Issue level="warn">장비 정보를 받는 중입니다.</Issue> : (
           <>
             <div className="flex flex-wrap items-center gap-2">
               <select value={g ?? ""} onChange={(e) => setGroup(e.target.value)} disabled={!!needle} aria-label="설정 묶음"
