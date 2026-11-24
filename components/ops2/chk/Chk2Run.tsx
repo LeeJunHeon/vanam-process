@@ -153,7 +153,7 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
       </p>
       {alarms.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">
-          {alarms.map((a) => <Chip key={a.ruleId} tone="alarm">{reasonText(bundle, a.code, "안전 규칙 발동")}</Chip>)}
+          {alarms.map((a) => <Chip key={a.ruleId} tone="alarm">{reasonText(bundle, a.code, "알람")}</Chip>)}
         </div>
       )}
       {lines.length ? (
@@ -161,6 +161,7 @@ function Alerts({ bundle, st, feed, onLog }: { bundle: Bundle | null; st: StateD
           {lines.map((r) => (
             <li key={r.e.id} className={`${FS.body} leading-snug`} title={r.desc}>
               <span className={`mr-1.5 tabular-nums text-[#5B6470] ${FS.small}`}>{whenText(r.e.ts)}</span>
+              <span className={`mr-1.5 text-[#5B6470] ${FS.small}`}>{r.source}</span>
               {r.level === "warn" ? <Chip tone="warn">{r.kind}</Chip> : r.level === "error" || r.level === "critical"
                 ? <Chip tone="alarm">{r.kind}</Chip> : <b className="text-[#1B1F24]">{r.kind}</b>}
               <span className={`ml-1 ${r.level === "warn" ? "text-[#B54708]" : r.level === "error" || r.level === "critical" ? "text-[#B42318]" : "text-[#5B6470]"}`}>{r.text}</span>

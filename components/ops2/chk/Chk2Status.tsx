@@ -233,7 +233,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
             <div className="flex flex-wrap gap-1.5">
               {alarms.map((a) => (
                 <Chip key={a.ruleId} tone="alarm" title={`${a.ruleId}${a.since ? ` · 시작 ${fmtKst(a.since)}` : ""}`}>
-                  {reasonText(bundle, a.code, "안전 규칙 발동")}
+                  {reasonText(bundle, a.code, "알람")}
                   {detail && <span className="font-mono font-normal">{a.ruleId}{a.code && ` · ${a.code}`}</span>}
                 </Chip>
               ))}
