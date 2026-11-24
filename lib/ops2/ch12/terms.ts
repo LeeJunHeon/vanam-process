@@ -45,7 +45,7 @@ export const STATE_FALLBACK: Record<string, { label: string; kind: "idle" | "act
 /** 옛 묶음(15 이하)·옛 기록의 옛 말 → 용어표 말. 챔버K toTerms(이온 게이지·도어·메인 밸브·건 셔터·순방향·반사·블록·로컬 …) 위에 챔버12 말 */
 const OLD_TO_NEW12: [RegExp, string][] = [
   [/플라즈마 클리닝/g, "Plasma Cleaning"], [/로드락/g, "Loadlock"], [/로터리( 펌프)?/g, "Rotary"], [/터보( 펌프)?/g, "Turbo"],
-  [/러핑 밸브/g, "RV"], [/러핑/g, "RV"], [/포어라인 밸브/g, "FV"], [/포어라인/g, "FV"], [/게이트 밸브/g, "Gate"], [/게이트/g, "Gate"],
+  [/러핑 밸브/g, "RV"], [/러핑/g, "RV"], [/포어라인 밸브/g, "FV"], [/포어라인/g, "FV"], [/게이트 ?밸브/g, "Gate"], [/게이트/g, "Gate"],
   [/벤트/g, "Vent"], [/4핀/g, "4Pin"], [/척 모터/g, "Chuck"], [/메인 셔터/g, "Main 셔터"], [/Gun 셔터 G(\d)/g, "Gun$1 셔터"],
   [/시퀀스 편집/g, "공정 순서 편집"], [/시퀀스/g, "공정 순서"], [/사건/g, "기록"],
 ];

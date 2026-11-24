@@ -388,10 +388,10 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
               tabs={[{ key: "events", label: "로그" }, { key: "commands", label: "조작 기록" }, { key: "runs", label: "공정 이력" }]} />
           )}
           {(local || logTab === "events") && <Ch12EventFeed bundle={bundle} feed={d.feed} />}
-          {!local && logTab === "commands" && <CommandLog bundle={d.bundle} commands={d.commands} />}
+          {!local && logTab === "commands" && <CommandLog bundle={d.bundle} commands={d.commands} plain />}
           {!local && logTab === "runs" && (
             <>
-              <RunList bundle={d.bundle} runs={d.runs} />
+              <RunList bundle={d.bundle} runs={d.runs} plain idInDetail />
               <Ch12History equipment={equipment} bundle={bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
             </>
           )}

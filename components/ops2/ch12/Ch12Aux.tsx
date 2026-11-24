@@ -384,7 +384,7 @@ export function RobotPanel({ bundle, st, feed }: { bundle: Ch12Bundle | null; st
         <ul className="mt-2 space-y-0.5 border-t border-[#E3E6EA] pt-2">
           {evs.map((e) => { const l = ch12LogLine(bundle, e); return (
             <li key={e.id} className={`truncate ${FS.small} ${l.level === "info" ? "text-[#5B6470]" : "text-[#B54708]"}`}>
-              <span className="tabular-nums text-[#8A929D]">{fmtKst(e.ts).slice(-8)}</span> {l.kind} {l.text}
+              <span className="tabular-nums text-[#8A929D]">{fmtKst(e.ts).slice(-8)}</span> {l.source} · {l.kind}{l.text ? ` · ${l.text}` : ""}
             </li>
           ); })}
         </ul>

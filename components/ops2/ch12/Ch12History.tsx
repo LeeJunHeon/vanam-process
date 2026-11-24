@@ -7,7 +7,10 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, History, RefreshCw } from "lucide-react";
 import { useChk2Mode } from "../chk/mode";
-import { logLine, runTitle } from "../chk/text";
+import { runTitle } from "../chk/text";
+import { byWord } from "@/lib/ops2/chk/plain";
+import { ch12LogLine } from "./Ch12Logs";
+import type { FeedItem } from "../chk/useChk2";
 import { Card } from "../chk/kit";
 import Chk2SummaryChart, { type PickField, type SummaryRow } from "../chk/Chk2SummaryChart";
 import { RUN_RESULT, reasonLabel } from "../chk/types";
@@ -80,7 +83,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
   const picked = cols ?? all.filter((f) => /pressure|_sccm$|p_w$|fwd_w|dc1_p|thickness_nm|pv$/.test(f.name)).slice(0, 5).map((f) => f.column);
   const fields = all.filter((f) => picked.includes(f.column));
   const blocks = Array.isArray(r.blocks) ? r.blocks.filter(isObj) : [];
-  const lines = d.events.map((e) => ({ e, ...logLine(asChk(bundle), { type: "event", data: { level: e.level, code: e.code, ruleId: e.ruleId, message: e.message, context: e.context } }) }))
+  const lines = d.events.map((e) => ({ e, ...ch12LogLine(bundle, { id: e.msgId, ts: e.ts, instance: "", seq: 0, type: "event", data: { level: e.level, code: e.code, ruleId: e.ruleId, message: e.message, context: e.context } } as FeedItem) }))
     .filter((x) => detail || x.main);
   const t0 = r.startedAt ? Date.parse(r.startedAt) : d.fetchedAt;
   const t1 = r.endedAt ? Date.parse(r.endedAt) : d.fetchedAt;
@@ -96,7 +99,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-4">
         {[["시작", fmtKst(r.startedAt)], ["끝", fmtKst(r.endedAt)], ["소요", r.durationS !== null ? clockOrDash(r.durationS) : "-"],
-          ["누가", r.startedBy ?? "-"], ["설정 버전", r.configVersion ?? "-"], ...(detail ? [["run id", r.runId]] : [])].map(([k, v]) => (
+          ["누가", byWord(r.startedBy) || "-"], ["설정 버전", r.configVersion ?? "-"], ...(detail ? [["run id", r.runId]] : [])].map(([k, v]) => (
           <div key={String(k)}><dt className="text-[#8A929D]">{k}</dt><dd className="truncate font-semibold text-[#1B1F24]">{String(v)}</dd></div>
         ))}
       </dl>
@@ -214,7 +217,7 @@ export default memo(function Ch12History({ equipment, bundle, refreshKey }: { eq
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">{fmtKst(r.endedAt)}</td>
                     <td className="px-2 py-1.5"><span className="font-semibold text-[#1B1F24]">{runTitle(r)}</span>
                       {detail && <span className="block font-mono text-[12px] text-[#8A929D]">{r.runId}</span>}</td>
-                    <td className="px-2 py-1.5 text-[#5B6470]">{r.startedBy ?? "-"}</td>
+                    <td className="px-2 py-1.5 text-[#5B6470]">{byWord(r.startedBy) || "-"}</td>
                     <td className="px-2 py-1.5"><ResultBadge r={r} /></td>
                     <td className="px-2 py-1.5 text-[12px] text-[#5B6470]" title={reasonTip(asChk(bundle), r.reasonCode, detail)}>{r.reasonCode ? reasonLabel(asChk(bundle), r.reasonCode) : ""}</td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">{r.durationS !== null ? clockOrDash(r.durationS) : "-"}</td>

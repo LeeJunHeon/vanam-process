@@ -5,7 +5,7 @@
 import { envOf, type BlockDef, type Cfg, type Ch12Defs, type Ch12Env } from "@/lib/ops2/ch12/blocks";
 import { paramValue } from "../chk/logic";
 import type { FeedItem } from "../chk/useChk2";
-import { STATE_FALLBACK, plcLabel, toTerms12 } from "@/lib/ops2/ch12/terms";
+import { STATE_FALLBACK, buttonName, placeName, plcLabel, toTerms12 } from "@/lib/ops2/ch12/terms";
 import {
   asChk, type ArgDef12, type Ch12Bundle, type Ch12State, type ChamberId, type ChamberState, type CommandDef12,
   type EngineState,
@@ -150,20 +150,35 @@ export function whoOf(origin: unknown, by: unknown, byName?: unknown): string {
   return origin === "web" ? `${n}(웹)` : n;
 }
 
-/** PLC 버튼 사건(장비 command/plc_button data) → 화면 로그 글: 'PLC 버튼 · CH1 벤트 켬 · 홍길동(웹)', 공정 중이면
- *  ' (CH1 공정 중 · 메인 공정(시간))', 거부·실패면 ' — 거부: 이유'(이유 = 장비 문구, 없으면 묶음 사유 이름). 계정은 상세 원시 줄에만 */
-export function plcButtonLine(b: Ch12Bundle | null, cd: Record<string, unknown>): string {
-  const who = typeof cd.who === "string" && cd.who ? cd.who : whoOf(cd.origin, cd.by, cd.by_name);
-  let t = `PLC 버튼 · ${String(cd.short || cd.target || "알 수 없는 버튼")} ${cd.on === true ? "켬" : "끔"} · ${who}`;
+/** PLC 버튼 사건(장비 command/plc_button data) → 평소 보기 로그 한 줄의 출처·내용(W-19 ⑤ — 시각 | 출처 | 이름 | 내용).
+ *  출처 = 누른 곳(웹·노트북·로봇), 이름 = 'PLC 버튼'(부르는 쪽), 내용 = 'CH1 Vent 켜기 · 홍길동', 공정 중이면 ' · 공정 중 TEST 모드'
+ *  (버튼 이름에 그 챔버가 없을 때만 'CH2 공정 중'), 거부·실패면 ' · 거부 · 사유 이름'. 같은 말이 두 번 나오지 않게(출처 '웹' 이면 이름만).
+ *  장비 문장(사유 원문·계정)은 상세 보기 원시 줄에만 */
+export function plcButtonLine(b: Ch12Bundle | null, cd: Record<string, unknown>): { source: string; text: string } {
+  const origin = String(cd.origin ?? "");
+  const source = origin === "local" ? "노트북" : origin === "robot" ? "로봇" : origin === "web" ? "웹" : "장비";
+  const by = typeof cd.by === "string" ? cd.by : "";
+  const name = origin === "web" ? ((typeof cd.by_name === "string" ? cd.by_name.trim() : "") || (by.includes("@") ? by.split("@")[0] : by)) : "";
+  const target = typeof cd.target === "string" ? cd.target : "";
+  const btn = target && b?.plcButtons?.some((x) => x.target === target) ? buttonName(b, target) : "";
+  const label = btn || (typeof cd.short === "string" && cd.short && cd.short !== target ? toTerms12(cd.short) : "모르는 대상");
+  const parts = [`${label} ${cd.on === true ? "켜기" : "끄기"}`];
+  if (name) parts.push(name);
   const p = (cd.process && typeof cd.process === "object" ? cd.process : null) as Record<string, unknown> | null;
-  if (p?.busy === true) t += ` (${String(p.chamber ?? "").toUpperCase()} 공정 중${p.block ? ` · ${String(p.block)}` : ""})`;
+  if (p?.busy === true) {
+    const ch = typeof p.chamber === "string" ? placeName(b, p.chamber) : "";
+    const blk = typeof p.block === "string" && p.block ? toTerms12(p.block) : "";
+    parts.push(`${ch && !label.startsWith(`${ch} `) ? `${ch} ` : ""}공정 중${blk ? ` ${blk}` : ""}`);
+  }
   if (cd.result === "rejected" || cd.result === "failed") {
     const code = typeof cd.reason === "string" ? cd.reason : "";
-    const why = (typeof cd.detail === "string" && cd.detail) || b?.reasons?.find((r) => r.code === code)?.label || code;
-    t += ` — ${cd.result === "rejected" ? "거부" : "실패"}${why ? `: ${why}` : ""}`;
+    const why = b?.reasons?.find((r) => r.code === code)?.label;
+    parts.push(cd.result === "rejected" ? "거부" : "실패");
+    if (why && !isCodeLike(why)) parts.push(toTerms12(why));
   }
-  return t;
+  return { source, text: parts.join(" · ") };
 }
+const isCodeLike = (t: string) => /^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(t);
 
 /** 이 장비가 PLC 버튼 사건을 내는가(묶음 eventKinds 에 command/plc_button) — 내면 PLC_BUTTON 명령 결과 줄은 상세에만(같은 일 두 줄 막기) */
 export const hasPlcEvent = (b: Ch12Bundle | null): boolean =>

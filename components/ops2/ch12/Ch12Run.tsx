@@ -349,7 +349,7 @@ export function ChamberRun(p: ChamberProps) {
           {stepping.map((t) => <p key={t}><b>가스 단계</b> · {t}</p>)}
         </div>
       )}
-      <Chk2Adjust bundle={adjBundle} st={adjSt} skewMs={p.skewMs} canKey={(kind, k) => !lock(kind, `${k}@${ch}`)}
+      <Chk2Adjust bundle={adjBundle} st={adjSt} skewMs={p.skewMs} canKey={(kind, k) => !lock(kind, `${k}@${ch}`)} plain
         onAsk={(a) => onAsk({ ...a, key: `${a.key ?? a.kind}@${ch}`, label: `${label} ${a.label}`, args: chArgs(bundle, a.kind, ch, a.args ?? {}) })} />
 
       <KeyValues bundle={bundle} st={st} ch={ch} running={running} />
