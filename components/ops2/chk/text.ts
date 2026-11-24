@@ -171,7 +171,10 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     const r = s(d.result), why = d.reasonCode ? rl(s(d.reasonCode)) : "";
     const sm = isObj(d.summary) ? d.summary : {};
     const manual = d.manual === true || sm.manual === true;
-    return { ...line, source: manual ? "수동 조작" : "공정", text: dedupe(line.kind, `${RUN_RESULT[r] ?? r}${why ? ` · ${why}` : ""}`),
+    // 사유 이름이 종류 이름과 겹치면(수동 조작 끝 · 수동 조작 끝내기) 사유는 빼고 결과만
+    const stem = line.kind.replace(/ (끝|중단)$/, "");
+    const why2 = why && !why.startsWith(stem) ? why : "";
+    return { ...line, source: manual ? "수동 조작" : "공정", text: dedupe(line.kind, `${RUN_RESULT[r] ?? r}${why2 ? ` · ${why2}` : ""}`),
              code: d.reasonCode ? s(d.reasonCode) : undefined, desc: rh(d.reasonCode) ?? line.desc };
   }
   if (e.type === "cmd_result") {
