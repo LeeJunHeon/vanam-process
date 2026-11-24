@@ -11,6 +11,7 @@
     "ops2:chat-ch12": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-chat-ch12.mjs",
     "ops2:ch12-ui": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-ch12-ui-check.mjs",
     "ops2:chk-wording": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-chk-wording.mjs",
+    "ops2:chk-feed": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-chk-feed.mjs",
     "hmi:build": "node scripts/hmi-build.mjs",
     "hmi:copy": "node scripts/hmi-copy.mjs",
     "postinstall": "prisma generate"
