@@ -57,7 +57,7 @@ export function EventFeed({ bundle, feed, fill = false, plain = false, commands 
           {shown.map((r) => (
             <p key={r.e.id} className={`flex gap-2 ${FS.small} leading-snug`} title={r.desc}>
               <span className="shrink-0 font-mono tabular-nums text-[#8A929D]">{fmtKst(r.e.ts)}</span>
-              {r.source && <span className="w-24 shrink-0 truncate text-[#5B6470]">{r.source}</span>}
+              {(r.source || plain) && <span className="w-24 shrink-0 truncate text-[#5B6470]">{r.source ?? ""}</span>}
               <span className={`flex shrink-0 items-center gap-1 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.level === "warn" ? <AlertTriangle size={11} /> : r.level === "error" || r.level === "critical" ? <AlertOctagon size={11} /> : null}{r.kind}
               </span>
