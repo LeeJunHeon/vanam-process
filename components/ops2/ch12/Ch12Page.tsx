@@ -54,8 +54,12 @@ const SEND_ERROR: Record<string, string> = {
 
 export type TabKey = "run" | "hmi" | "recipe" | "log" | "config";
 export const FEED_MAIN_KEEP12 = 1500;
-export const WEB_TABS: { key: TabKey; label: string }[] = [
-  { key: "run", label: "운전" }, { key: "hmi", label: "HMI" }, { key: "recipe", label: "레시피" }, { key: "log", label: "기록" }, { key: "config", label: "설정" },
+export const WEB_TABS: { key: TabKey; label: string; title: string }[] = [
+  { key: "run", label: "운전", title: "CH1·CH2 공정 상태·주요 값·장비 카드와 아래 칸 조작" },
+  { key: "hmi", label: "HMI", title: "장비 계통도와 PLC 버튼" },
+  { key: "recipe", label: "레시피", title: "공정·Plasma Cleaning 레시피 목록과 편집" },
+  { key: "log", label: "기록", title: "로그·조작 기록·공정 이력" },
+  { key: "config", label: "설정", title: "장비 설정 보기와 적용" },
 ];
 export const LOCAL_TABS = WEB_TABS.filter((t) => t.key === "run" || t.key === "hmi" || t.key === "log");
 
@@ -268,7 +272,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
       raf = requestAnimationFrame(() => {
         const top = Math.max(scroller ? scroller.getBoundingClientRect().top : 0, 0);
         const r = statusEl.getBoundingClientRect();
-        const next = r.bottom <= top + 1 ? { top: top + 8, left: Math.round(r.left), width: Math.round(r.width) } : null;
+        const next = r.bottom <= top + 1 ? { top, left: Math.round(r.left), width: Math.round(r.width) } : null;
         setBar((b) => (!b && !next) || (b && next && b.top === next.top && b.left === next.left && b.width === next.width) ? b : next);
       });
     };
@@ -296,7 +300,6 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
     : chipAge <= LATE_MS ? { label: `${who} 연결됨 · ${ageSec ?? 0}초 전`, tone: "neutral" }
     : chipAge <= LOST_MS ? { label: `${who} 늦음 ${ageSec}초`, tone: "warn" } : { label: `${who} 끊김 ${ageSec}초`, tone: "alarm" };
   const links: ConnInfo[] = [
-    ...(local ? [{ label: !up?.enabled ? "웹 연결 사용하지 않음" : up.connected ? "웹 연결됨" : "웹 끊김", tone: (up?.enabled && !up.connected ? "warn" : "neutral") as ConnInfo["tone"] }] : []),
     ...(neverConnected ? [] : [{ label: plcOk ? "PLC 정상" : "PLC 값 오래됨", tone: (plcOk || !connected ? "neutral" : "warn") as ConnInfo["tone"] }]),
   ];
   const runMode = d.hello.runMode;
@@ -341,7 +344,8 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
       ) : (
         <>
           {bar && statusEl && (
-            <div className="fixed z-30" style={{ top: bar.top, left: bar.left, width: bar.width }}>
+            // 스크롤 영역 맨 위에 틈 없이 붙이고 위·아래 여백(8px)까지 화면 바탕색으로 가린다(챔버K W-16 — 뒤 글자가 비치지 않게)
+            <div className="fixed z-30 bg-[#EEF0F3] pb-2 pt-2" style={{ top: bar.top, left: bar.left, width: bar.width }} data-status-bar="">
               <StatusBar12 bundle={bundle} st={st} connected={connected} lock={lock} onAsk={setAsk} />
             </div>
           )}
@@ -392,7 +396,8 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
         <div className="space-y-3">
           {!local && (
             <Tabs small value={logTab} onChange={setLogTab}
-              tabs={[{ key: "events", label: "로그" }, { key: "commands", label: "조작 기록" }, { key: "runs", label: "공정 이력" }]} />
+              tabs={[{ key: "events", label: "로그", title: "장비가 보낸 사건과 공정 진행" }, { key: "commands", label: "조작 기록", title: "웹·노트북에서 보낸 명령과 결과" },
+                { key: "runs", label: "공정 이력", title: "끝난 공정과 챔버별 공정 기록" }]} />
           )}
           {(local || logTab === "events") && <Ch12EventFeed bundle={bundle} feed={d.feed} />}
           {!local && logTab === "commands" && <CommandLog bundle={d.bundle} commands={d.commands} plain />}

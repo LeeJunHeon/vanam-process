@@ -4,13 +4,20 @@
 import { useState, type ReactNode } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { BigValue, Card, FieldValue, QBadge } from "../chk/kit";
+import { StateTag, type StateWords } from "../chk/StateTag";
 import type { BlockDef, Link } from "../chk/types";
 import { useChk2Mode } from "../chk/mode";
 import { dropPrefix, fieldTip, toTerms12 } from "@/lib/ops2/ch12/terms";
 
 type Common = { def?: BlockDef; snap?: Record<string, unknown>; link?: Link };
 
-/** 블록 하나 — big 은 위 줄에 크게, 나머지 숫자·문자 필드는 목록, bool 은 점 */
+/** 켜짐·꺼짐 / 열림·닫힘 / 감지·없음 — 필드 이름으로(밸브·셔터 = 열림/닫힘, 센서 = 감지/없음, 나머지 켜짐/꺼짐) */
+export const words12 = (name: string): StateWords =>
+  /valve|shutter|_gas_sw$|^(m|r|f)_v_|vent/.test(name) ? "open" : /sensor|water_ok|atm|_detect/.test(name) ? "detect" : "onoff";
+/** 켜지면 이상인 상태(인터락 열림·이상·과온·센서 이상·워치독 이상) — 켜짐 배지를 주의색으로 */
+export const alert12 = (name: string) => /itl_open|fault|^ot$|_err$|_alarm$/.test(name);
+
+/** 블록 하나 — big 은 위 줄에 크게, 나머지 숫자·문자 필드는 목록, bool 은 이름 + 상태 배지(StateTag — 체크박스 모양 네모 없이) */
 /** 라벨 끝의 PLC 레지스터·코일 주소 '(D119)'·'(D148/D149)'·'(D128×6)'·'(M00401)' — 개발용, '상세'에서만 */
 export const plainLabel = (label: string) => label.replace(/\s*\((?:[DM]\d+)[^)]*\)/g, "").trim() || label;
 
@@ -50,26 +57,30 @@ export function BlockCard({ def: def0, snap, link, big = [], foldable, hide = []
       right={<span className="flex items-center gap-1.5">{foldable && !open && off && <span className="text-[12px] text-[#8A929D]">꺼져 있어 접어 둠</span>}<QBadge link={link} /></span>}
     >
       {open && (
-        <>
+        <div className="@container">
           {bigs.length > 0 && (
-            <div className={`grid divide-x divide-gray-100 rounded-[10px] border border-[#E3E6EA]`}
-              style={{ gridTemplateColumns: `repeat(${bigs.length}, minmax(0, 1fr))` }}>
+            // 큰 값 칸은 좁으면 줄을 바꾼다(값·단위가 겹치지 않게 — 한 칸 최소 9rem)
+            <div className="grid rounded-[10px] border border-[#E3E6EA]"
+              style={{ gridTemplateColumns: `repeat(auto-fit, minmax(min(9rem, 100%), 1fr))` }}>
               {bigs.map((f) => <div key={f.column} className="min-w-0" title={fieldTip(def0.fields.find((x) => x.column === f.column), detail)}>
                 <BigValue f={f} v={snap?.[f.column]} dim={dimOf(f.column, f.ownQuality)} /></div>)}
             </div>
           )}
           {bools.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
-              {bools.map((f) => <FieldValue key={f.column} f={f} v={snap?.[f.column]} dim={dimOf(f.column, f.ownQuality)} />)}
+            <div className="mt-2 grid grid-cols-1 gap-x-5 gap-y-1 @[440px]:grid-cols-2">
+              {bools.map((f) => (
+                <StateTag key={f.column} on={dimOf(f.column, f.ownQuality) ? null : snap?.[f.column] === true} label={f.label}
+                  words={words12(f.name)} alert={alert12(f.name)} title={fieldTip(def0.fields.find((x) => x.column === f.column), detail)} />
+              ))}
             </div>
           )}
           {others.length > 0 && (
-            <div className="mt-2 grid grid-cols-1 gap-x-5 sm:grid-cols-2">
+            <div className="mt-2 grid grid-cols-1 gap-x-5 @[440px]:grid-cols-2">
               {others.map((f) => <FieldValue key={f.column} f={f} v={snap?.[f.column]} dim={dimOf(f.column, f.ownQuality)} />)}
             </div>
           )}
           {children}
-        </>
+        </div>
       )}
     </Card>
   );

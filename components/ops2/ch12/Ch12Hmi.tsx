@@ -13,7 +13,9 @@
 // 노드 상태 = 1초 행 plc.<코일 이름 소문자>(램프 코일이 있으면 램프). 코일 원래 이름은 '상세'에서만(마우스 올림 글).
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Lock } from "lucide-react";
-import { FS, FSPX, T, Btn, Card, Dot, StateBox, type Ask } from "../chk/kit";
+import { FS, FSPX, T, Btn, Card, type Ask } from "../chk/kit";
+import { StateBadge, StateTag } from "../chk/StateTag";
+import { words12 } from "./BlockCard";
 import { useChk2Mode } from "../chk/mode";
 import { blockLabel, chamberState, engineOf, isRunning, plcCol, plcName, short } from "./logic";
 import type { Ch12Bundle, Ch12State, PlcButtonDef12 } from "./types";
@@ -338,9 +340,10 @@ function OtherButtons(p: Props) {
                 const wait = p.plcOk && p.pending[b.target] !== undefined && p.pending[b.target] !== (p.snapshot?.[col] === true);
                 return (
                   <div key={b.target} className="flex items-center justify-between gap-2">
-                    <span className="min-w-0 truncate" title={detail ? `${b.desc || b.name || b.target} · ${col}` : undefined}>
-                      <StateBox on={p.plcOk ? lit : null} label={buttonName(p.bundle, b.target, g === "shared" ? null : placeName(p.bundle, g))} />
-                      {detail && <span className={`ml-1 font-mono ${FS.small} text-[#8A929D]`}>{b.name ?? b.target}</span>}
+                    <span className="min-w-0 flex-1" title={detail ? `${b.desc || b.name || b.target} · ${col}` : undefined}>
+                      <StateTag on={p.plcOk ? lit : null} words={words12(b.target)}
+                        label={<>{buttonName(p.bundle, b.target, g === "shared" ? null : placeName(p.bundle, g))}
+                          {detail && <span className={`ml-1 font-mono ${FS.small} text-[#8A929D]`}>{b.name ?? b.target}</span>}</>} />
                     </span>
                     <Btn size="sm" lock={p.lockOf(b.target)} onClick={() => {
                       const want = !(p.snapshot?.[col] === true);
@@ -381,7 +384,7 @@ function Lamps({ bundle, snapshot, plcOk, n, gases }: { bundle: Ch12Bundle | nul
   const off = plcOk ? itl.filter((x) => v(`${x}_인터락`) === false).length : 0;
   const lamp = (c: string) => (
     <span className="flex items-center gap-1.5" title={fieldTipOf(bundle, `plc.${c}`, detail)}>
-      <Dot on={plcOk ? v(c) === true : null} dim={!plcOk} />{fieldName(bundle, `plc.${c}`, title)}
+      {fieldName(bundle, `plc.${c}`, title)}<StateBadge on={plcOk ? v(c) === true : null} />
     </span>
   );
   return (

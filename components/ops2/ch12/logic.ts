@@ -151,8 +151,8 @@ export function whoOf(origin: unknown, by: unknown, byName?: unknown): string {
 }
 
 /** PLC 버튼 사건(장비 command/plc_button data) → 평소 보기 로그 한 줄의 출처·내용(W-19 ⑤ — 시각 | 출처 | 이름 | 내용).
- *  출처 = 누른 곳(웹·노트북·로봇), 이름 = 'PLC 버튼'(부르는 쪽), 내용 = 'CH1 Vent 켜기 · 홍길동', 공정 중이면 ' · 공정 중 TEST 모드'
- *  (버튼 이름에 그 챔버가 없을 때만 'CH2 공정 중'), 거부·실패면 ' · 거부 · 사유 이름'. 같은 말이 두 번 나오지 않게(출처 '웹' 이면 이름만).
+ *  출처 = 누른 곳(웹·노트북·로봇), 이름 = 'PLC 버튼'(부르는 쪽), 내용 = 'CH1 Vent 켜기 · 홍길동', 공정 중이면 ' · 진행 중 단계 TEST 모드'
+ *  (버튼 이름에 그 챔버가 없을 때만 'CH2 진행 중 단계 …'), 거부·실패면 ' · 거부 · 사유 이름'. 같은 말이 두 번 나오지 않게(출처 '웹' 이면 이름만).
  *  장비 문장(사유 원문·계정)은 상세 보기 원시 줄에만 */
 export function plcButtonLine(b: Ch12Bundle | null, cd: Record<string, unknown>): { source: string; text: string } {
   const origin = String(cd.origin ?? "");
@@ -168,7 +168,8 @@ export function plcButtonLine(b: Ch12Bundle | null, cd: Record<string, unknown>)
   if (p?.busy === true) {
     const ch = typeof p.chamber === "string" ? placeName(b, p.chamber) : "";
     const blk = typeof p.block === "string" && p.block ? toTerms12(p.block) : "";
-    parts.push(`${ch && !label.startsWith(`${ch} `) ? `${ch} ` : ""}공정 중${blk ? ` ${blk}` : ""}`);
+    // '공정 중 시간 기준 메인 공정' 처럼 같은 말이 두 번 나오지 않게 단계가 있으면 '진행 중 단계 <이름>'
+    parts.push(`${ch && !label.startsWith(`${ch} `) ? `${ch} ` : ""}${blk ? `진행 중 단계 ${blk}` : "공정 중"}`);
   }
   if (cd.result === "rejected" || cd.result === "failed") {
     const code = typeof cd.reason === "string" ? cd.reason : "";

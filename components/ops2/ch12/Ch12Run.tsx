@@ -43,13 +43,13 @@ type TrendCol = { title: string; unit: string; lines: [string, string | null][] 
 const TREND12: Record<Ch, TrendCol[]> = {
   ch1: [
     { title: "압력", unit: "mTorr", lines: [["ch1.mfc.pressure_mtorr", "ch1.set.pressure_mtorr"]] },
-    { title: "MFC 밸브 위치", unit: "%", lines: [["ch1.mfc.valve_pct", null]] },
+    { title: "밸브 위치", unit: "%", lines: [["ch1.mfc.valve_pct", null]] },
     { title: "가스 유량", unit: "sccm", lines: [["ch1.mfc.ar_sccm", "ch1.set.ar_sccm"], ["ch1.mfc.o2_sccm", "ch1.set.o2_sccm"]] },
     { title: "파워", unit: "W", lines: [["ch1.dcpulse.p_w", "ch1.set.dcpulse_w"], ["ch1.rfpulse.fwd_w", "ch1.set.rfpulse_w"]] },
   ],
   ch2: [
     { title: "압력", unit: "mTorr", lines: [["ch2.mfc.pressure_mtorr", "ch2.set.pressure_mtorr"]] },
-    { title: "MFC 밸브 위치", unit: "%", lines: [["ch2.mfc.valve_pct", null]] },
+    { title: "밸브 위치", unit: "%", lines: [["ch2.mfc.valve_pct", null]] },
     { title: "가스 유량", unit: "sccm", lines: [["ch2.mfc.ar_sccm", "ch2.set.ar_sccm"], ["ch2.mfc.o2_sccm", "ch2.set.o2_sccm"], ["ch2.mfc.n2_sccm", "ch2.set.n2_sccm"]] },
     { title: "파워", unit: "W", lines: [["ch2.dcpulse.p_w", "ch2.set.dcpulse_w"], ["ch2.rfpulse.fwd_w", "ch2.set.rfpulse_w"],
       ["ch2.dc.dc1_p", "ch2.set.dc_w"], ["ch2.rf.fwd_w", "ch2.set.rf_w"]] },
@@ -183,7 +183,7 @@ function Seq({ bundle, st, ch, lock, onAsk, onEditSeq, label }: {
                 now ? "bg-[#E8EEFC] font-semibold text-[#1B1F24]" : done ? "text-[#8A929D]" : "text-[#1B1F24]"}`}>
                 <span className="w-6 shrink-0 text-right tabular-nums text-[#5B6470]">{i + 1}</span>
                 <span className="min-w-0 flex-1 truncate">{blockLabel(bundle, b.type)}{b.label && b.label !== b.type && b.label !== blockLabel(bundle, b.type) ? ` · ${b.label}` : ""}</span>
-                {now && <span className="shrink-0 tabular-nums text-[#133A7C]">{paused ? "멈춤" : `남은 ${clockOrDash(cs?.remainS ?? step?.remainS)}`}</span>}
+                {now && <span className="shrink-0 tabular-nums text-[#133A7C]">{paused ? "멈춤" : typeof (cs?.remainS ?? step?.remainS) === "number" ? `남은 ${clockOrDash(cs?.remainS ?? step?.remainS)}` : "진행 중"}</span>}
                 {done && <span className={`shrink-0 ${FS.small}`}>끝남</span>}
                 {detail && <span className={`shrink-0 font-mono ${FS.small} text-[#8A929D]`}>{b.type}</span>}
               </li>
@@ -197,6 +197,12 @@ function Seq({ bundle, st, ch, lock, onAsk, onEditSeq, label }: {
 }
 
 // ───────────── 챔버 칸 ─────────────
+/** 장비 카드 계통(챔버K 장비 카드 배치와 같은 생각 — 가스·압력 / 파워 / 측정) */
+const SYSTEMS: { key: string; kinds: string[] }[] = [
+  { key: "gas", kinds: ["mfc", "ig"] },
+  { key: "power", kinds: ["dcpulse", "rfpulse", "dc", "rf"] },
+  { key: "measure", kinds: ["stm100", "oes", "rga"] },
+];
 export type ChamberProps = {
   bundle: Ch12Bundle | null; st: Ch12State | null; ch: Ch; connected: boolean; lock: LockFn; onAsk: (a: Ask) => void;
   feed: FeedItem[]; trend: TrendPt[]; nowMs: number; skewMs: number; equipment: string; local: boolean;
@@ -357,14 +363,25 @@ export function ChamberRun(p: ChamberProps) {
       <Chk2Trend trend={p.trend} equipment={p.equipment} runId={cs?.runId ?? null} local={p.local} nowMs={nowMs}
         defs={trendDefs(bundle, ch)} title={`${label} ${CARD.trend}`} />
 
-      <div className="grid grid-cols-1 gap-3">
-        {blocks.map((b) => {
-          const kind = b.name.split(".").pop() ?? "";
-          const gases = cdef?.gases ?? [];
-          const big = (BIG[kind] ?? []).filter((n) => b.fields.some((f) => f.name === n))
-            .filter((n) => kind !== "mfc" || !/_sccm$/.test(n) || gases.includes(n.split("_")[0]));        // 그 챔버 가스 라인만
-          return <BlockCard key={b.name} def={b} snap={snap} link={st?.links?.[b.name]} big={big} foldable={FOLD.has(kind)} />;
-        })}
+      {/* 장비 카드 — 챔버K 장비 카드처럼 계통별 열(가스·압력 · 파워 · 측정), 칸이 넓으면 두 열. 이름의 챔버 앞말은 뺀다 */}
+      <div className="@container">
+        <div className="grid grid-cols-1 items-start gap-3 @[720px]:grid-cols-2">
+          {SYSTEMS.map((sys) => {
+            const list = blocks.filter((b) => sys.kinds.includes(b.name.split(".").pop() ?? ""));
+            if (!list.length) return null;
+            return (
+              <div key={sys.key} className={`flex min-w-0 flex-col gap-3 ${sys.key === "measure" ? "@[720px]:col-start-1" : ""}`} data-system={sys.key}>
+                {list.map((b) => {
+                  const kind = b.name.split(".").pop() ?? "";
+                  const gases = cdef?.gases ?? [];
+                  const big = (BIG[kind] ?? []).filter((n) => b.fields.some((f) => f.name === n))
+                    .filter((n) => kind !== "mfc" || !/_sccm$/.test(n) || gases.includes(n.split("_")[0]));        // 그 챔버 가스 라인만
+                  return <BlockCard key={b.name} def={b} snap={snap} link={st?.links?.[b.name]} big={big} foldable={FOLD.has(kind)} strip={label} />;
+                })}
+              </div>
+            );
+          })}
+        </div>
       </div>
       <Spectra feed={feed} st={st} ch={ch} />
       {targets.length > 0 && (

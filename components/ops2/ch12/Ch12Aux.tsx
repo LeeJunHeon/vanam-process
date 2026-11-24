@@ -6,7 +6,8 @@
 // 값은 1초 행 블록(묶음 snapshot — ch2.heater·ch2.thk·ch2.stm100·pc.rf·tsp·tsp.ig)과 엔진 상태(state.heater·state.engines).
 import { useMemo, useState } from "react";
 import { Bot, Flame, Play, Sparkles, Square, Timer, Wrench, X } from "lucide-react";
-import { FS, Btn, Card, Chip, Dot, Empty, KV, StateBox, type Ask } from "../chk/kit";
+import { FS, Btn, Card, Chip, Empty, KV, type Ask } from "../chk/kit";
+import { StateBadge, StateTag } from "../chk/StateTag";
 import { paramValue } from "../chk/logic";
 import { useChk2Mode } from "../chk/mode";
 import type { FeedItem, SendResult } from "../chk/useChk2";
@@ -21,7 +22,7 @@ import {
   type NumRange,
 } from "./logic";
 import { asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types";
-import { CARD, blockName, commandName, dropPrefix, fieldName, fieldTipOf, ownerName, placeName, toTerms12 } from "@/lib/ops2/ch12/terms";
+import { CARD, blockName, buttonName, commandName, dropPrefix, fieldName, fieldTipOf, ownerName, placeName, toTerms12 } from "@/lib/ops2/ch12/terms";
 import type { RecipeItem as RecipeSummary } from "../chk/useRecipes";
 import { PC_FIELDS, pcRowLine } from "@/lib/ops2/ch12/pc";
 
@@ -87,16 +88,15 @@ export function HeaterStatus({ he, bundle = null }: { he: Record<string, unknown
       </div>
       <p className={`mt-1 ${FS.body} font-semibold ${badge === "FAULT" && !stale ? "text-[#B42318]" : badge === "ITL" && !stale ? "text-[#B54708]" : "text-[#1B1F24]"}`}
         data-heater-status="">{toTerms12(String(p.status_text ?? ""))}</p>
-      <div className="mt-1.5 grid grid-cols-4 gap-x-2 gap-y-1">
+      <div className="mt-1.5 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
         {LAMPS.map(([k, kind]) => {
           const col = `ch2.heater.${k}`;
           const on = he[k] === true;
           const off = stale || he.ok === null || he.ok === undefined;
           const bad = !off && (kind === "ok" ? !on : on);
           return (
-            <span key={k} title={fieldTipOf(bundle, col, detail)} className={`flex items-center gap-1.5 ${FS.small} ${bad ? "font-semibold text-[#B54708]" : "text-[#5B6470]"}`}>
-              <Dot on={off ? null : kind === "ok" ? on : on} dim={off} alert={bad && kind === "err"} />{fieldName(bundle, col, "CH2")}
-            </span>
+            <StateTag key={k} on={off ? null : on} alert={kind === "err"} words={k === "water_ok" ? "detect" : "onoff"} title={fieldTipOf(bundle, col, detail)}
+              label={<span className={bad ? "font-semibold text-[#B54708]" : ""}>{fieldName(bundle, col, "CH2")}</span>} />
           );
         })}
       </div>
@@ -130,7 +130,7 @@ export function HeaterThicknessPanel({ bundle, st, lock, onAsk, plcOk, feed = []
       right={supports && <span className={`${FS.small} text-[#5B6470]`}>히터 {supports.heater ? "사용" : "꺼짐"} · 두께 모니터 {supports.thickness ? "사용" : "꺼짐"}</span>}>
       <div className="space-y-3">
         <HeaterStatus he={he} bundle={bundle} />
-        {heat ? <BlockCard def={heat} snap={snap} link={st?.links?.["ch2.heater"]} big={["pv", "sv", "mv_pct"]} foldable startOpen={false} /> : <Missing what="히터 1초 값" />}
+        {heat ? <BlockCard def={heat} snap={snap} link={st?.links?.["ch2.heater"]} big={["pv", "sv", "mv_pct"]} foldable startOpen={false} strip={placeName(bundle, "ch2")} /> : <Missing what="히터 1초 값" />}
         {(hasKind(bundle, KINDS.heaterOnOff) || hasKind(bundle, KINDS.heaterApply)) && (
           <div className="space-y-2 rounded-[10px] border border-[#E3E6EA] p-3">
             <p className={`${FS.body} font-semibold text-[#1B1F24]`}>히터 조작</p>
@@ -157,8 +157,8 @@ export function HeaterThicknessPanel({ bundle, st, lock, onAsk, plcOk, feed = []
             {!plcOk && <p className={`${FS.small} text-[#B54708]`}>PLC 값이 오래되어 히터 조작이 잠겼습니다.</p>}
           </div>
         )}
-        {thk ? <BlockCard def={thk} snap={snap} link={st?.links?.["ch2.thk"]} big={["eff_nm", "target_nm", "remaining_nm", "pct"]} /> : <Missing what="두께 판정" />}
-        {stm && <BlockCard def={stm} snap={snap} link={st?.links?.["ch2.stm100"]} big={["thickness_nm", "rate_nm_s"]} foldable />}
+        {thk ? <BlockCard def={thk} snap={snap} link={st?.links?.["ch2.thk"]} big={["eff_nm", "target_nm", "remaining_nm", "pct"]} strip={placeName(bundle, "ch2")} /> : <Missing what="두께 판정" />}
+        {stm && <BlockCard def={stm} snap={snap} link={st?.links?.["ch2.stm100"]} big={["thickness_nm", "rate_nm_s"]} foldable strip={placeName(bundle, "ch2")} />}
         <div className="flex flex-wrap gap-2">
           {hasKind(bundle, KINDS.thkZero) && (
             <Btn lock={lock(kZero, key(kZero))} onClick={() => onAsk({ kind: kZero, key: key(kZero), label: "두께 영점", args: chArgs(bundle, kZero, "ch2"),
@@ -310,8 +310,8 @@ export function TspPanel({ bundle, st, lock, onAsk, nowMs }: Common & { nowMs: n
           <p className={`${FS.small} text-[#5B6470]`}>켜짐 {short(pv("TSP_ON_SEC"))} s / 꺼짐 {short(pv("TSP_OFF_SEC"))} s. 바꾸기는 설정의 TSP 운전에서 합니다.</p>
         </div>
         <div className="grid grid-cols-1 gap-2">
-          {tsp ? <BlockCard def={tsp} snap={snap} link={st?.links?.tsp} big={[]} /> : <Missing what="TSP" />}
-          {ig && <BlockCard def={ig} snap={snap} link={st?.links?.["tsp.ig"]} big={["pressure_torr"]} />}
+          {tsp ? <BlockCard def={tsp} snap={snap} link={st?.links?.tsp} big={[]} /> : <Missing what={placeName(bundle, "tsp")} />}
+          {ig && <BlockCard def={ig} snap={snap} link={st?.links?.["tsp.ig"]} big={["pressure_torr"]} strip={placeName(bundle, "tsp")} />}
         </div>
       </div>
     </Card>
@@ -378,7 +378,7 @@ export function RobotPanel({ bundle, st, feed }: { bundle: Ch12Bundle | null; st
     <Card title={<><Bot size={15} /> {CARD.robot}</>}>
       {r ? (
         <div className="space-y-0.5">
-          <KV k="로봇 명령 받기"><StateBox on={!!r.listening} label={r.listening ? "받는 중" : "받지 않음"} /></KV>
+          <StateTag on={!!r.listening} label="로봇 명령 받기" />
           {detail && <KV k="내부 명령 포트"><span className="font-mono">{r.apiPort ?? "—"}</span></KV>}
           <KV k="처리한 명령"><b className="tabular-nums">{r.count ?? 0}</b>건</KV>
           <KV k="처리 중">{infl.length ? `${infl.length}건 · ${infl.map((x) => robotCmd(bundle, x.cmd)).join(", ")}` : "없음"}</KV>
@@ -413,8 +413,8 @@ export function CommonOps({ bundle, st, lock, onAsk, plcOk }: Common & { plcOk: 
     <Card title={CARD.common}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <span className={`${FS.body} font-semibold text-[#1B1F24]`}>Power Select</span>
-          <StateBox on={ps} label={ps === null ? "모름" : ps ? "켜짐" : "꺼짐"} />
+          <span className={`${FS.body} font-semibold text-[#1B1F24]`}>{buttonName(bundle, "sw_power_select")}</span>
+          <StateBadge on={ps} />
           <Btn lock={lock(kPs)} onClick={() => onAsk({ kind: kPs, label: "Power Select 켜기", args: { on: true },
             note: "Power Select 출력을 켭니다. DC Pulse 사용 중이면 RF Select 는 켜지 않습니다." })}>켜기</Btn>
           <Btn lock={lock(kPs)} onClick={() => onAsk({ kind: kPs, label: "Power Select 끄기", args: { on: false },
