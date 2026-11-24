@@ -139,7 +139,7 @@ await esbuild.build({
   define: { "process.env.NEXT_PUBLIC_BASE_PATH": '""' },
   stdin: {
     resolveDir: root, loader: "ts", contents: `
-      export { default as Ch12Run, ChamberRun, TREND_DEFS12, TREND_COLS12 } from "./components/ops2/ch12/Ch12Run";
+      export { default as Ch12Run, ChamberRun, trendDefs, TREND_COLS12 } from "./components/ops2/ch12/Ch12Run";
       export { HeaterThicknessPanel, PcPanel, TspPanel, PresputterPanel, RobotPanel, CommonOps, HeaterStatus } from "./components/ops2/ch12/Ch12Aux";
       export { StatusBand12 } from "./components/ops2/ch12/Ch12Status";
       export { default as Ch12Hmi, drawnTargets, plcAsk, plcContext, plcChamber, HAZARD_TEXT } from "./components/ops2/ch12/Ch12Hmi";
@@ -436,7 +436,7 @@ const chamberProps = (ch) => ({
     ["축 맨 위 4개", { "dc.p": 300, "dc.set_w": 300, "rf.fwd_w": 299, "rf.set_w": 300 }],
     ["축 맨 아래 4개", { "dc.p": 300, "dc.set_w": 1, "rf.fwd_w": 0.5, "rf.set_w": 0.8, "rfp.fwd_w": 0.2, "rfp.set_w": 0.3 }],
     ["CH1 가스 유량 위 2·아래 2(Ar 20·목표 20, O2 1.5·목표 1.5)",
-     { "ch1.mfc.ar_sccm": 20, "ch1.set.ar_sccm": 20, "ch1.mfc.o2_sccm": 1.5, "ch1.set.o2_sccm": 1.5 }, U.TREND_DEFS12.ch1],
+     { "ch1.mfc.ar_sccm": 20, "ch1.set.ar_sccm": 20, "ch1.mfc.o2_sccm": 1.5, "ch1.set.o2_sccm": 1.5 }, U.trendDefs(bundle, "ch1")],
   ].map(([name, v, defs]) => {
     const html = renderToStaticMarkup(h(U.Chk2Trend, { trend: mk(v), equipment: "CHK2", runId: null, local: true, nowMs: t0 + 40000, defs }));
     const labs = labelYs(html), hs = svgH(html);

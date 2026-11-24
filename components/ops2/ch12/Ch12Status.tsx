@@ -13,7 +13,8 @@ import { useChk2Mode } from "../chk/mode";
 import { reasonLabel } from "../chk/types";
 import { fmtKst } from "@/lib/ops2/time";
 import { KINDS, blockLabel, chamberState, clockOrDash, engineOf, isRunning, pickKind, stateInfo } from "./logic";
-import { OWNER_LABEL, asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types";
+import { asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types";
+import { ownerName, placeName } from "@/lib/ops2/ch12/terms";
 
 export type LockFn = (kind: string, key?: string) => string | null;
 export type ConnInfo = { label: string; tone: Tone };
@@ -65,13 +66,13 @@ function ChamberCell({ bundle, st, ch, connected, nowMs }: {
   const prog = running && step && typeof step.no === "number" && typeof step.total === "number" && step.total > 0
     ? Math.min(1, Math.max(0, (step.no - 1) / step.total)) : null;
   const alarms = [...(cs?.alarms ?? []), ...(st?.alarms ?? []).filter((a) => a.chamber === ch).map((a) => a.ruleId)];
-  const label = bundle?.chambers?.find((c) => c.id === ch)?.label ?? ch.toUpperCase();
+  const label = placeName(bundle, ch);
   return (
     <div className="min-w-0 rounded-[10px] border border-[#E3E6EA] px-3 py-2" data-band-chamber={ch}>
       <p className={`flex flex-wrap items-center gap-1.5 ${FS.small} font-semibold text-[#5B6470]`}>
         <span className="rounded bg-[#3A424D] px-1.5 py-px text-white">{label}</span>
         {STATE_WORD[info.kind] ?? "대기"}
-        {cs?.owner && <span>· {OWNER_LABEL[cs.owner] ?? cs.owner}</span>}
+        {cs?.owner && <span>· {ownerName(bundle, cs.owner)}</span>}
         {cs?.paused && <Chip tone="warn" icon={<PauseCircle size={11} />}>일시정지</Chip>}
         {alarms.length > 0 && <Chip tone="alarm">알람 {alarms.length}</Chip>}
       </p>
@@ -144,9 +145,9 @@ export function StatusBand12({ bundle, st, connected, conn, links, mode, equipme
         <StopButtons12 bundle={bundle} lock={lock} onAsk={onAsk} />
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-1">
-        <Sum name="로드락" text={ll} />
-        <Sum name="플라즈마 클리닝" text={pcLine} tone={chamberState(st, "pc")?.alarms?.length ? "alarm" : "neutral"} />
-        <Sum name="TSP" text={tspLine} tone={chamberState(st, "tsp")?.alarms?.length ? "alarm" : "neutral"} />
+        <Sum name={placeName(bundle, "loadlock")} text={ll} />
+        <Sum name={placeName(bundle, "pc")} text={pcLine} tone={chamberState(st, "pc")?.alarms?.length ? "alarm" : "neutral"} />
+        <Sum name={placeName(bundle, "tsp")} text={tspLine} tone={chamberState(st, "tsp")?.alarms?.length ? "alarm" : "neutral"} />
         {glob.map((a) => (
           <Chip key={a.ruleId} tone="alarm" title={a.since ? `시작 ${fmtKst(a.since)}` : undefined}>
             {a.code ? reasonLabel(asChk(bundle), a.code) : a.ruleId}{detail && <span className="font-mono font-normal">{a.ruleId}</span>}
@@ -173,7 +174,7 @@ export function StatusBar12({ bundle, st, connected, lock, onAsk }: {
     <div className="flex items-center gap-4 whitespace-nowrap rounded-[12px] border border-[#D9DDE3] bg-white/95 px-3 py-1.5 shadow-md backdrop-blur">
       {(["ch1", "ch2"] as const).map((ch) => (
         <span key={ch} className={`min-w-0 truncate ${FS.body} ${connected ? "text-[#1B1F24]" : "text-[#8A929D]"}`}>
-          <b>{ch.toUpperCase()}</b> <span className="tabular-nums">{chamberLine(bundle, st, ch)}</span>
+          <b>{placeName(bundle, ch)}</b> <span className="tabular-nums">{chamberLine(bundle, st, ch)}</span>
         </span>
       ))}
       <span className="ml-auto"><StopButtons12 bundle={bundle} lock={lock} onAsk={onAsk} small /></span>

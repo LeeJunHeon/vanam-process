@@ -20,7 +20,8 @@ import {
   KINDS, chArgs, chamberState, checkNum, clockOrDash, engineOf, hasKind, isHHMM, isRunning, paramRange, pickKind, short, stateInfo,
   type NumRange,
 } from "./logic";
-import { OWNER_LABEL, asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types";
+import { asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types";
+import { CARD, fieldName, ownerName, placeName } from "@/lib/ops2/ch12/terms";
 import type { RecipeItem as RecipeSummary } from "../chk/useRecipes";
 import { PC_FIELDS, pcRowLine } from "@/lib/ops2/ch12/pc";
 
@@ -43,7 +44,7 @@ function ProcLine({ bundle, st, ch }: { bundle: Ch12Bundle | null; st: Ch12State
   return (
     <div className={`mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 rounded-[10px] border border-[#E3E6EA] px-3 py-2 ${FS.body}`}>
       <b className={idle ? "text-[#5B6470]" : "text-[#1B1F24]"}>{idle ? "대기" : info.label}</b>
-      {cs?.owner && <span className="text-[#5B6470]">소유 {OWNER_LABEL[cs.owner] ?? cs.owner}</span>}
+      {cs?.owner && <span className="text-[#5B6470]">{ownerName(bundle, cs.owner)}</span>}
       {cs?.step && <span className="text-[#5B6470]">{cs.step.label || (cs.step.type ? "단계" : "")}{cs.step.no != null && ` ${cs.step.no}/${cs.step.total ?? "-"}`}</span>}
       {!idle && <span className="tabular-nums">남은 <b className="text-[#133A7C]">{clockOrDash(cs?.remainS ?? cs?.step?.remainS)}</b></span>}
       {!idle && <span className="tabular-nums">ETA <b className="text-[#133A7C]">{clockOrDash(cs?.etaRemainingS)}</b></span>}
@@ -190,7 +191,7 @@ export function PcPanel({ bundle, st, lock, onAsk, recipes, getRecipe }: Common 
   };
   const rowCh = row && (Number(row.use_ch) === 2 ? 2 : Number(row.use_ch) === 1 ? 1 : null);
   return (
-    <Card title={<><Sparkles size={15} /> 플라즈마 클리닝</>}>
+    <Card title={<><Sparkles size={15} /> {placeName(bundle, "pc")}</>}>
       <ProcLine bundle={bundle} st={st} ch="pc" />
       <div className="space-y-3">
         <div className="flex flex-wrap items-end gap-2">
@@ -238,7 +239,7 @@ export function PcPanel({ bundle, st, lock, onAsk, recipes, getRecipe }: Common 
         {rf ? <BlockCard def={rf} snap={snap} link={st?.links?.["pc.rf"]} big={["fwd_w", "ref_w", "set_w"]} /> : <Missing what="PC RF" />}
         {targets.length > 0 && (
           <div className="grid grid-cols-2 gap-x-4">
-            {targets.map((f) => <KV key={f.column} k={f.label.replace("플라즈마 클리닝 ", "")}><b className="tabular-nums">{short(snap?.[f.column])}</b> {f.unit}</KV>)}
+            {targets.map((f) => <KV key={f.column} k={fieldName(bundle, f.column, placeName(bundle, "pc"))}><b className="tabular-nums">{short(snap?.[f.column])}</b> {f.unit}</KV>)}
           </div>
         )}
         <p className={`${FS.small} text-[#5B6470]`}>입력 칸 순서: {PC_FIELDS.map((f) => f.label).join(" · ")}</p>
@@ -274,7 +275,7 @@ export function TspPanel({ bundle, st, lock, onAsk, nowMs }: Common & { nowMs: n
   if (ct.value !== null) args.target = String(target.trim());
   if (cc.value !== null) args.cycles = cc.value;
   return (
-    <Card title={<><Timer size={15} /> TSP</>}>
+    <Card title={<><Timer size={15} /> {placeName(bundle, "tsp")}</>}>
       <ProcLine bundle={bundle} st={st} ch="tsp" />
       <div className="space-y-3">
         <div className="flex flex-wrap items-end gap-2">
@@ -318,7 +319,7 @@ export function TspPanel({ bundle, st, lock, onAsk, nowMs }: Common & { nowMs: n
 export function PresputterPanel({ bundle, st, lock, onAsk }: Common) {
   const kRes = pickKind(bundle, KINDS.preReserve), kCan = pickKind(bundle, KINDS.preCancel);
   return (
-    <Card title={<><Wrench size={15} /> 프리스퍼터 예약</>} right={<span className={`${FS.small} text-[#5B6470]`}>챔버마다 매일 같은 시각</span>}>
+    <Card title={<><Wrench size={15} /> {CARD.presputter}</>} right={<span className={`${FS.small} text-[#5B6470]`}>챔버마다 매일 같은 시각</span>}>
       <div className="space-y-3">
         {(["ch1", "ch2"] as const).map((ch) => <PresputterRow key={ch} bundle={bundle} st={st} ch={ch} lock={lock} onAsk={onAsk} kRes={kRes} kCan={kCan} />)}
       </div>
@@ -329,7 +330,7 @@ export function PresputterPanel({ bundle, st, lock, onAsk }: Common) {
 function PresputterRow({ bundle, st, ch, lock, onAsk, kRes, kCan }: Common & { ch: "ch1" | "ch2"; kRes: string; kCan: string }) {
   const pre = engineOf(st, ch)?.presputter as Record<string, unknown> | undefined;
   const [time, setTime] = useState(() => (typeof pre?.hhmm === "string" && isHHMM(pre.hhmm) ? pre.hhmm : "06:00"));
-  const label = ch.toUpperCase();
+  const label = placeName(bundle, ch);
   const key = (k: string) => `${k}@${ch}`;
   return (
     <div className="flex flex-wrap items-end gap-2 rounded-[10px] border border-[#E3E6EA] p-3">
@@ -365,7 +366,7 @@ export function RobotPanel({ bundle, st, feed }: { bundle: Ch12Bundle | null; st
   const last = r?.last ?? null;
   const infl = r?.inflight ?? [];
   return (
-    <Card title={<><Bot size={15} /> 로봇 연결</>}>
+    <Card title={<><Bot size={15} /> {CARD.robot}</>}>
       {r ? (
         <div className="space-y-0.5">
           <KV k="로봇 명령 받기"><StateBox on={!!r.listening} label={r.listening ? "받는 중" : "받지 않음"} /></KV>
@@ -400,7 +401,7 @@ export function CommonOps({ bundle, st, lock, onAsk, plcOk }: Common & { plcOk: 
   const ps = plcOk ? st?.snapshot?.["plc.sw_power_select"] === true : null;
   const why = reason.trim();
   return (
-    <Card title="장비 공통 조작">
+    <Card title={CARD.common}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
           <span className={`${FS.body} font-semibold text-[#1B1F24]`}>Power Select</span>

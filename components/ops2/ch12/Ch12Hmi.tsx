@@ -17,6 +17,7 @@ import { FS, FSPX, T, Btn, Card, Dot, StateBox, type Ask } from "../chk/kit";
 import { useChk2Mode } from "../chk/mode";
 import { blockLabel, chamberState, engineOf, isRunning, plcCol, plcName, short } from "./logic";
 import type { Ch12Bundle, Ch12State, PlcButtonDef12 } from "./types";
+import { CARD, buttonName, fieldName, placeName } from "@/lib/ops2/ch12/terms";
 
 const FONT = "Pretendard, system-ui, sans-serif";
 type PlcBtn = PlcButtonDef12;
@@ -54,7 +55,7 @@ export function plcContext(bundle: Ch12Bundle | null, st: Ch12State | null | und
       const step = cs?.step;
       const block = step?.label || (step?.type ? blockLabel(bundle, step.type) : "");
       const name = engineOf(st ?? null, ch)?.process_name ?? "";
-      procLine = `${ch.toUpperCase()} 공정 중 — ${[block, name].filter(Boolean).join(" · ") || "진행 중"}`;
+      procLine = `${placeName(bundle, ch)} 공정 중 — ${[block, name].filter(Boolean).join(" · ") || "진행 중"}`;
     }
   }
   const text = { ...HAZARD_TEXT, ...(bundle?.plcHazardText ?? {}) };
@@ -68,7 +69,7 @@ export function plcContext(bundle: Ch12Bundle | null, st: Ch12State | null | und
 export function plcAsk(b: PlcBtn, want: boolean, ctx?: { procLine: string | null; hazards: PlcHazard[] }): PlcAsk {
   const c = ctx ?? { procLine: null, hazards: dangerTarget(b.target) ? [{ kind: "person" as const, text: HAZARD_TEXT.person }] : [] };
   return {
-    kind: "PLC_BUTTON", label: b.short || plcName(b), detail: want ? "→ 켜기·열기" : "→ 끄기·닫기", args: { target: b.target, on: want },
+    kind: "PLC_BUTTON", label: plcName(b), detail: want ? "→ 켜기·열기" : "→ 끄기·닫기", args: { target: b.target, on: want },
     danger: c.hazards.some((h) => h.kind === "person"), red: c.hazards.length > 0 || !!c.procLine,
     plc: { target: b.target, want }, key: `PLC_BUTTON:${b.target}`,
     note: "정말 하시겠습니까? PLC 출력이 바로 바뀝니다. 공정 중에도 실행되며(잠그지 않음) 장비 로그와 그 챔버 공정 로그에 남습니다.",
@@ -157,15 +158,21 @@ function useDraw(p: Props, scale: number) {
       {text(x, y + 22 + px(30), st, { size: FSPX.small, color: stFill(t) })}
     </>);
   };
-  const shutter = (t: string, x: number, y: number, w: number, name: string) => {
+  /** 셔터 막대 — 이름·상태 한 줄, stack 이면 두 줄(좁은 Gun 셔터 셋) */
+  const shutter = (t: string, x: number, y: number, w: number, name: string, stack = false) => {
     const lamp = swCol(t), st = word(t, lamp, "open");
     return node(t, name, st, <>
-      <rect className="ring" x={x - 5} y={y - 6} width={w + 10} height={22} rx={6} fill="none" stroke={T.primary} strokeWidth={2} opacity={0} />
+      <rect className="ring" x={x - 5} y={y - 6} width={w + 10} height={stack ? 12 + px(30) : 22} rx={6} fill="none" stroke={T.primary} strokeWidth={2} opacity={0} />
       <rect x={x} y={y} width={w} height={10} rx={3} fill={fill(lamp)} stroke={stroke(t, lamp)} strokeWidth={2} strokeDasharray={dash(t)} />
-      <text x={x + w / 2} y={y + 12 + px(14)} textAnchor="middle" fontSize={px(FSPX.body)} fontFamily={FONT}>
-        <tspan fontWeight={700} fill={T.text}>{name}</tspan>
-        <tspan fontSize={px(FSPX.small)} fill={stFill(t)}> {st}</tspan>
-      </text>
+      {stack ? <>
+        {text(x + w / 2, y + 12 + px(12), name, { bold: true, size: FSPX.small })}
+        {text(x + w / 2, y + 12 + px(26), st, { size: FSPX.small, color: stFill(t) })}
+      </> : (
+        <text x={x + w / 2} y={y + 12 + px(14)} textAnchor="middle" fontSize={px(FSPX.body)} fontFamily={FONT}>
+          <tspan fontWeight={700} fill={T.text}>{name}</tspan>
+          <tspan fontSize={px(FSPX.small)} fill={stFill(t)}> {st}</tspan>
+        </text>
+      )}
     </>);
   };
   /** 사각 버튼(도어·게이트·핀·진공 준비) — 안에 이름 + 상태(램프 코일). 버튼이라 상태 글은 켜짐/꺼짐(챔버K Chk2Hmi 도어 버튼과 같은 규칙 —
@@ -191,8 +198,6 @@ function useDraw(p: Props, scale: number) {
   return { px, on, text, valve, pump, shutter, square, pipe, box, snap, btn };
 }
 
-const GAS_NAME: Record<string, string> = { ar: "Ar", o2: "O₂", n2: "N₂" };
-
 /** 챔버 하나의 계통도 */
 function ChamberMap(p: Props & { ch: "ch1" | "ch2" }) {
   const n = p.ch === "ch1" ? 1 : 2;
@@ -207,13 +212,15 @@ function ChamberMap(p: Props & { ch: "ch1" | "ch2" }) {
   const ig = snap?.[`${p.ch}.ig.pressure_torr`];
   const wp = snap?.[`${p.ch}.mfc.pressure_mtorr`];
   const vp = snap?.[`${p.ch}.mfc.valve_pct`];
+  const title = placeName(p.bundle, p.ch);
+  const nm = (t: string) => buttonName(p.bundle, t, title);          // 'CH1 MV' → 'MV'(카드 제목과 같은 앞말은 뺌)
   const CX = 300, CY = 70, CW = 190, CH = 230;          // 챔버
   const gy = (i: number) => 96 + i * 62;
   const mainGas = `main_${n}_gas_sw`;
   const anyGas = gases.some((g) => on(`${g}_${n}_gas_sw`));
   return (
     <div ref={wrap} className="min-w-0">
-      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="block h-auto w-full select-none" role="group" aria-label={`${p.ch.toUpperCase()} 계통도`}>
+      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="block h-auto w-full select-none" role="group" aria-label={`${title} ${CARD.map}`}>
         {/* 배관 — 열린 구간만 진회색 */}
         {gases.map((g, i) => <g key={`a${g}`}>{D.pipe(`M140,${gy(i) + 16} H178`, on(`${g}_${n}_gas_sw`))}</g>)}
         {gases.map((g, i) => <g key={`b${g}`}>{D.pipe(`M206,${gy(i) + 16} H226 V${170} H244`, on(`${g}_${n}_gas_sw`))}</g>)}
@@ -227,42 +234,42 @@ function ChamberMap(p: Props & { ch: "ch1" | "ch2" }) {
         {D.pipe("M450,372 V384 H540", on(`r_v_${n}_sw`))}
         {/* 챔버 — 구조만 */}
         <rect x={CX} y={CY} width={CW} height={CH} rx={14} fill="#FFFFFF" stroke={T.on} strokeWidth={2} />
-        {text(CX + CW / 2, CY + px(18), p.ch.toUpperCase(), { bold: true })}
-        {n === 2 && [1, 2, 3].map((g, i) => <g key={g}>{D.shutter(`shutter_${g}_sw`, CX + 12 + i * 60, CY + 32, 50, `G${g}`)}</g>)}
-        {D.shutter(`main_shutter_${n}_sw`, CX + 25, CY + (n === 2 ? 78 : 40), CW - 50, "Main 셔터")}
+        {text(CX + CW / 2, CY + px(18), title, { bold: true })}
+        {n === 2 && [1, 2, 3].map((g, i) => <g key={g}>{D.shutter(`shutter_${g}_sw`, CX + 12 + i * 60, CY + 32, 50, nm(`shutter_${g}_sw`), true)}</g>)}
+        {D.shutter(`main_shutter_${n}_sw`, CX + 25, CY + (n === 2 ? 84 : 40), CW - 50, nm(`main_shutter_${n}_sw`))}
         <rect x={CX + 40} y={CY + 128} width={CW - 80} height={px(16) * 2 + 12} rx={6} fill="#F5F6F8" stroke={T.border} />
         {text(CX + CW / 2, CY + 128 + 4 + px(13), "척", { bold: true })}
         {text(CX + CW / 2, CY + 128 + 4 + px(29), zpos ? { up: "위", mid: "가운데", down: "아래" }[zpos] ?? zpos : "위치 모름", { size: FSPX.small, color: T.muted })}
         {text(CX + CW / 2, CY + CH - 34, sub ? "기판 감지" : "기판 없음", { size: FSPX.small, color: sub ? T.text : T.muted })}
         {text(CX + CW / 2, CY + CH - 12, `압력 ${short(wp)} mTorr`, { size: FSPX.small, color: T.value })}
         {/* 도어 */}
-        {D.square(`door_${n}_open_sw`, CX + 4, 6, 88, "도어 열기", `door_${n}_open_lamp`)}
-        {D.square(`door_${n}_close_sw`, CX + 98, 6, 88, "도어 닫기", `door_${n}_close_lamp`)}
+        {D.square(`door_${n}_open_sw`, CX + 4, 6, 88, nm(`door_${n}_open_sw`), `door_${n}_open_lamp`)}
+        {D.square(`door_${n}_close_sw`, CX + 98, 6, 88, nm(`door_${n}_close_sw`), `door_${n}_close_lamp`)}
         {/* 가스 */}
         {gases.map((g, i) => (
           <g key={g}>
-            {D.box(8, gy(i), 132, px(13) + px(18) + 14, `${GAS_NAME[g] ?? g} MFC`,
+            {D.box(8, gy(i), 132, px(13) + px(18) + 14, fieldName(p.bundle, `${p.ch}.mfc.${g}_sccm`, title),
               text(18, gy(i) + 6 + px(13) + px(18), `${short(flow(g))} sccm`, { anchor: "start", color: T.value, bold: true }))}
-            {D.valve(`${g}_${n}_gas_sw`, 192, gy(i) + 16, GAS_NAME[g] ?? g, { side: "above" })}
+            {D.valve(`${g}_${n}_gas_sw`, 192, gy(i) + 16, nm(`${g}_${n}_gas_sw`), { side: "above" })}
           </g>
         ))}
-        {D.valve(mainGas, 258, 170, "Main 가스")}
-        {D.box(8, 330, 132, px(13) + px(18) + 14, "밸브 위치",
+        {D.valve(mainGas, 258, 170, nm(mainGas))}
+        {D.box(8, 330, 132, px(13) + px(18) + 14, fieldName(p.bundle, `${p.ch}.mfc.valve_pct`, title),
           text(18, 330 + 6 + px(13) + px(18), typeof vp === "number" && Number.isFinite(vp) ? `${short(vp)} %` : "—", { anchor: "start", color: T.value, bold: true }))}
-        {D.box(8, 390, 132, px(13) + px(18) + 14, "이온 게이지",
+        {D.box(8, 390, 132, px(13) + px(18) + 14, fieldName(p.bundle, `${p.ch}.ig.pressure_torr`, title),
           text(18, 390 + 6 + px(13) + px(18), typeof ig === "number" ? `${ig.toExponential(2)} Torr` : "—", { anchor: "start", color: T.value, bold: true }))}
         {/* 벤트·게이트 */}
-        {D.valve(`vent_${n}_sw`, 574, 110, "벤트", { lamp: `vent_${n}_lamp` })}
+        {D.valve(`vent_${n}_sw`, 574, 110, nm(`vent_${n}_sw`), { lamp: `vent_${n}_lamp` })}
         {text(620, 112, "대기", { size: FSPX.small, color: T.muted, anchor: "end" })}
-        {D.square(`g_v_${n}_open_sw`, 538, 196, 96, "게이트 열기", `g_v_${n}_open_lamp`)}
-        {D.square(`g_v_${n}_close_sw`, 538, 252, 96, "게이트 닫기", `g_v_${n}_close_lamp`)}
-        {text(586, 252 + px(32) + 30, "→ 로드락", { size: FSPX.small, color: T.muted })}
+        {D.square(`g_v_${n}_open_sw`, 538, 196, 96, nm(`g_v_${n}_open_sw`), `g_v_${n}_open_lamp`)}
+        {D.square(`g_v_${n}_close_sw`, 538, 252, 96, nm(`g_v_${n}_close_sw`), `g_v_${n}_close_lamp`)}
+        {text(586, 252 + px(32) + 30, `→ ${placeName(p.bundle, "loadlock")}`, { size: FSPX.small, color: T.muted })}
         {/* 배기 */}
-        {D.valve(`m_v_${n}_sw`, 360, 346, "M.V.", { vertical: true, side: "right" })}
-        {D.pump(`turbo_${n}_sw`, 360, 400, "Turbo")}
-        {D.valve(`f_v_${n}_sw`, 470, 400, "F.V.")}
-        {D.valve(`r_v_${n}_sw`, 450, 346, "R.V.", { vertical: true, side: "right" })}
-        {D.pump(`r_p_${n}_sw`, 566, 400, "Rotary")}
+        {D.valve(`m_v_${n}_sw`, 360, 346, nm(`m_v_${n}_sw`), { vertical: true, side: "right" })}
+        {D.pump(`turbo_${n}_sw`, 360, 400, nm(`turbo_${n}_sw`))}
+        {D.valve(`f_v_${n}_sw`, 470, 400, nm(`f_v_${n}_sw`))}
+        {D.valve(`r_v_${n}_sw`, 450, 346, nm(`r_v_${n}_sw`), { vertical: true, side: "right" })}
+        {D.pump(`r_p_${n}_sw`, 566, 400, nm(`r_p_${n}_sw`))}
       </svg>
     </div>
   );
@@ -274,20 +281,22 @@ function LoadLockMap(p: Props) {
   const [wrap, scale] = useScale(VB_W);
   const D = useDraw(p, scale);
   const { px, on, text } = D;
+  const title = placeName(p.bundle, "loadlock");
+  const nm = (t: string) => buttonName(p.bundle, t, title);          // 'Loadlock 4Pin 올림' → '4Pin 올림'
   return (
     <div ref={wrap} className="min-w-0">
-      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="block h-auto w-full select-none" role="group" aria-label="로드락 계통도">
+      <svg viewBox={`0 0 ${VB_W} ${VB_H}`} className="block h-auto w-full select-none" role="group" aria-label={`${title} ${CARD.map}`}>
         {D.pipe("M300,90 H360", on("l_vent_lamp") || on("l_vent_sw"))}
         {D.pipe("M200,130 V180 H260", on("l_r_v_sw"))}
         {D.pipe("M288,180 H370", on("l_r_v_sw") && on("l_r_p_sw"))}
         <rect x={110} y={30} width={190} height={100} rx={14} fill="#FFFFFF" stroke={T.on} strokeWidth={2} />
-        {text(205, 30 + px(18), "로드락", { bold: true })}
-        {D.square("l_pin_up_sw", 122, 30 + px(18) + 10, 80, "4핀 올림", "l_pin_up_lamp")}
-        {D.square("l_pin_down_sw", 210, 30 + px(18) + 10, 80, "4핀 내림", "l_pin_down_lamp")}
-        {D.valve("l_vent_sw", 374, 90, "벤트", { lamp: "l_vent_lamp" })}
-        {D.valve("l_r_v_sw", 274, 180, "러핑 밸브")}
-        {D.pump("l_r_p_sw", 396, 180, "Rotary")}
-        {D.square("l_vac_ready_sw", 480, 40, 140, "진공 준비", "l_vac_ready_sw")}
+        {text(205, 30 + px(18), title, { bold: true })}
+        {D.square("l_pin_up_sw", 122, 30 + px(18) + 10, 80, nm("l_pin_up_sw"), "l_pin_up_lamp")}
+        {D.square("l_pin_down_sw", 210, 30 + px(18) + 10, 80, nm("l_pin_down_sw"), "l_pin_down_lamp")}
+        {D.valve("l_vent_sw", 374, 90, nm("l_vent_sw"), { lamp: "l_vent_lamp" })}
+        {D.valve("l_r_v_sw", 274, 180, nm("l_r_v_sw"))}
+        {D.pump("l_r_p_sw", 396, 180, nm("l_r_p_sw"))}
+        {D.square("l_vac_ready_sw", 480, 40, 140, nm("l_vac_ready_sw"), "l_vac_ready_sw")}
         {text(550, 120, on("l_atm") || on("l_atm_sensor") ? "대기압 감지" : "대기압 아님", { size: FSPX.small, color: T.muted })}
         {text(550, 120 + px(16), on("l_gauge_a") ? "게이지 A 켜짐" : "게이지 A 꺼짐", { size: FSPX.small, color: T.muted })}
         {text(110, 20, "← CH1·CH2 게이트", { size: FSPX.small, color: T.muted, anchor: "start" })}
@@ -308,8 +317,6 @@ export function drawnTargets(b: Ch12Bundle | null): Set<string> {
   return new Set([...DRAWN(1, g("ch1", ["ar", "o2"])), ...DRAWN(2, g("ch2", ["ar", "o2", "n2"])), ...LL_DRAWN]);
 }
 
-const GROUP: Record<string, string> = { ch1: "CH1", ch2: "CH2", loadlock: "로드락", shared: "공통" };
-
 /** 계통도에 없는 PLC 버튼 — 한국어 이름(원래 이름은 '상세'), 켜짐 = 진회색 네모, 전환 중 = 파란 점선 */
 function OtherButtons(p: Props) {
   const { detail } = useChk2Mode();
@@ -318,11 +325,11 @@ function OtherButtons(p: Props) {
   const groups = ["ch1", "ch2", "loadlock", "shared"].map((g) => ({ g, items: list.filter((b) => (b.chamber ?? "shared") === g) })).filter((x) => x.items.length);
   if (!list.length) return null;
   return (
-    <Card title="그 밖의 PLC 버튼" right={<span className={`${FS.small} text-[#5B6470]`}>계통도에 없는 버튼</span>}>
+    <Card title={CARD.otherButtons} right={<span className={`${FS.small} text-[#5B6470]`}>계통도에 없는 버튼</span>}>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {groups.map(({ g, items }) => (
           <div key={g} className="min-w-0">
-            <p className={`mb-1.5 ${FS.small} font-semibold text-[#5B6470]`}>{GROUP[g] ?? g}</p>
+            <p className={`mb-1.5 ${FS.small} font-semibold text-[#5B6470]`}>{placeName(p.bundle, g)}</p>
             <div className="space-y-1.5">
               {items.map((b) => {
                 const col = plcCol(b);
@@ -331,7 +338,7 @@ function OtherButtons(p: Props) {
                 return (
                   <div key={b.target} className="flex items-center justify-between gap-2">
                     <span className="min-w-0 truncate" title={detail ? `${b.name ?? b.target} · ${col}` : undefined}>
-                      <StateBox on={p.plcOk ? lit : null} label={plcName(b)} />
+                      <StateBox on={p.plcOk ? lit : null} label={buttonName(p.bundle, b.target, g === "shared" ? null : placeName(p.bundle, g))} />
                       {detail && <span className={`ml-1 font-mono ${FS.small} text-[#8A929D]`}>{b.name ?? b.target}</span>}
                     </span>
                     <Btn size="sm" lock={p.lockOf(b.target)} onClick={() => {
@@ -384,7 +391,7 @@ export default function Ch12Hmi(p: Props) {
   const g = (ch: string, d: string[]) => p.bundle?.chambers?.find((c) => c.id === ch)?.gases ?? d;
   return (
     <div className="space-y-3">
-      <Card title="계통도" right={<span className={`flex items-center gap-1 ${FS.small} ${locked ? "font-semibold text-[#B54708]" : "text-[#5B6470]"}`}>
+      <Card title={CARD.map} right={<span className={`flex items-center gap-1 ${FS.small} ${locked ? "font-semibold text-[#B54708]" : "text-[#5B6470]"}`}>
         {locked && <Lock size={12} />}{p.note}</span>}>
         <div className={p.plcOk ? "" : "opacity-50"}>
           <div className="grid gap-4 min-[1280px]:grid-cols-2">

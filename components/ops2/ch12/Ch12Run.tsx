@@ -28,7 +28,8 @@ import { LocalFiles } from "./Ch12LocalFiles";
 import {
   KINDS, blockControl, blockLabel, chArgs, chamberState, clockOrDash, engineOf, hasKind, isRunning, pickKind, short, startedUpto, stateInfo,
 } from "./logic";
-import { OWNER_LABEL, asChk, type Ch12Bundle, type Ch12State } from "./types";
+import { asChk, type Ch12Bundle, type Ch12State } from "./types";
+import { blockName, fieldName, ownerName, placeName } from "@/lib/ops2/ch12/terms";
 import type { Row } from "@/lib/ops2/ch12/recipe";
 import { fmtKst } from "@/lib/ops2/time";
 
@@ -37,45 +38,56 @@ const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : n
 const fieldOf = (b: Ch12Bundle | null, col: string): FieldDef | undefined =>
   b?.snapshot?.blocks?.flatMap((x) => x.fields).find((f) => f.column === col);
 
-// ───────────── 추세 열(챔버별 — useChk2 trendCols·Chk2Trend defs, 모듈 상수라 값이 바뀌지 않는다) ─────────────
-const gasLines = (ch: Ch): [string, string, string | null][] =>
-  (ch === "ch1" ? ["ar", "o2"] : ["ar", "o2", "n2"]).map((g) => [`${ch}.mfc.${g}_sccm`, `${{ ar: "Ar", o2: "O₂", n2: "N₂" }[g]} 유량`, `${ch}.set.${g}_sccm`]);
-export const TREND_DEFS12: Record<Ch, TrendDef[]> = {
+// ───────────── 추세 열(챔버별 — useChk2 trendCols 는 모듈 상수 열, 그래프 제목·선 이름은 그릴 때 묶음에서) ─────────────
+type TrendCol = { title: string; unit: string; lines: [string, string | null][] };      // [값 열, 목표 열]
+const TREND12: Record<Ch, TrendCol[]> = {
   ch1: [
-    { title: "압력", unit: "mTorr", lines: [["ch1.mfc.pressure_mtorr", "챔버 압력", "ch1.set.pressure_mtorr"]] },
-    { title: "밸브 위치", unit: "%", lines: [["ch1.mfc.valve_pct", "MFC 밸브 위치", null]] },
-    { title: "가스 유량", unit: "sccm", lines: gasLines("ch1") },
-    { title: "파워", unit: "W", lines: [["ch1.dcpulse.p_w", "DC Pulse", "ch1.set.dcpulse_w"], ["ch1.rfpulse.fwd_w", "RF Pulse", "ch1.set.rfpulse_w"]] },
+    { title: "압력", unit: "mTorr", lines: [["ch1.mfc.pressure_mtorr", "ch1.set.pressure_mtorr"]] },
+    { title: "MFC 밸브 위치", unit: "%", lines: [["ch1.mfc.valve_pct", null]] },
+    { title: "가스 유량", unit: "sccm", lines: [["ch1.mfc.ar_sccm", "ch1.set.ar_sccm"], ["ch1.mfc.o2_sccm", "ch1.set.o2_sccm"]] },
+    { title: "파워", unit: "W", lines: [["ch1.dcpulse.p_w", "ch1.set.dcpulse_w"], ["ch1.rfpulse.fwd_w", "ch1.set.rfpulse_w"]] },
   ],
   ch2: [
-    { title: "압력", unit: "mTorr", lines: [["ch2.mfc.pressure_mtorr", "챔버 압력", "ch2.set.pressure_mtorr"]] },
-    { title: "밸브 위치", unit: "%", lines: [["ch2.mfc.valve_pct", "MFC 밸브 위치", null]] },
-    { title: "가스 유량", unit: "sccm", lines: gasLines("ch2") },
-    { title: "파워", unit: "W", lines: [["ch2.dcpulse.p_w", "DC Pulse", "ch2.set.dcpulse_w"], ["ch2.rfpulse.fwd_w", "RF Pulse", "ch2.set.rfpulse_w"],
-      ["ch2.dc.dc1_p", "DC Power", "ch2.set.dc_w"], ["ch2.rf.fwd_w", "RF Power", "ch2.set.rf_w"]] },
-    { title: "히터 온도", unit: "°C", lines: [["ch2.heater.pv", "히터", "ch2.heater.sv"]] },
+    { title: "압력", unit: "mTorr", lines: [["ch2.mfc.pressure_mtorr", "ch2.set.pressure_mtorr"]] },
+    { title: "MFC 밸브 위치", unit: "%", lines: [["ch2.mfc.valve_pct", null]] },
+    { title: "가스 유량", unit: "sccm", lines: [["ch2.mfc.ar_sccm", "ch2.set.ar_sccm"], ["ch2.mfc.o2_sccm", "ch2.set.o2_sccm"], ["ch2.mfc.n2_sccm", "ch2.set.n2_sccm"]] },
+    { title: "파워", unit: "W", lines: [["ch2.dcpulse.p_w", "ch2.set.dcpulse_w"], ["ch2.rfpulse.fwd_w", "ch2.set.rfpulse_w"],
+      ["ch2.dc.dc1_p", "ch2.set.dc_w"], ["ch2.rf.fwd_w", "ch2.set.rf_w"]] },
+    { title: "히터 온도", unit: "°C", lines: [["ch2.heater.pv", "ch2.heater.sv"]] },
   ],
 };
-export const TREND_COLS12: readonly string[] = Object.values(TREND_DEFS12).flatMap((ds) => ds.flatMap((d) => d.lines.flatMap(([a, , b]) => (b ? [a, b] : [a]))));
+export const TREND_COLS12: readonly string[] = Object.values(TREND12).flatMap((ds) => ds.flatMap((d) => d.lines.flatMap(([a, b]) => (b ? [a, b] : [a]))));
+
+/** 값 이름 — 장비 이름이 있어야 뜻이 서는 값(파워·Forward·현재 온도)은 '장비 이름 + 필드 이름'('DC Pulse 파워'·'RF Pulse Forward'), 나머지는 필드 이름 */
+const DEV_NAMED = /\.(dcpulse|rfpulse|rf|heater)\./;
+function valueName(b: Ch12Bundle | null, col: string, ch: Ch): string {
+  const f = fieldName(b, col, placeName(b, ch));
+  if (!DEV_NAMED.test(col)) return f;
+  const dev = blockName(b, col.split(".").slice(0, 2).join("."), placeName(b, ch));
+  return f.startsWith(dev) ? f : `${dev} ${f}`;
+}
+/** 추세 그래프 정의(Chk2Trend defs) — 선 이름은 묶음 필드 이름 */
+export const trendDefs = (b: Ch12Bundle | null, ch: Ch): TrendDef[] =>
+  TREND12[ch].map((d) => ({ title: d.title, unit: d.unit, lines: d.lines.map(([a, t]) => [a, valueName(b, a, ch), t] as [string, string, string | null]) }));
 
 // ───────────── 주요 값 ─────────────
-type KeyDef = { label: string; value: string; target: string | null; limit?: string; bar: boolean };
+type KeyDef = { value: string; target: string | null; limit?: string; bar: boolean };
 const keyDefs = (ch: Ch): KeyDef[] => [
-  { label: "챔버 압력", value: `${ch}.mfc.pressure_mtorr`, target: `${ch}.set.pressure_mtorr`, bar: true },
-  ...(ch === "ch1" ? ["ar", "o2"] : ["ar", "o2", "n2"]).map((g) => ({
-    label: `${{ ar: "Ar", o2: "O₂", n2: "N₂" }[g]} 유량`, value: `${ch}.mfc.${g}_sccm`, target: `${ch}.set.${g}_sccm`, bar: true })),
-  { label: "DC Pulse", value: `${ch}.dcpulse.p_w`, target: `${ch}.set.dcpulse_w`, bar: true },
-  { label: "RF Pulse", value: `${ch}.rfpulse.fwd_w`, target: `${ch}.set.rfpulse_w`, bar: true },
+  { value: `${ch}.mfc.pressure_mtorr`, target: `${ch}.set.pressure_mtorr`, bar: true },
+  ...(ch === "ch1" ? ["ar", "o2"] : ["ar", "o2", "n2"]).map((g) => ({ value: `${ch}.mfc.${g}_sccm`, target: `${ch}.set.${g}_sccm`, bar: true })),
+  { value: `${ch}.dcpulse.p_w`, target: `${ch}.set.dcpulse_w`, bar: true },
+  { value: `${ch}.rfpulse.fwd_w`, target: `${ch}.set.rfpulse_w`, bar: true },
   ...(ch === "ch2" ? [
-    { label: "DC Power", value: "ch2.dc.dc1_p", target: "ch2.set.dc_w", bar: true },
-    { label: "RF Power", value: "ch2.rf.fwd_w", target: "ch2.set.rf_w", bar: true },
-    { label: "히터", value: "ch2.heater.pv", target: "ch2.heater.sv", limit: "CH2_HEATER_MAX_TEMP", bar: true },
-    { label: "두께", value: "ch2.thk.eff_nm", target: "ch2.thk.target_nm", bar: true },
+    { value: "ch2.dc.dc1_p", target: "ch2.set.dc_w", bar: true },
+    { value: "ch2.rf.fwd_w", target: "ch2.set.rf_w", bar: true },
+    { value: "ch2.heater.pv", target: "ch2.heater.sv", limit: "CH2_HEATER_MAX_TEMP", bar: true },
+    { value: "ch2.thk.eff_nm", target: "ch2.thk.target_nm", bar: true },
   ] : []),
-  { label: "이온 게이지", value: `${ch}.ig.pressure_torr`, target: null, bar: false },
+  { value: `${ch}.ig.pressure_torr`, target: null, bar: false },
 ];
 
-function KeyTile({ d, bundle, snap }: { d: KeyDef; bundle: Ch12Bundle | null; snap?: Record<string, unknown> }) {
+function KeyTile({ d, bundle, snap, ch }: { d: KeyDef; bundle: Ch12Bundle | null; snap?: Record<string, unknown>; ch: Ch }) {
+  const name = valueName(bundle, d.value, ch);
   const f = fieldOf(bundle, d.value), tf = d.target ? fieldOf(bundle, d.target) ?? (bundle?.snapshot?.process ?? []).find((x) => x.column === d.target) : undefined;
   const v = num(snap?.[d.value]), t = d.target ? num(snap?.[d.target]) : null;
   const unit = f?.unit ?? "";
@@ -84,11 +96,11 @@ function KeyTile({ d, bundle, snap }: { d: KeyDef; bundle: Ch12Bundle | null; sn
   return (
     <Tile className="p-3">
       <div className="flex items-baseline justify-between gap-2">
-        <span className={`truncate ${FS.body} font-semibold text-[#1B1F24]`}>{d.label}</span>
+        <span className={`truncate ${FS.body} font-semibold text-[#1B1F24]`}>{name}</span>
         {t !== null && <span className={`shrink-0 ${FS.small} text-[#5B6470]`}>목표 {short(t)} {tf?.unit ?? unit}</span>}
       </div>
       <div className="mt-1"><Val text={txt.text} unit={unit} size="big" alt={txt.alt} altWarn={txt.warn} /></div>
-      {d.bar ? <div className="mt-1"><RangeBar value={v} target={t} band={null} max={max} label={`${d.label} 막대`} /></div>
+      {d.bar ? <div className="mt-1"><RangeBar value={v} target={t} band={null} max={max} label={`${name} 막대`} /></div>
         : <p className={`mt-1 ${FS.small} text-[#8A929D]`}>로그 값 — 막대 없음</p>}
     </Tile>
   );
@@ -114,7 +126,7 @@ function KeyValues({ bundle, st, ch, running }: { bundle: Ch12Bundle | null; st:
   return (
     <Card title="주요 값" right={<span className={`${FS.small} text-[#5B6470]`}>{running ? "이번 공정이 쓰는 장비" : "지원 장비"}</span>}>
       {shown.length ? (
-        <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">{shown.map((d) => <KeyTile key={d.value} d={d} bundle={bundle} snap={snap} />)}</div>
+        <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">{shown.map((d) => <KeyTile key={d.value} d={d} bundle={bundle} snap={snap} ch={ch} />)}</div>
       ) : <Empty>값을 아직 받지 못했습니다</Empty>}
       <p className={`mt-2 ${FS.small} text-[#5B6470]`}>막대: ▲ = 목표 · 세로선 = 지금</p>
     </Card>
@@ -234,7 +246,7 @@ export function ChamberRun(p: ChamberProps) {
   const running = isRunning(bundle, cs);
   const eng = engineOf(st, ch);
   const snap = st?.snapshot;
-  const label = cdef?.label ?? ch.toUpperCase();
+  const label = placeName(bundle, ch);
   const key = (k: string) => `${k}@${ch}`;
   const ask = (a: Ask) => onAsk({ ...a, key: a.key ?? key(a.kind) });
   const kStop = pickKind(bundle, KINDS.stop), kStart = pickKind(bundle, KINDS.start), kClear = pickKind(bundle, KINDS.clear), kErr = pickKind(bundle, KINDS.errClear);
@@ -267,7 +279,7 @@ export function ChamberRun(p: ChamberProps) {
             <p className={`flex flex-wrap items-center gap-1.5 ${FS.small} font-semibold text-[#5B6470]`}>
               <span className="rounded bg-[#3A424D] px-1.5 py-px text-white">{label}</span>
               {info.kind === "active" ? "가동 중" : info.kind === "stopping" ? "정지 중" : "대기"}
-              {cs?.owner && <span>· 소유 {OWNER_LABEL[cs.owner] ?? cs.owner}</span>}
+              {cs?.owner && <span>· {ownerName(bundle, cs.owner)}</span>}
               {typeof cs?.recipeRev === "number" && cs.recipeRev > 0 && <span>· 레시피 판 {cs.recipeRev}</span>}
               {cs?.paused && <Chip tone="warn"><Pause size={11} />일시정지</Chip>}
             </p>
@@ -335,7 +347,7 @@ export function ChamberRun(p: ChamberProps) {
       <KeyValues bundle={bundle} st={st} ch={ch} running={running} />
 
       <Chk2Trend trend={p.trend} equipment={p.equipment} runId={cs?.runId ?? null} local={p.local} nowMs={nowMs}
-        defs={TREND_DEFS12[ch]} title={`추세 — ${label}`} />
+        defs={trendDefs(bundle, ch)} title={`추세 — ${label}`} />
 
       <div className="grid grid-cols-1 gap-3">
         {blocks.map((b) => {
@@ -351,7 +363,7 @@ export function ChamberRun(p: ChamberProps) {
         <Card title="공정 목표값" right={<span className={`${FS.small} text-[#5B6470]`}>그 시각 엔진이 장비에 요청한 값</span>}>
           <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">
             {targets.map((f) => (
-              <KV key={f.column} k={f.label.replace(/^(CH\d|플라즈마 클리닝) /, "")} title={detail ? f.column : undefined}>
+              <KV key={f.column} k={fieldName(bundle, f.column, label)} title={detail ? f.column : undefined}>
                 <b className="tabular-nums text-[#133A7C]">{short(snap?.[f.column])}</b><span className={`ml-1 ${FS.small} text-[#5B6470]`}>{f.unit}</span>
               </KV>
             ))}

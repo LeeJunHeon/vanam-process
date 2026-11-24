@@ -16,6 +16,7 @@ import type { FeedItem } from "../chk/useChk2";
 import { fmtKst } from "@/lib/ops2/time";
 import { blockLabel, feedChamber, hasPlcEvent, plcButtonLine } from "./logic";
 import { asChk, type Ch12Bundle } from "./types";
+import { placeName } from "@/lib/ops2/ch12/terms";
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => !!v && typeof v === "object" && !Array.isArray(v);
@@ -75,10 +76,8 @@ const LevelIcon = ({ level }: { level: string }) =>
   level === "warn" ? <AlertTriangle size={11} /> : level === "error" || level === "critical" ? <AlertOctagon size={11} /> : null;
 
 export type FeedFilter = "all" | "ch1" | "ch2" | "pc" | "tsp" | "shared";
-const FILTERS: { key: FeedFilter; label: string }[] = [
-  { key: "all", label: "전체" }, { key: "ch1", label: "CH1" }, { key: "ch2", label: "CH2" }, { key: "pc", label: "플라즈마 클리닝" },
-  { key: "tsp", label: "TSP" }, { key: "shared", label: "공통" },
-];
+const FILTER_KEYS: FeedFilter[] = ["all", "ch1", "ch2", "pc", "tsp", "shared"];
+const filters = (b: Ch12Bundle | null) => FILTER_KEYS.map((key) => ({ key, label: key === "all" ? "전체" : placeName(b, key) }));
 const inFilter = (e: FeedItem, f: FeedFilter) => {
   if (f === "all") return true;
   const c = feedChamber(e);
@@ -108,7 +107,7 @@ export function Ch12EventFeed({ bundle, feed, height = "h-[28rem]" }: { bundle: 
         {onlyIssue ? <CheckSquare size={12} aria-hidden /> : <Square size={12} aria-hidden />} 경고·오류만{issues > 0 && ` ${issues}`}
       </button>
     }>
-      <div className="mb-2"><Tabs small tabs={FILTERS} value={f} onChange={setF} /></div>
+      <div className="mb-2"><Tabs small tabs={filters(bundle)} value={f} onChange={setF} /></div>
       {!shown.length ? (
         <p className={`py-6 text-center ${FS.body} text-[#8A929D]`}>{onlyIssue ? "경고·오류가 없습니다" : "로그가 없습니다 — 장비가 연결되면 쌓입니다"}</p>
       ) : (
@@ -117,7 +116,7 @@ export function Ch12EventFeed({ bundle, feed, height = "h-[28rem]" }: { bundle: 
           {shown.map((r) => (
             <p key={r.e.id} className={`flex items-start gap-2 ${FS.small} leading-snug`} title={detail ? r.raw : undefined}>
               <span className="shrink-0 tabular-nums text-[#8A929D]">{fmtKst(r.e.ts)}</span>
-              {f === "all" && <span className="w-12 shrink-0 font-semibold text-[#5B6470]">{chamberWord(feedChamber(r.e))}</span>}
+              {f === "all" && <span className="w-12 shrink-0 font-semibold text-[#5B6470]">{chamberWord(bundle, feedChamber(r.e))}</span>}
               <span className={`flex shrink-0 items-center gap-1 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 <LevelIcon level={r.level} />{r.kind}
               </span>
@@ -133,8 +132,7 @@ export function Ch12EventFeed({ bundle, feed, height = "h-[28rem]" }: { bundle: 
   );
 }
 
-const CH_WORD: Record<string, string> = { ch1: "CH1", ch2: "CH2", pc: "PC", tsp: "TSP" };
-export const chamberWord = (c: string) => CH_WORD[c] ?? "공통";
+export const chamberWord = (b: Ch12Bundle | null, c: string) => placeName(b, ["ch1", "ch2", "pc", "tsp"].includes(c) ? c : "shared");
 
 /** 챔버 칸 알림 — 이 챔버의 활성 알람 + 최근 사건(평소 보기 줄, 새것 위), '기록 전체 보기' → 기록 탭(챔버K 알림과 같은 모양) */
 export function ChamberLog({ bundle, feed, ch, alarms, onLog, max = 12 }: {

@@ -85,15 +85,4 @@ export type { Ch12BlockDef };
 export const asChk = (b: Ch12Bundle | null): Bundle | null => b as unknown as Bundle | null;
 export const asCh12 = (b: Bundle | null): Ch12Bundle | null => b as unknown as Ch12Bundle | null;
 
-/** 소유자(owner) 이름 — 1초 행 enumLabels 와 같게 */
-export const OWNER_LABEL: Record<string, string> = { robot: "로봇", web: "웹", local: "로컬" };
-
-/** 공정 상태 이름 — 묶음 states 가 비었을 때(장비 4단계 전) 대신 쓰는 이름. 장비 process_engine·pc_view·tsp_engine 의 이름 */
-export const STATE_FALLBACK: Record<string, { label: string; kind: "idle" | "active" | "stopping" }> = {
-  IDLE: { label: "대기", kind: "idle" }, idle: { label: "대기", kind: "idle" },
-  PREFLIGHT: { label: "시작 전 점검", kind: "active" }, preflight: { label: "시작 전 점검", kind: "active" },
-  RUNNING: { label: "공정 진행", kind: "active" }, run: { label: "진행", kind: "active" },
-  COOLDOWN: { label: "행 사이 대기", kind: "active" }, test: { label: "TEST", kind: "active" },
-  CLEANUP: { label: "정리 중", kind: "stopping" }, STOPPING: { label: "정지 순서", kind: "stopping" },
-  stopping: { label: "정지 중", kind: "stopping" },
-};
+// 조작 주체·공정 상태의 대신 쓰는 이름은 lib/ops2/ch12/terms.ts(OWNER·STATE_FALLBACK) 한 곳에(W-19)

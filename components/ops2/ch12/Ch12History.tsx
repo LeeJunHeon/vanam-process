@@ -15,6 +15,7 @@ import { fmtKst } from "@/lib/ops2/time";
 import { blockSummary } from "./Ch12BlockEditor";
 import { blockDefOf, blockLabel, clockOrDash } from "./logic";
 import { asChk, type Ch12Bundle } from "./types";
+import { blockName, fieldName, placeName } from "@/lib/ops2/ch12/terms";
 
 type RunItem = {
   runId: string; name: string | null; recipeName: string | null; startedBy: string | null; stepNo: number | null;
@@ -27,7 +28,7 @@ type Detail = {
   events: EventRow[]; summaries: SummaryRow[]; truncated?: { events?: boolean; summaries?: boolean };
 };
 
-const CH_LABEL: Record<string, string> = { ch1: "CH1", ch2: "CH2", pc: "플라즈마 클리닝", tsp: "TSP" };
+const CHAMBER_KEYS = ["ch1", "ch2", "pc", "tsp"] as const;
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const kstDay = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(ms));
 const LEVEL_TONE: Record<string, string> = {
@@ -48,7 +49,10 @@ function fieldsFor(b: Ch12Bundle | null, ch: string): (PickField & { blockLabel:
   const names = b?.chambers?.find((c) => c.id === ch)?.blocks ?? [];
   return (b?.snapshot?.blocks ?? []).filter((bl) => names.includes(bl.name) || bl.name.startsWith(`${ch}.`))
     .flatMap((bl) => bl.fields.filter((f) => (f.type === "float" || f.type === "int") && f.summary !== "any" && !f.detail)
-      .map((f) => ({ ...f, block: bl.name, blockLabel: bl.label, label: `${bl.label} · ${f.label}` })));
+      .map((f) => {
+        const t = placeName(b, ch), bn = blockName(b, bl.name, t), fn = fieldName(b, f.column, t);
+        return { ...f, block: bl.name, blockLabel: bn, label: fn.startsWith(bn) || bl.name.endsWith(".mfc") ? fn : `${bn} ${fn}` };
+      }));
 }
 
 function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; runId: string; bundle: Ch12Bundle | null; onBack: () => void }) {
@@ -84,7 +88,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         {back}
-        <span className="rounded bg-[#3A424D] px-1.5 py-0.5 text-[12px] font-semibold text-white">{CH_LABEL[ch] ?? ch}</span>
+        <span className="rounded bg-[#3A424D] px-1.5 py-0.5 text-[12px] font-semibold text-white">{placeName(bundle, ch)}</span>
         <b className="text-[14px] text-[#1B1F24]">{runTitle(r)}</b>
         <ResultBadge r={r} />
         {r.reasonCode && <span className="text-[12px] text-[#5B6470]">{reasonLabel(asChk(bundle), r.reasonCode)}</span>}
@@ -180,7 +184,7 @@ export default memo(function Ch12History({ equipment, bundle, refreshKey }: { eq
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#5B6470]">
             <span className="flex overflow-hidden rounded-lg border border-[#D9DDE3]">
-              {[["", "전체"], ["ch1", "CH1"], ["ch2", "CH2"], ["pc", "플라즈마 클리닝"], ["tsp", "TSP"]].map(([k, l]) => (
+              {[["", "전체"], ...CHAMBER_KEYS.map((k) => [k, placeName(bundle, k)])].map(([k, l]) => (
                 <button key={k} onClick={() => setChamber(k)} className={`px-2 py-0.5 ${chamber === k ? "bg-[#3A424D] font-semibold text-white" : "hover:bg-[#F5F6F8]"}`}>{l}</button>
               ))}
             </span>
@@ -205,7 +209,7 @@ export default memo(function Ch12History({ equipment, bundle, refreshKey }: { eq
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.runId} onClick={() => setOpen(r.runId)} className="cursor-pointer border-t border-[#E3E6EA] hover:bg-[#E8EEFC]">
-                    <td className="px-2 py-1.5"><span className="rounded bg-[#EEF0F3] px-1 text-[12px] font-semibold text-[#1B1F24]">{r.chamber ? CH_LABEL[r.chamber] ?? r.chamber : "?"}</span></td>
+                    <td className="px-2 py-1.5"><span className="rounded bg-[#EEF0F3] px-1 text-[12px] font-semibold text-[#1B1F24]">{r.chamber ? placeName(bundle, r.chamber) : "?"}</span></td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">{fmtKst(r.startedAt)}</td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">{fmtKst(r.endedAt)}</td>
                     <td className="px-2 py-1.5"><span className="font-semibold text-[#1B1F24]">{runTitle(r)}</span>

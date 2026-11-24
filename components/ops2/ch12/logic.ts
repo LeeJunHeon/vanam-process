@@ -5,8 +5,9 @@
 import { envOf, type BlockDef, type Cfg, type Ch12Defs, type Ch12Env } from "@/lib/ops2/ch12/blocks";
 import { paramValue } from "../chk/logic";
 import type { FeedItem } from "../chk/useChk2";
+import { STATE_FALLBACK, plcLabel, toTerms12 } from "@/lib/ops2/ch12/terms";
 import {
-  STATE_FALLBACK, asChk, type ArgDef12, type Ch12Bundle, type Ch12State, type ChamberId, type ChamberState, type CommandDef12,
+  asChk, type ArgDef12, type Ch12Bundle, type Ch12State, type ChamberId, type ChamberState, type CommandDef12,
   type EngineState,
 } from "./types";
 
@@ -75,7 +76,7 @@ export function engineOf(st: Ch12State | null, ch: ChamberId): EngineState | und
 export function stateInfo(b: Ch12Bundle | null, name: string | null | undefined, ch?: string): { label: string; kind: string } {
   if (!name) return { label: "상태 없음", kind: "none" };
   const s = b?.states?.find((x) => x.name === name) ?? (ch ? b?.states?.find((x) => x.name === `${ch}.${name}`) : undefined);
-  if (s) return { label: s.label, kind: s.kind };
+  if (s) return { label: toTerms12(s.label), kind: s.kind };
   const f = STATE_FALLBACK[name];
   return f ? { label: f.label, kind: f.kind } : { label: name, kind: "active" };
 }
@@ -92,8 +93,11 @@ export function isRunning(b: Ch12Bundle | null, cs: ChamberState | null): boolea
 export const blockDefOf = (b: Ch12Bundle | null, type: string | null | undefined): BlockDef | undefined =>
   type ? (b?.blocks?.defs as BlockDef[] | undefined)?.find((d) => d.type === type) : undefined;
 
-export const blockLabel = (b: Ch12Bundle | null, type: string | null | undefined): string =>
-  blockDefOf(b, type)?.label ?? type ?? "-";
+/** 단계 종류 이름 — 묶음 blocks.defs label(옛 묶음이면 용어표 말) */
+export const blockLabel = (b: Ch12Bundle | null, type: string | null | undefined): string => {
+  const l = blockDefOf(b, type)?.label;
+  return l ? toTerms12(l) : type ?? "-";
+};
 
 /** 지금 블록을 건너뛸·멈출 수 있는가(블록 정의 — 마지막 판단은 장비: SKIP_NOT_ALLOWED·PAUSE_NOT_ALLOWED) */
 export function blockControl(b: Ch12Bundle | null, cs: ChamberState | null): {
@@ -254,14 +258,8 @@ export function lockReason(c: LockCtx, kind: string, key: string = kind): string
 }
 
 // ───────────── PLC 버튼 이름 ─────────────
-/** 작업자에게 보이는 PLC 버튼 이름 — 묶음 label 끝의 코일 원래 이름 '(L_VAC_READY_SW)' 를 빼고, 이름이 같은 건 셔터는 번호를 붙인다.
- *  원래 이름은 '상세'에서만(부르는 쪽) */
-export function plcName(b: { target: string; label?: string | null; name?: string | null }): string {
-  const m = /^shutter_(\d)_sw$/.exec(b.target);
-  if (m) return `Gun${m[1]} 셔터`;
-  const t = String(b.label ?? "").replace(/\s*\([A-Za-z0-9_]+\)/g, "").trim();
-  return t || b.target;
-}
+/** 작업자에게 보이는 PLC 버튼 이름 — 묶음 label(묶음 16 'CH1 MV'), 옛 묶음 label 의 코일 이름 괄호는 뺀다(terms.plcLabel). 원래 이름은 상세 보기에서만 */
+export const plcName = plcLabel;
 
 /** 버튼의 지금 값 열 — 묶음 addr(있으면) 또는 target, plc.<소문자> */
 export const plcCol = (b: { target: string; addr?: string | null }) => `plc.${String(b.addr || b.target).toLowerCase()}`;
