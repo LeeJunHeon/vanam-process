@@ -252,6 +252,7 @@ export function ChamberRun(p: ChamberProps) {
   const ask = (a: Ask) => onAsk({ ...a, key: a.key ?? key(a.kind) });
   const kStop = pickKind(bundle, KINDS.stop), kStart = pickKind(bundle, KINDS.start), kClear = pickKind(bundle, KINDS.clear), kErr = pickKind(bundle, KINDS.errClear);
   const step = cs?.step;
+  const stepLabel = cs?.stepLabel ?? eng?.step_label ?? null;           // 장비 묶음 16 — 진행 중 동작의 화면 이름
   const eta = cs?.etaRemainingS;
   const etaAt = typeof eta === "number" && eta >= 0 ? new Date(nowMs + eta * 1000).toISOString() : null;
   const alarms = [...(cs?.alarms ?? []).map((r) => ({ ruleId: r, text: r, tip: undefined as string | undefined })),
@@ -294,7 +295,13 @@ export function ChamberRun(p: ChamberProps) {
                 {typeof step.elapsedS === "number" && <span className="text-[#5B6470]"> · 블록 경과 {clockOrDash(step.elapsedS)}</span>}
               </p>
             )}
-            {eng?.text && <p className={`truncate ${FS.body} text-[#5B6470]`}>{String(eng.text)}</p>}
+            {/* 지금 동작(W-19 ④) — 장비 묶음 16 의 화면 이름(stepLabel — 'MV 열기'·'RF Pulse 켜기 120 W'). v1 스텝 문구(엔진 text)는 상세 보기에서만 */}
+            {running && stepLabel && (
+              <p className={`truncate ${FS.body} text-[#1B1F24]`} title={fieldTipOf(bundle, `${ch}.proc.step_label`, detail)} data-step-label={ch}>
+                <span className="text-[#5B6470]">{fieldName(bundle, `${ch}.proc.step_label`, label)}</span> <b>{stepLabel}</b>
+              </p>
+            )}
+            {detail && eng?.text && <p className={`truncate font-mono ${FS.small} text-[#8A929D]`}>{String(eng.text)}</p>}
             {eng?.error && <p className={`${FS.body} font-semibold text-[#B42318]`}>{String(eng.error)}</p>}
             <p className={`${FS.body} text-[#5B6470]`}>
               {eng?.recipe_name ? <>적재 <b className="text-[#1B1F24]">{String(eng.recipe_name)}</b>

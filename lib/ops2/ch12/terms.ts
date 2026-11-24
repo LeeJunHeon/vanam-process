@@ -70,11 +70,14 @@ export function placeName(b: BundleLike, id: string): string {
 const fieldsOf = (b: BundleLike) => [...(b?.snapshot?.blocks ?? []).flatMap((x) => x.fields), ...(b?.snapshot?.process ?? [])];
 export const fieldOf = (b: BundleLike, column: string): FieldLike | undefined => fieldsOf(b).find((x) => x.column === column);
 
-/** 스냅샷 필드 이름 — 묶음 label(주소 괄호는 빼고, 옛 말이면 용어표 말). title 을 주면 그 앞말을 뺀다 */
+/** 스냅샷 필드 이름 — 묶음 label(주소 괄호는 빼고, 옛 말이면 용어표 말). title 을 주면 그 앞말을 뺀다.
+ *  묶음에 그 필드가 없으면(옛 묶음) FIELD_FALLBACK, 그것도 없으면 열 이름 */
 export function fieldName(b: BundleLike, column: string, title?: string | null): string {
   const l = fieldOf(b, column)?.label;
-  return dropPrefix(l ? tidy(l) : column, title);
+  return dropPrefix(l ? tidy(l) : FIELD_FALLBACK[column.replace(/^(ch\d|pc|tsp)\./, "")] ?? column, title);
 }
+/** 옛 묶음(15 이하)에 없는 필드의 이름 — 챔버 앞말을 뺀 열 이름 → 이름 */
+const FIELD_FALLBACK: Record<string, string> = { "proc.step_label": "진행 중 동작" };
 
 /** 장비 블록 이름(묶음 snapshot.blocks label — 'CH1 DC Pulse'). title 을 주면 그 앞말을 뺀다 */
 export function blockName(b: BundleLike, name: string, title?: string | null): string {
