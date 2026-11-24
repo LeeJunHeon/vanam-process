@@ -147,13 +147,14 @@ function VersionDetail({ v }: { v: Version }) {
   );
 }
 
-export default function Chk2Config({ equipment, bundle, st, perms, connected, reloadSchema, notify, startOpen = false, plainHead = false, term, keyInDetail = false }: {
+export default function Chk2Config({ equipment, bundle, st, perms, connected, reloadSchema, notify, startOpen = false, plainHead = false, term, keyInDetail = false, valueText }: {
   equipment: string; bundle: Bundle | null; st: StateData | null; perms: Perms | null; connected: boolean;
   reloadSchema: () => Promise<void>; notify: (n: Omit<Notice, "id" | "at">) => void;
   startOpen?: boolean;     // W-15 챔버K — 탭을 열면 바로 펼침(기본: 접힘, 지금 동작)
   plainHead?: boolean;     // W-15 챔버K — 맨 위 한 줄 "설정 버전 n · 바꾼 값은 관리자가 적용합니다"(기본: 없음)
   term?: (t: string) => string;   // W-19 CH1&2 — 설정 이름·설명을 용어표 말로(기본: 묶음 글 그대로 — 챔버K 그대로)
   keyInDetail?: boolean;          // W-19 CH1&2 — 설정 키(대문자 이름) 줄을 상세 보기에서만(기본: 늘 — 챔버K 그대로)
+  valueText?: (key: string, v: unknown) => string | null;   // W-19 CH1&2 — 지금 값·기본값 칸의 보이는 글(null 이면 원래 표시, 기본: 없음 — 챔버K 그대로)
 }) {
   const { detail } = useChk2Mode();
   const [open, setOpen] = useState(startOpen);
@@ -438,7 +439,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                             </span>
                           </td>
                           <td className="px-2 py-1.5 tabular-nums text-[#1B1F24]">
-                            {typeof nowVal(p) === "string" && p.enumLabels?.[nowVal(p) as string] ? p.enumLabels[nowVal(p) as string] : show(nowVal(p))}
+                            {valueText?.(p.key, nowVal(p)) ?? (typeof nowVal(p) === "string" && p.enumLabels?.[nowVal(p) as string] ? p.enumLabels[nowVal(p) as string] : show(nowVal(p)))}
                             {p.unit && <span className="text-[#5B6470]"> {p.unit}</span>}
                           </td>
                           <td className="px-2 py-1.5">
@@ -452,7 +453,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                             {p.enum && <p className={`${FS.small}`}>{p.enum.map((x) => p.enumLabels?.[String(x)] ?? String(x)).join(" · ")}</p>}
                             {p.pattern && <p className={`font-mono ${FS.small}`}>/{p.pattern}/</p>}
                           </td>
-                          <td className="px-2 py-1.5 tabular-nums text-[#5B6470]">{show(p.default)}</td>
+                          <td className="px-2 py-1.5 tabular-nums text-[#5B6470]">{valueText?.(p.key, p.default) ?? show(p.default)}</td>
                           <td className="px-2 py-1.5">
                             <SafetyBadge s={p.safety} title={p.safety === "H" ? "공정 중 변경 금지·관리자 전용" : undefined} />
                             <p className={`mt-0.5 ${FS.small} text-[#5B6470]`}>{APPLY_TEXT[p.apply ?? ""] ?? p.apply}</p>
