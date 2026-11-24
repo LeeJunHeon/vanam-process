@@ -176,7 +176,14 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
   const source = s(c.source), kind = s(c.kind), code = s(d.code);
   const named = !!b?.eventKinds?.some((x) => x.source === source && x.kind === kind);
   const kindName = named && !isCode(line.kind) ? line.kind : rl(code) || genericEventName(source, code, (x) => sourceLabel(b, x));
-  const text = stripCodes(line.text.split(" — ").filter((t) => t && t !== kindName).join(". ")).replace(/노트북 · 노트북/g, "노트북");
+  let text = stripCodes(line.text.split(" — ").filter((t) => t && t !== kindName).join(". ")).replace(/노트북 · 노트북/g, "노트북");
+  // 정지 순서 끝 — 장비 글 "1:ok, 2:not_needed, …" 은 단계 수로("13단계 · 실행 9 · 필요 없음 4")
+  const steps = [...s(d.message).matchAll(/(\d+):([a-z_]+)/g)].map((m) => m[2]);
+  if (source === "safety" && kind === "seq_done" && steps.length) {
+    const n = (k: string) => steps.filter((x) => x === k).length;
+    const other = steps.length - n("ok") - n("not_needed");
+    text = `${steps.length}단계 · 실행 ${n("ok")}${n("not_needed") ? ` · 필요 없음 ${n("not_needed")}` : ""}${other ? ` · 그 밖 ${other}` : ""}`;
+  }
   return { ...line, kind: kindName, text, source: line.source && line.source !== source ? line.source
     : source || code ? genericEventName(source, code).replace(/ 기록$/, "").replace(/^장비$/, "") || undefined : undefined };
 }
