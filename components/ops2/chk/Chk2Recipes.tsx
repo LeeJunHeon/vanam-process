@@ -56,7 +56,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
   bundle: Bundle | null; st: StateData | null; recipes: ReturnType<typeof useRecipes>;
   lock: LockFn; onAsk: (a: Ask) => void; notify: (n: Omit<Notice, "id" | "at">) => void;
   dirtyRef: MutableRefObject<boolean>;           // 저장 안 한 변경 — 탭·장비를 바꿀 때 화면이 묻는다
-  listOnly?: boolean;                            // 장비 정의(열)를 받지 못한 장비 — 목록 보기만
+  listOnly?: boolean;                            // 장비 정보(열)를 받지 못한 장비 — 목록 보기만
   openReq?: { id: string | null; n: number } | null;   // 운전 탭 '레시피 편집' — 이 레시피를 연다(n 이 바뀔 때마다)
 }) {
   const { detail } = useChk2Mode();
@@ -144,7 +144,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
     setSel(at >= 0 ? next.rows[at]?.uid ?? null : next.rows[0]?.uid ?? null);
     notify({ tone: c?.errors ? "warn" : "ok", title: `레시피 '${name}' 저장함`,
              text: c ? `서버 검사: 오류 ${c.errors} · 경고 ${c.warnings}${c.first ? ` — ${c.first}` : ""}${c.errors ? " · 오류를 고쳐야 적재할 수 있습니다" : ""}`
-               : "서버 검사 없음(장비 정의에 레시피 열이 없음)" });
+               : "서버 검사 없음(장비 정보에 레시피 열이 없음)" });
   };
   const cancelEdit = () => {
     if (!draft) return;
@@ -193,9 +193,9 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
     askLoadFull({ name: r.data.recipe.name, rows: r.data.recipe.rows as Row[] });
   };
   const savedWhy = !draft ? null : !draft.id ? "저장한 뒤" : dirty ? "저장한 뒤(저장 안 한 변경이 있음)" : null;
-  const loadWhy = !draft || draft.kind !== "process" ? null : !env ? "장비 정의를 기다리는 중" : savedWhy
+  const loadWhy = !draft || draft.kind !== "process" ? null : !env ? "장비 정보를 기다리는 중" : savedWhy
     ? `${savedWhy} 적재` : errCount ? `오류 ${errCount}개를 고쳐야 적재할 수 있습니다` : lock("RECIPE_LOAD");
-  const runWhy = !draft || draft.kind !== "heater" ? null : !env ? "장비 정의를 기다리는 중" : savedWhy
+  const runWhy = !draft || draft.kind !== "heater" ? null : !env ? "장비 정보를 기다리는 중" : savedWhy
     ? `${savedWhy} 실행` : errCount ? `오류 ${errCount}개를 고쳐야 실행할 수 있습니다` : lock("HEATER_RECIPE_RUN");
   const rowWhy = (i: number): string | null => {
     const rc = pCheck?.rows[i];
@@ -248,11 +248,11 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
       {outdated && (
         <Issue level="warn">
           {(bundle?.version ?? 0) > GOLDEN_EXPORT_VERSION
-            ? `웹 검사 기준이 장비보다 옛것이라 장비 판단만 믿을 것(웹 검사 v${GOLDEN_EXPORT_VERSION}, 장비 정의 v${bundle?.version})`
-            : `장비 정의가 웹 검사 기준보다 옛것이라 장비 판단만 믿을 것(장비 정의 v${bundle?.version}, 웹 검사 v${GOLDEN_EXPORT_VERSION})`}
+            ? `웹 검사 기준이 장비보다 옛것이라 장비 판단만 믿을 것(웹 검사 v${GOLDEN_EXPORT_VERSION}, 장비 정보 v${bundle?.version})`
+            : `장비 정보가 웹 검사 기준보다 옛것이라 장비 판단만 믿을 것(장비 정보 v${bundle?.version}, 웹 검사 v${GOLDEN_EXPORT_VERSION})`}
         </Issue>
       )}
-      {!env && bundle && <p className={`${FS.small} text-[#5B6470]`}>장비 정의에 레시피 열이 없어 웹 검사를 하지 않고 장비 판단만 씁니다.</p>}
+      {!env && bundle && <p className={`${FS.small} text-[#5B6470]`}>장비 정보에 레시피 열이 없어 웹 검사를 하지 않고 장비 판단만 씁니다.</p>}
       {recipes.error && <Issue level="alarm">{recipes.error}</Issue>}
     </>
   );
@@ -360,7 +360,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
                     <td className="px-3 py-2 text-[#5B6470]">{KIND[r.kind]}</td>
                     <td className="px-3 py-2 text-right tabular-nums text-[#1B1F24]">{r.rowCount}</td>
                     <td className="max-w-[18rem] truncate px-3 py-2 text-[#5B6470]" title={r.check?.first ?? undefined}>
-                      {r.check?.errors && r.check.first ? r.check.first : `${r.updatedBy}${detail && r.bundleVersion ? ` · 장비 정의 v${r.bundleVersion}` : ""}`}
+                      {r.check?.errors && r.check.first ? r.check.first : `${r.updatedBy}${detail && r.bundleVersion ? ` · 장비 정보 v${r.bundleVersion}` : ""}`}
                     </td>
                     <td className="px-3 py-2">
                       {!r.check ? <Chip>검사 없음</Chip> : r.check.errors ? <Chip tone="alarm">오류 {r.check.errors}</Chip>

@@ -163,7 +163,7 @@ export function RunList({ bundle, runs, plain = false }: {
 }) {
   const { detail } = useChk2Mode();
   return (
-    <Card title="런 이력">
+    <Card title={plain ? "공정 이력" : "런 이력"}>
       {!runs.length ? (
         <p className={`py-5 text-center ${FS.body} text-[#8A929D]`}>기록된 공정이 없습니다</p>
       ) : (

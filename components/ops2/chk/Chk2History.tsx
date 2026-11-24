@@ -203,7 +203,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
         <section>
           <h4 className={`mb-1 ${FS.body} font-bold text-[#1B1F24]`}>레시피 값</h4>
           {pText.length ? <p className={`${FS.small} leading-relaxed text-[#1B1F24]`}>{pText.join(" · ")}</p>
-            : <p className={`${FS.small} text-[#5B6470]`}>{exp.length ? "블록 행(아래 블록 기록)" : "없음"}</p>}
+            : <p className={`${FS.small} text-[#5B6470]`}>{exp.length ? "단계로 된 행 · 아래 단계 기록" : "없음"}</p>}
           {detail && params.length > 0 && (
             <p className={`mt-1 ${FS.small} leading-relaxed text-[#5B6470]`}>
               {params.map(([k, v]) => <span key={k} className="mr-2 inline-block font-mono">{k} {typeof v === "object" ? JSON.stringify(v) : String(v)}</span>)}
@@ -213,7 +213,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
             <div className="min-w-0">
               <h4 className={`mb-1 ${FS.body} font-bold text-[#1B1F24]`}>원래 순서(판 1 · {exp.length}개)</h4>
               {exp.length ? <div className="max-h-96 overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2"><ExpandedView exp={exp} bundle={bundle} showParams /></div>
-                : <p className={`${FS.small} text-[#5B6470]`}>블록 기록 없음</p>}
+                : <p className={`${FS.small} text-[#5B6470]`}>단계 기록 없음</p>}
             </div>
             <div className="min-w-0">
               <h4 className={`mb-1 ${FS.body} font-bold text-[#1B1F24]`}>실제 실행{executed.length ? `(${executed.length}개)` : ""}</h4>
@@ -230,7 +230,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
                     </li>
                   ))}
                 </ol>
-              ) : <p className={`${FS.small} text-[#5B6470]`}>{r.endedAt ? "실행 기록 없음(장비 정의 13 이전 공정)" : "공정이 끝나면 실행된 순서가 남습니다"}</p>}
+              ) : <p className={`${FS.small} text-[#5B6470]`}>{r.endedAt ? "실행 기록 없음 · 옛 장비 프로그램의 공정" : "공정이 끝나면 실행된 순서가 남습니다"}</p>}
               {summary && (
                 <p className={`mt-1 ${FS.small} text-[#5B6470]`}>
                   마지막 판 {summary.revision ?? 1} · 건너뜀 {summary.skips ?? 0}번 · 일시정지 {summary.pauses ?? 0}번

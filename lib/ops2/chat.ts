@@ -159,7 +159,7 @@ function startFields(params: Obj, blocks: Blk[]): [string, string][] {
   const ht = p.use_heater === true ? num(p.heater_temp) : num(hr?.target_c);
   if (ht !== null && ht > 0) {
     const ramp = num(p.heater_ramp) ?? num(hr?.ramp_c_per_min);
-    out.push(["히터", `${n0(ht)} °C${ramp ? ` (램프 ${n0(ramp)} °C/min)` : ""}`]);
+    out.push(["히터", `${n0(ht)} °C${ramp ? ` (승온 ${n0(ramp)} °C/min)` : ""}`]);
   }
   return out;
 }

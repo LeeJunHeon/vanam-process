@@ -28,7 +28,10 @@ const LABEL: Record<string, string> = {
   "process.skip_wait": "지금 대기 끝내기",
 };
 
-const nameOf = (it: AdjustItemDef) => it.label || LABEL[it.key] || it.key;
+const nameOf = (it: AdjustItemDef, plain = false) => {
+  const n = it.label || LABEL[it.key] || it.key;
+  return plain ? n.replace("램프", "승온") : n;      // W-17 챔버K(plain) — 용어표 말
+};
 
 const SCOPE: Record<AdjustState["scope"], { text: string; tone: string; send: boolean }> = {
   live: { text: "지금 쓰는 중이라 바로 적용", tone: "bg-[#F5F6F8] text-[#5B6470]", send: true },
@@ -69,21 +72,22 @@ function deviceTime(t: number | null | undefined, skewMs: number): string {
 }
 
 /** 화면에 보일 쓰는 곳 — 장비 값이 없으면(5-12 이전 장비) 모름, 보내기는 장비가 판단 */
-function whereOf(a: AdjustState | undefined): { text: string; tone: string; send: boolean } {
+function whereOf(a: AdjustState | undefined, plain = false): { text: string; tone: string; send: boolean } {
   if (!a) return { text: "장비가 지금 값을 보내지 않음", tone: "bg-[#F5F6F8] text-[#5B6470]", send: true };
   if (a.busy) return { text: "RF Pulse 가 시작하는 중이라 끝난 뒤에 할 수 있음", tone: "bg-[#EEF3FF] text-[#1D4ED8]", send: false };
-  return SCOPE[a.scope] ?? { text: a.scope, tone: "bg-[#F5F6F8] text-[#5B6470]", send: true };
+  const w = SCOPE[a.scope] ?? { text: a.scope, tone: "bg-[#F5F6F8] text-[#5B6470]", send: true };
+  return plain ? { ...w, text: w.text.replace(/블록/g, "단계") } : w;       // W-17 챔버K(plain) — 운전 화면은 단계
 }
 
-function Row({ it, bundle, a, skewMs, canSend, onSend }: {
-  it: AdjustItemDef; bundle: Bundle | null; a: AdjustState | undefined; skewMs: number;
+function Row({ it, bundle, a, skewMs, canSend, onSend, plain }: {
+  it: AdjustItemDef; bundle: Bundle | null; a: AdjustState | undefined; skewMs: number; plain?: boolean;
   canSend: boolean; onSend: (v: number | boolean, now: number | null) => void;
 }) {
   const [text, setText] = useState("");
   const { detail } = useChk2Mode();
   const r = itemRange(bundle, it.param);
   const chk = checkText(text, it.param, r);
-  const where = whereOf(a);
+  const where = whereOf(a, plain);
   const isBool = it.param.type === "bool";
   const now = a ? num(a.value) : null;
   const changed = !!a?.adjusted && !isBool && a.value !== a.recipe;
@@ -91,7 +95,7 @@ function Row({ it, bundle, a, skewMs, canSend, onSend }: {
   return (
     <tr className="border-t border-[#E3E6EA] align-top">
       <td className="px-2 py-1.5">
-        <p className={`${FS.body} font-semibold text-[#1B1F24]`}>{nameOf(it)}</p>
+        <p className={`${FS.body} font-semibold text-[#1B1F24]`}>{nameOf(it, plain)}</p>
         {it.help && <p className={`max-w-xs ${FS.small} text-[#5B6470]`}>{it.help}</p>}
         {detail && <p className={`font-mono ${FS.small} text-[#5B6470]`}>{it.device}.{it.item}</p>}
       </td>
@@ -132,9 +136,10 @@ function Row({ it, bundle, a, skewMs, canSend, onSend }: {
   );
 }
 
-export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk }: {
+export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk, plain = false }: {
   bundle: Bundle | null; st: StateData | null; skewMs: number;
   canKey: (kind: string, key: string) => boolean; onAsk: (a: Ask) => void;
+  plain?: boolean;          // W-17 챔버K — 블록 → 단계, 램프 → 승온(기본은 지금 동작 — CH1&2 그대로)
 }) {
   const [open, setOpen] = useState(false);
   const [openUnused, setOpenUnused] = useState(false);
@@ -161,13 +166,13 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk }: {
               const key = `PROCESS_ADJUST:${it.key}`;
               const a = of(it);
               return (
-                <Row key={it.key} it={it} bundle={bundle} a={a} skewMs={skewMs}
+                <Row key={it.key} it={it} bundle={bundle} a={a} skewMs={skewMs} plain={plain}
                   canSend={canKey("PROCESS_ADJUST", key)}
                   onSend={(v, now) => onAsk({
-                    kind: "PROCESS_ADJUST", key, label: `공정 중 수정 · ${nameOf(it)}`,
+                    kind: "PROCESS_ADJUST", key, label: `공정 중 수정 · ${nameOf(it, plain)}`,
                     detail: typeof v === "boolean" ? "" : `${fmt(now)} → ${fmt(v)} ${it.param.unit ?? ""}`,
                     args: { device: it.device, item: it.item, value: v }, red: true,
-                    lines: [`이번 공정${detail && runId ? `(run ${runId})` : ""}의 값만 바뀝니다. 레시피·설정은 그대로입니다`, whereOf(a).text,
+                    lines: [`이번 공정${detail && runId ? `(run ${runId})` : ""}의 값만 바뀝니다. 레시피·설정은 그대로입니다`, whereOf(a, plain).text,
                             ...(it.help ? [it.help] : []), ...(detail && it.whenLive ? [`바로 적용 조건: ${it.whenLive}`] : [])],
                     note: detail && it.apply ? `장비 동작: ${it.apply}` : undefined,
                   })} />
@@ -182,7 +187,7 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk }: {
     <Card title={
       <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 items-center gap-1.5" aria-expanded={open}>
         {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<SlidersHorizontal size={15} /> <span className="shrink-0 whitespace-nowrap">공정 중 값 바꾸기</span>
-        <span className={`min-w-0 truncate text-left ${FS.body} font-normal text-[#5B6470]`}>— {using.length ? using.map(nameOf).join(" · ") : "지금 바꿀 수 있는 항목 없음"}</span>
+        <span className={`min-w-0 truncate text-left ${FS.body} font-normal text-[#5B6470]`}>— {using.length ? using.map((x) => nameOf(x, plain)).join(" · ") : "지금 바꿀 수 있는 항목 없음"}</span>
       </button>}
       right={<span className={`${FS.small} text-[#5B6470]`}>이번 공정에만 · 레시피·설정은 그대로</span>}>
       {open && (

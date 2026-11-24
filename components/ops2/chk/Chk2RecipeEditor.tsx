@@ -251,7 +251,7 @@ function BlockRowPanes({ row, rc, env, bundle, readOnly, onRow, startWhy, onStar
   const [sel, setSel] = useState<string | null>(() => tree[0]?.uid ?? null);
   const [preview, setPreview] = useState(false);
   const errors = rc?.errors ?? [], warnings = rc?.warnings ?? [];
-  if (!env) return <div className="lg:col-span-2"><Empty>이 장비 정의에는 블록 정의가 없어(옛 장비) 블록 공정을 고칠 수 없습니다.</Empty></div>;
+  if (!env) return <div className="lg:col-span-2"><Empty>이 장비 정보에는 블록 정의가 없어(옛 장비) 블록 공정을 고칠 수 없습니다.</Empty></div>;
   const commit = (next: EBlock[]) => { setTree(next); onRow({ ...row.data, blocks: next.map(toJson) }); };
   const act = (a: "up" | "down" | "copy" | "delete") => { if (!sel) return; const r = treeAct(tree, sel, a, sel); commit(r.tree); setSel(r.sel); };
   const t = rc?.expanded ? expectedTime(rc.expanded) : null;
