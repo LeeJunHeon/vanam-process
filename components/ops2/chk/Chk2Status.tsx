@@ -17,7 +17,7 @@ import { paramValue } from "./logic";
 import { HEATER_OWNER, GAS_STATE, RUN_RESULT, stateLabel, type Bundle, type RunBlock, type RunRow, type StateData } from "./types";
 import { reasonText } from "./logView";
 import { byWord } from "@/lib/ops2/chk/plain";
-import { MODE_NAME, fieldName } from "@/lib/ops2/chk/terms";
+import { MODE_NAME, fieldName, stepName } from "@/lib/ops2/chk/terms";
 
 // 지난 공정이 남긴 출력(state.left 키) → 이름은 묶음 스냅샷 필드에서(terms.fieldName — 옛 묶음이면 용어표 이름)
 const LEFT_COLUMN: Record<string, string> = {
@@ -158,7 +158,8 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
           {active && st && !manual && (
             <p className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 ${FS.body} text-[#1B1F24]`}>
               {step && <span className="tabular-nums text-[#5B6470]">단계 {step.no}/{step.total}</span>}
-              <b>{blockTitle(bundle, st, v1Row)}</b>
+              <b>{v1Row || !st.step?.type || st.procState === "CSV_DELAY" || st.run?.current === "delay" ? blockTitle(bundle, st, v1Row)
+                : stepName(bundle, { type: st.step.type, label: st.step.label })}</b>
               {target && <span className="text-[#5B6470]">{target}</span>}
               {progText && <span className="font-semibold tabular-nums text-[#133A7C]">{progText}</span>}
             </p>
