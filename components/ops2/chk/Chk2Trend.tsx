@@ -189,7 +189,7 @@ const trendDefs = (pressureTarget: string): TrendDef[] => [
   // 압력 목표선 = pressureTarget(묶음 16 은 선택된 설정점의 값 mfc.sp_sel_mtorr, 옛 장비는 mfc.sp_mtorr)
   { title: "압력", unit: "mTorr", lines: [["mfc.pressure_mtorr", "챔버 압력", pressureTarget]] },
   // 밸브 위치(묶음 15) — 압력과 단위가 달라 그림을 따로(한 그래프 = 단위 하나), 압력 바로 아래
-  { title: "밸브 위치", unit: "%", lines: [["mfc.valve_pct", "MFC 밸브 위치", null]] },
+  { title: "MFC 밸브 위치", unit: "%", lines: [["mfc.valve_pct", "MFC 밸브 위치", null]] },
   { title: "파워", unit: "W", lines: [["dc.p", "DC Power", "dc.set_w"], ["rf.fwd_w", "RF Power", "rf.set_w"], ["rfp.fwd_w", "RF Pulse", "rfp.set_w"]] },
   { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", "heater.sv2"]] },
 ];
