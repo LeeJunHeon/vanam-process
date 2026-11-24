@@ -198,7 +198,8 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
   const cd = isObj(c.data) ? c.data : {};
   const source = s(c.source), kind = s(c.kind), code = s(d.code), level = s(d.level) || "info";
   const named = !!b?.eventKinds?.some((x) => x.source === source && x.kind === kind);
-  let name = named && !isCode(line.kind) ? line.kind : rl(code) || genericEventName(source, code, (x) => sourceName(x));
+  // 이름이 없는 사건(옛 묶음·옛 기록)은 출처 칸이 장비를 말하므로 이름은 '기록'(한 줄에 같은 말 두 번 없이)
+  let name = named && !isCode(line.kind) ? line.kind : rl(code) || "기록";
   if (source === "safety" && kind === "fired") name = level === "error" || level === "critical" ? "알람" : level === "warn" ? "경고" : "안내";
   if (source === "safety" && kind === "released") name = "해제";
   // 내용 — 사유 이름 > 웹이 값으로 만든 글 > (둘 다 없을 때만) 장비 문장에서 코드·주소를 뺀 글

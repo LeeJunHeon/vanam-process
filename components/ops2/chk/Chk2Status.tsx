@@ -176,7 +176,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
 
       {active && manual && (
         <p className={`mt-3 flex flex-wrap gap-x-4 gap-y-1 ${FS.body} text-[#5B6470]`}>
-          <b className="text-[#1B1F24]">수동 조작 중{manual.waiting ? " · 다음 조작을 기다림" : ""}</b>
+          <b className="text-[#1B1F24]">수동 조작 중{manual.waiting ? " · 다음 조작 대기" : ""}</b>
           {startedMs !== null && <span>시작 <b className="tabular-nums text-[#1B1F24]">{hm(new Date(startedMs))}</b></span>}
           {elapsedS !== null && <span>경과 <b className="tabular-nums text-[#1B1F24]">{fmtDur(elapsedS)}</b></span>}
           <span>켜져 있는 출력 <b className="text-[#1B1F24]">{outs.length ? outs.join(" · ") : "없음"}</b></span>
