@@ -45,7 +45,7 @@ const isKind = (k: unknown): k is Kind => k === "ch1" || k === "ch2" || k === "p
 export function loadPayload(rows: Row[], name: string): { args: Record<string, unknown>; why: string } {
   const blk = rows.filter(isBlockRow);
   if (!blk.length) return { args: { name, rows }, why: "" };
-  if (blk.length !== rows.length) return { args: {}, why: "v1 행과 블록 행을 함께 적재할 수 없습니다. 한 종류만 남기세요" };
+  if (blk.length !== rows.length) return { args: {}, why: "CSV 행과 블록 행을 함께 적재할 수 없습니다. 한 종류만 남기세요" };
   const blocks = blk.flatMap((r, k) => (r.blocks as Blk[]).map((x) => (blk.length > 1 ? { ...x, row: k + 1 } : x)));
   return { args: { name, blocks }, why: "" };
 }
@@ -191,7 +191,7 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
   const list = (recipes.list ?? []).filter((r) => isKind(r.kind));
   return (
     <Card title={<><BookOpen size={15} /> 레시피</>}
-      right={<span className={`flex items-center gap-2 ${FS.small} text-[#5B6470]`} title={`챔버마다 장비 지원·가스 라인이 달라 레시피는 챔버별(저장한 뒤에는 바꿀 수 없음). ${PLACE.pc}은 v1 PC CSV 첫 행과 같은 열`}>
+      right={<span className={`flex items-center gap-2 ${FS.small} text-[#5B6470]`} title={`챔버마다 장비 지원·가스 라인이 달라 레시피는 챔버별(저장한 뒤에는 바꿀 수 없음). ${PLACE.pc}은 PC CSV 첫 행과 같은 열`}>
         종류
         <select value={chamber} disabled={!!d?.id} aria-label="레시피 종류"
           onChange={(e) => { const k = e.target.value as Kind; if (d && !d.id && (k === "pc") !== (d.kind === "pc")) return; if (d) setD({ ...d, kind: k }); else setNewKind(k); }}
@@ -266,7 +266,7 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
                       {o ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                       <span className="w-6 text-right font-mono text-[12px] text-[#8A929D]">{i + 1}</span>
                       <span className={`rounded px-1 text-[12px] font-semibold ${blk ? "bg-[#E8EEFC] text-[#1D4ED8]" : "bg-[#EEF0F3] text-[#5B6470]"}`}>
-                        {blk ? "블록 행" : c?.kind === "delay" ? "대기 행" : c?.kind === "test" ? "TEST 행" : "v1 행"}</span>
+                        {blk ? "블록 행" : c?.kind === "delay" ? "대기 행" : c?.kind === "test" ? "TEST 행" : "CSV 행"}</span>
                       <b className="shrink-0 text-[12px] text-[#1B1F24]">{rowName(r, i)}</b>
                       <span className="truncate text-[12px] text-[#5B6470]">{blk ? `블록 ${(r.blocks as unknown[]).length}개` : rowLine(r)}</span>
                     </button>
@@ -316,7 +316,7 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
           {recipes.canEdit && !isPc && (
             <div className="flex flex-wrap gap-1.5">
               <Btn small onClick={() => { setRows([...d.rows, { name: "", blocks: [] }]); setOpenRow(d.rows.length); }}><Layers size={12} /> 블록 행 넣기</Btn>
-              <Btn small onClick={() => { setRows([...d.rows, {}]); setOpenRow(d.rows.length); }}><FilePlus2 size={12} /> v1 행 넣기</Btn>
+              <Btn small onClick={() => { setRows([...d.rows, {}]); setOpenRow(d.rows.length); }}><FilePlus2 size={12} /> CSV 행 넣기</Btn>
               <Btn small onClick={() => setRows([...d.rows, { Process_name: "delay 10m" }])}>대기 행 넣기</Btn>
             </div>
           )}

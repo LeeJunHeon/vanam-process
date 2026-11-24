@@ -32,6 +32,7 @@ import Ch12SeqEdit from "./Ch12SeqEdit";
 import { StatusBand12, StatusBar12, type ConnInfo } from "./Ch12Status";
 import { lockReason, plcCol, plcStaleSec } from "./logic";
 import { asCh12, asChk, type Ch12State } from "./types";
+import { toTerms12 } from "@/lib/ops2/ch12/terms";
 
 const STORE_KEY = "vanam-process:ch12-device";
 const LATE_MS = 3_000;
@@ -412,7 +413,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {curTab === "config" && !local && !neverConnected && (
         <Chk2Config equipment={equipment} bundle={d.bundle} st={st as unknown as StateData | null} perms={perms ?? null}
-          connected={connected} reloadSchema={d.loadSchema} notify={notify} />
+          connected={connected} reloadSchema={d.loadSchema} notify={notify} startOpen plainHead term={toTerms12} keyInDetail />
       )}
 
       {seqFor && (
