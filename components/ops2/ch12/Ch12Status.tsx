@@ -153,7 +153,7 @@ export function StatusBand12({ bundle, st, connected, conn, links, mode, equipme
         <Sum name={placeName(bundle, "tsp")} text={tspLine} tone={chamberState(st, "tsp")?.alarms?.length ? "alarm" : "neutral"} />
         {glob.map((a) => (
           <Chip key={a.ruleId} tone="alarm" title={[reasonTip(asChk(bundle), a.code, detail), a.since ? `시작 ${fmtKst(a.since)}` : ""].filter(Boolean).join(" · ") || undefined}>
-            {a.code ? reasonLabel(asChk(bundle), a.code) : a.ruleId}{detail && <span className="font-mono font-normal">{a.ruleId}</span>}
+            {a.code && reasonLabel(asChk(bundle), a.code) !== a.code ? reasonLabel(asChk(bundle), a.code) : "알람"}{detail && <span className="font-mono font-normal">{a.ruleId}</span>}
           </Chip>
         ))}
       </div>

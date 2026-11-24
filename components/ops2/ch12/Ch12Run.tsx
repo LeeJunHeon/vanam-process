@@ -261,7 +261,9 @@ export function ChamberRun(p: ChamberProps) {
   const stepLabel = cs?.stepLabel ?? eng?.step_label ?? null;           // 장비 묶음 16 — 진행 중 동작의 화면 이름
   const eta = cs?.etaRemainingS;
   const etaAt = typeof eta === "number" && eta >= 0 ? new Date(nowMs + eta * 1000).toISOString() : null;
-  const alarms = [...(cs?.alarms ?? []).map((r) => ({ ruleId: r, text: r, tip: undefined as string | undefined })),
+  // 챔버 알람(1초 행 <c>.proc.alarms — 사유 코드)은 묶음 사유 이름으로, 이름이 없으면 '알람'(코드는 상세 보기에서만)
+  const alarmName = (code: string) => { const l = reasonLabel(asChk(bundle), code); return l !== code ? l : detail ? code : "알람"; };
+  const alarms = [...(cs?.alarms ?? []).map((r) => ({ ruleId: r, text: alarmName(r), tip: reasonTip(asChk(bundle), r, detail) })),
     ...(st?.alarms ?? []).filter((a) => a.chamber === ch && !(cs?.alarms ?? []).includes(a.ruleId))
       .map((a) => ({ ruleId: a.ruleId, text: a.code ? reasonLabel(asChk(bundle), a.code) : a.ruleId, tip: reasonTip(asChk(bundle), a.code, detail) }))];
   const blocks = (cdef?.blocks ?? []).map((n) => bundle?.snapshot?.blocks?.find((b) => b.name === n)).filter((b) => !!b)
