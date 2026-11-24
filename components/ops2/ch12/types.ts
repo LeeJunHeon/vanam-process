@@ -39,6 +39,7 @@ export type Ch12Bundle = Omit<Bundle, "blocks" | "recipe" | "commands"> & {
 export type PlcButtonDef12 = {
   target: string; label: string; name?: string; addr?: string; chamber?: string; coil?: number;
   short?: string; procChamber?: "ch1" | "ch2" | null; hazard?: { on?: string | null; off?: string | null };
+  desc?: string;                                                                  // 묶음 16 — 래더 이름·코일(상세 보기에서만)
 };
 
 /** state.chambers[c] — hub.chamber_state(1초 행 <c>.proc.*) */
@@ -47,6 +48,7 @@ export type ChamberState = {
   step: { no: number | null; total: number | null; type: string | null; label: string | null;
           elapsedS: number | null; remainS: number | null } | null;
   remainS: number | null; etaRemainingS: number | null; minTotalS: number | null; paused: boolean | null; alarms: string[];
+  stepLabel?: string | null;                                                      // 묶음 16 — 진행 중 동작의 화면 이름(step_labels)
 };
 
 /** 엔진 web_state(아직 장비가 보내지 않을 수 있다 — 있으면 쓴다). 공정 엔진 state_dict 와 같은 키를 기대한다 */
@@ -56,6 +58,7 @@ export type EngineState = {
   queue?: { index?: number; total?: number; mode?: string } | null; error?: string | null;
   adjust?: unknown; last_result?: unknown;
   process_name?: string | null;                                                  // 지금 공정 이름(공정 중일 때만 — D425)
+  step_label?: string | null;                                                    // 묶음 16 — 진행 중 동작의 화면 이름(text 는 v1 스텝 문구)
   blocks?: unknown[]; started_upto?: number; startedUpto?: number;                  // 시퀀스 편집용(있으면)
   recipe?: { name?: string; rows?: number; row?: number | null; listActive?: boolean; loaded?: boolean } | null;
   [k: string]: unknown;
