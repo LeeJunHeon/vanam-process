@@ -55,6 +55,17 @@ export function Big12({ f, snap, bundle, off, title }: { f?: FieldDef; snap: Sna
   );
 }
 
+/** 상태 두 열 — 두 칸에 들어가면 두 칸, 이름이 길어 반 칸에 안 들어가는 상태는 그 줄을 혼자 쓴다(이름을 자르지 않음 — W-20).
+ *  DevCard states 칸(늘 두 칸)과 같은 자리(줄 아래)에 그린다 */
+export function StateList({ items }: { items: ReactNode[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+      {items.map((x, i) => <div key={i} className="min-w-fit grow basis-[calc(50%-0.5rem)]">{x}</div>)}
+    </div>
+  );
+}
+
 /** 블록 박스(장비 하나) — big = 큰 값 필드, rows = 라벨-값 줄(없으면 bool 아닌 평소 필드 모두), states = 상태(없으면 bool 평소 필드 모두).
  *  chipOn = 머리 칩 '출력 켜짐/꺼짐'을 만드는 bool 필드(상태 목록에서는 뺌). 상세 보기는 나머지 필드(레지스터·내부 값)를 아래에 */
 export function BlockBox({ ctx, name, strip, title, big, rows, states, chipOn, chip, summary, children, note, actions, actionsEnd, hide = [] }: {
@@ -85,12 +96,12 @@ export function BlockBox({ ctx, name, strip, title, big, rows, states, chipOn, c
         {chip}<QBadge link={link} /></>}
       big={bigF && <Big12 f={bigF} snap={snap} bundle={bundle} off={off} title={tipOf(bigF)} />}
       summary={summary}
-      states={stateFs.length ? stateFs.map((f) => (
-        <StateTag key={f.column} on={dim(f) ? null : snap?.[f.column] === true} label={f.label} words={words12(f.name)} alert={alert12(f.name)} title={tipOf(f)} />
-      )) : undefined}
       note={note} actions={actions} actionsEnd={actionsEnd}>
-      {(rowFs.length > 0 || children || rest.length > 0) && <>
+      {(rowFs.length > 0 || stateFs.length > 0 || children || rest.length > 0) && <>
         {rowFs.map((f) => <FieldValue key={f.column} f={f} v={snap?.[f.column]} dim={dim(f)} snap={snap} blocks={bundle?.snapshot?.blocks} />)}
+        <StateList items={stateFs.map((f) => (
+          <StateTag key={f.column} on={dim(f) ? null : snap?.[f.column] === true} label={f.label} words={words12(f.name)} alert={alert12(f.name)} title={tipOf(f)} />
+        ))} />
         {children}
         {rest.length > 0 && (
           <div className="mt-1 border-t border-dashed border-[#E3E6EA] pt-1">

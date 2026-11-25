@@ -146,7 +146,7 @@ await esbuild.build({
       export { default as Ch12Hmi, drawnTargets, plcAsk, plcContext, plcChamber, HAZARD_TEXT } from "./components/ops2/ch12/Ch12Hmi";
       export { default as Ch12Confirm, PlcConfirmBody, recordNote, isPlcAsk } from "./components/ops2/ch12/Ch12Confirm";
       export { withServerArgs } from "./lib/ops2/commandArgs";
-      export { Ch12EventFeed, ch12LogLine } from "./components/ops2/ch12/Ch12Logs";
+      export { Ch12EventFeed, ch12LogLine, RunAlerts } from "./components/ops2/ch12/Ch12Logs";
       export { WEB_TABS, LOCAL_TABS } from "./components/ops2/ch12/Ch12Page";
       export { Chk2ModeContext } from "./components/ops2/chk/mode";
       export { default as Chk2Trend, layoutTrendLabels, LABEL_LINE, LABEL_GAP } from "./components/ops2/chk/Chk2Trend";
@@ -222,10 +222,16 @@ const chamberProps = (ch) => ({
         && b["건너뛰기"] === false && b["일시정지"] === false && b["공정 순서 편집"] === false
         && (!cs.stepLabel || t.includes(`진행 중 동작 ${cs.stepLabel}`)),
         { procState: cs.procState, stop: b["CH1 STOP"], b, text: t.slice(0, 400) });
-  const mine = feed.filter((e) => L.feedChamber(e) === "ch1").map((e) => U.ch12LogLine(bundle, e)).filter((l) => l.main);
-  check("ui:chamber-log — 이 챔버 기록만 로그(로그 줄 = 장비 시각 + 출처 + 이름 + 내용, 평소 보기에 공정 단계 줄)",
-        t.includes("알림·로그") && mine.length > 0 && mine.every((l) => t.includes(l.text.replace(/\s+/g, " ")) && t.includes(l.source))
-        && mine.some((l) => l.source === "공정" && l.kind === "단계" && l.text.includes("시작")), mine.map((l) => `${l.source} | ${l.kind} | ${l.text}`));
+  // W-20 ④ 알림 띠 — 챔버 칸마다 있던 '알림·로그' 카드 대신 운전 탭 알림 띠 하나(두 챔버·공통, 최근 60줄, 챔버 줄은 출처 앞에 장소 이름)
+  const al = render(U.RunAlerts, { bundle, st, feed, onLog: noop }), at = textOf(al);
+  const mainAll = feed.map((e) => ({ e, l: U.ch12LogLine(bundle, e) })).filter((x) => x.l.main);
+  const mine = mainAll.slice(-60).filter((x) => L.feedChamber(x.e) === "ch1").map((x) => x.l);
+  const other = mainAll.slice(-60).filter((x) => L.feedChamber(x.e) !== "ch1").map((x) => x.l);
+  check("ui:run-alerts — 알림 띠 하나(두 챔버·공통 줄 — 줄 = 시각 + 장소·출처 + 이름 + 내용, 최근 60줄), 챔버 칸 '알림·로그' 카드 없음",
+        !t.includes("알림·로그") && !t.includes("기록 전체 보기") && at.includes("알림") && at.includes("기록 전체 보기")
+        && mine.length > 0 && mine.every((l) => at.includes(l.text.replace(/\s+/g, " "))) && at.includes("CH1 공정") && other.length > 0
+        && other.every((l) => at.includes(l.text.replace(/\s+/g, " "))) && (al.match(/data-log-line/g) ?? []).length === Math.min(60, mainAll.length)
+        && mine.some((l) => l.source === "공정" && l.kind === "단계" && l.text.includes("시작")), { main: mainAll.length, ch1: mine.length, other: other.length });
   check("ui:no-dev-text — 운전 탭 CH1 칸에 개발용 글(인자 형식·명령 이름·코일 이름·열 이름)이 없음(상세 끔)", devHits(t).length === 0, devHits(t));
 }
 {
@@ -253,7 +259,8 @@ const chamberProps = (ch) => ({
   const pop = feed.find((e) => e.type === "event" && e.data.context?.kind === "popup" && e.data.context?.chamber === "ch2");
   const pl = pop && U.ch12LogLine(bundle, pop);
   check("ui:popup-line — v1 경고창(시작 가드 '대기 필요' 등)은 로그 줄(경고)로 — 문구 그대로, 시작은 COOLDOWN 거부",
-        !!pop && pl.level === "warn" && pop.data.message.startsWith("이전 공정 종료 후 1분 대기 필요합니다.") && t.includes(pl.text.replace(/\s+/g, " "))
+        !!pop && pl.level === "warn" && pop.data.message.startsWith("이전 공정 종료 후 1분 대기 필요합니다.")
+        && textOf(render(U.RunAlerts, { bundle, st, feed })).includes(pl.text.replace(/\s+/g, " "))
         && fx.cmd.start2_cooldown.reason === "COOLDOWN", { pop: pop?.data, cmd: fx.cmd.start2_cooldown });
   const ht = textOf(render(U.HeaterBox12, { ctx: { bundle, st, lock: noLock, onAsk: noop }, plcOk: true }));
   // 히터 레지스터 칸(41칸)은 상세 보기에서 — PV·목표·MV 는 히터 박스(v1 히터 패널 글). 라벨의 레지스터 주소 '(D112)' 는 상세에서만
@@ -316,6 +323,19 @@ const chamberProps = (ch) => ({
   const gridOk = /class="@container\/ch [^"]*" data-chamber="ch2"/.test(idle) && /class="[^"]*@min-\[650px\]\/ch:grid-cols-2[^"]*@min-\[950px\]\/ch:grid-cols-3[^"]*" data-devices="ch2"/.test(idle);
   check("ui:idle-layout — 대기 칸 머리 → 다음 공정 → 장비 박스(주요 값·추세·공정 순서 없음), 공정 중 칸은 그대로, [레시피 열기]는 레시피 탭 있을 때만, 격자는 챔버 칸 폭 기준",
         idleOk && runOk && gridOk, { idleOk, runOk, gridOk, loaded2 });
+}
+{
+  // W-20 ④ 운전 탭 영역(컨테이너 run) 1360px 이상: 왼쪽 3/4 CH1·CH2 칸 · 오른쪽 1/4 알림 띠(왼쪽 높이를 따름 — absolute, 목록 안 스크롤),
+  //   공통 장비는 아래 전체 폭. 더 좁으면 알림은 맨 아래(order-last, 목록 최대 240px)
+  const runP = { ...chamberProps("ch1"), plcOk: true, pcRecipes: [], getRow: async () => null, onEditSeq: noop, send: async () => ({}), notify: noop };
+  const html = render(U.Ch12Run, runP);
+  const left = /class="min-w-0 @min-\[1360px\]\/run:col-span-3"/.test(html), grid4 = /@container\/run[\s\S]{0,120}@min-\[1360px\]\/run:grid-cols-4/.test(html);
+  const band = /class="relative order-last min-w-0 @min-\[1360px\]\/run:order-none" data-alerts=""/.test(html)
+    && /@min-\[1360px\]\/run:absolute @min-\[1360px\]\/run:inset-0/.test(html) && /max-h-\[240px\][^"]*@min-\[1360px\]\/run:flex-1/.test(html);
+  const one = (html.match(/data-alerts=""/g) ?? []).length === 1 && !textOf(html).includes("알림·로그");
+  const order = html.indexOf('data-chamber="ch2"') < html.indexOf('data-alerts=""') && html.indexOf('data-alerts=""') < html.indexOf("Plasma Cleaning");
+  check("ui:run-band — 운전 탭 1360px 이상 왼쪽 3/4 챔버 칸 · 오른쪽 1/4 알림 띠(하나, 왼쪽 높이·목록 안 스크롤), 좁으면 알림 맨 아래(240px)",
+        left && grid4 && band && one && order, { left, grid4, band, one, order });
 }
 {
   const html = render(U.PresputterPanel, { bundle, st, lock: noLock, onAsk: noop });

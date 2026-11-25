@@ -19,7 +19,7 @@ import type { FeedItem, SendResult, TrendPt } from "../chk/useChk2";
 import type { Notice } from "../chk/kit";
 import type { RecipeFull, RecipeItem } from "../chk/useRecipes";
 import { ChamberDevices } from "./Ch12Devices";
-import { ChamberLog } from "./Ch12Logs";
+import { RunAlerts } from "./Ch12Logs";
 import { CommonOps, PcPanel, PresputterPanel, RobotPanel, TspPanel, type LockFn } from "./Ch12Aux";
 import { hasRowContent, loadPayload, rowLine } from "./Ch12Recipes";
 import { Spectra } from "./Ch12Spectra";
@@ -411,7 +411,6 @@ export function ChamberRun(p: ChamberProps) {
           </div>
         </Card>
       )}
-      <ChamberLog bundle={bundle} feed={feed} ch={ch} alarms={alarms} onLog={p.onLog} />
     </div>
   );
 }
@@ -428,21 +427,33 @@ export type RunProps = Omit<ChamberProps, "ch" | "onEditSeq"> & {
 export default function Ch12Run(p: RunProps) {
   const { bundle, st, lock, onAsk, feed, nowMs } = p;
   const cmn = { bundle, st, lock, onAsk };
+  // 운전 탭 영역(컨테이너 run, W-20 — 챔버K 대기 화면과 같은 기준): 1360px 이상이면 왼쪽 3/4 = CH1·CH2 칸, 오른쪽 1/4 = 알림 띠
+  //   (두 챔버·공통 알림 하나 — 높이는 왼쪽 묶음을 따르고 목록 안에서 스크롤), 공통 장비는 그 아래 전체 폭.
+  //   더 좁으면 CH1·CH2 칸 → 공통 장비 → 알림(맨 아래, 목록 최대 240px). 챔버 칸마다 있던 '알림·로그' 카드는 없앰
   return (
-    <div className="space-y-3">
-      <div className="grid items-start gap-3 min-[1280px]:grid-cols-2">
-        {(["ch1", "ch2"] as const).map((ch) => <ChamberRun key={ch} {...p} ch={ch} onEditSeq={() => p.onEditSeq(ch)} />)}
-      </div>
-      <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-        <PcPanel {...cmn} recipes={p.pcRecipes} getRecipe={p.getRow} />
-        <TspPanel {...cmn} nowMs={nowMs} />
-      </div>
-      <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-        <PresputterPanel {...cmn} />
-        <RobotPanel bundle={bundle} st={st} feed={feed} />
-        <CommonOps {...cmn} plcOk={p.plcOk} />
-        {p.local && p.localCan && <LocalFiles bundle={bundle} can={p.localCan} onAsk={onAsk} />}
-        <Ch12Timing st={st} bundle={bundle} />
+    <div className="@container/run">
+      <div className="grid grid-cols-1 gap-3 @min-[1360px]/run:grid-cols-4">
+        <div className="min-w-0 @min-[1360px]/run:col-span-3">
+          <div className="grid items-start gap-3 min-[1280px]:grid-cols-2">
+            {(["ch1", "ch2"] as const).map((ch) => <ChamberRun key={ch} {...p} ch={ch} onEditSeq={() => p.onEditSeq(ch)} />)}
+          </div>
+        </div>
+        <div className="relative order-last min-w-0 @min-[1360px]/run:order-none" data-alerts="">
+          <RunAlerts bundle={bundle} st={st} feed={feed} onLog={p.onLog} />
+        </div>
+        <div className="min-w-0 space-y-3 @min-[1360px]/run:col-span-4">
+          <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+            <PcPanel {...cmn} recipes={p.pcRecipes} getRecipe={p.getRow} />
+            <TspPanel {...cmn} nowMs={nowMs} />
+          </div>
+          <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+            <PresputterPanel {...cmn} />
+            <RobotPanel bundle={bundle} st={st} feed={feed} />
+            <CommonOps {...cmn} plcOk={p.plcOk} />
+            {p.local && p.localCan && <LocalFiles bundle={bundle} can={p.localCan} onAsk={onAsk} />}
+            <Ch12Timing st={st} bundle={bundle} />
+          </div>
+        </div>
       </div>
     </div>
   );
