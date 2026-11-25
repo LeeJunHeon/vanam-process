@@ -228,6 +228,22 @@ const chamberProps = (ch) => ({
   check("ui:no-dev-text — 운전 탭 CH1 칸에 개발용 글(인자 형식·명령 이름·코일 이름·열 이름)이 없음(상세 끔)", devHits(t).length === 0, devHits(t));
 }
 {
+  // W-19b ③ 작은 글 — 적재 카드 '적재 <이름> · 공정 1/1'(옛 '1/1행' 아님), 주요 값 범례 '▲ 목표 · │ 현재',
+  // 공정 끝까지 값과 '확정 전' 사이 띄움(위 띠·운전 카드). ETA 가 아직 없는 공정 중 + 적재 레시피·큐 1개
+  const st3 = JSON.parse(JSON.stringify(st));
+  const ek = st3.engines?.["proc.ch1"] ? "proc.ch1" : "ch1";
+  st3.engines = { ...(st3.engines ?? {}), [ek]: { ...(st3.engines?.[ek] ?? {}), recipe_name: "CH1 RF Pulse Ar", queue: { index: 0, total: 1, mode: true } } };
+  st3.chambers.ch1 = { ...st3.chambers.ch1, etaRemainingS: null };
+  const html = render(U.ChamberRun, { ...chamberProps("ch1"), st: st3 }), t = textOf(html);
+  const band = render(U.StatusBand12, { bundle, st: st3, connected: true, conn: { label: "장비 연결됨 · 1초 전", tone: "neutral" },
+    links: [], mode: "sim", equipment: "CH12-SIM", label: null, lock: noLock, onAsk: noop, nowMs, plcOk: true });
+  const gap = /공정 끝까지 <b[^>]*>[^<]+<\/b> (<!-- -->)?<span[^>]*>확정 전<\/span>/;
+  check("ui:small-text — 적재 '… · 공정 1/1'(행 아님)·범례 '▲ 목표 · │ 현재'·위 띠 '공정 끝까지 — 확정 전' 띄움",
+        t.includes("적재 CH1 RF Pulse Ar · 공정 1/1") && !/\d\/\d+행/.test(t) && t.includes("▲ 목표 · │ 현재") && !t.includes("세로선")
+        && gap.test(band) && textOf(band).includes("확정 전"),
+        { run: t.match(/적재 .{0,40}/)?.[0], legend: t.match(/▲.{0,20}/)?.[0], band: band.match(/공정 끝까지.{0,200}/)?.[0] });
+}
+{
   const html = render(U.ChamberRun, chamberProps("ch2"));
   const t = textOf(html), b = buttons(html);
   check("ui:chamber-idle — 대기 중·공정 시작·적재 해제·오류 해제·STOP(늘 눌림)·다음 공정 레시피 고르기",
