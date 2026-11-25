@@ -87,9 +87,10 @@ const fmt = (v: number) => String(Number(v.toPrecision(4)));
 const titleWidthGuess = (t: string, fs: number) => [...t].reduce((n, c) => n + (c.charCodeAt(0) > 0x2000 ? fs : fs * 0.62), 0);
 const LEGEND_GAP = 12;          // 제목 끝과 범례 사이(W-19)
 
-function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend = false }: {
+function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend = false, edgeTicks = false }: {
   title: string; unit: string; lines: Line[]; t0: number; t1: number; width: number; hover: number | null; setHover: (t: number | null) => void;
   fitLegend?: boolean;          // W-19 챔버K — 범례를 제목 끝 뒤로(긴 제목과 겹치지 않게). 기본은 LEFT + 110 고정 그대로
+  edgeTicks?: boolean;          // W-19 챔버K — 양 끝에 가까운 시간 글자는 안쪽 정렬(세로축 글자·마지막 값 띠와 겹치지 않게). 기본은 가운데 정렬 그대로
 }) {
   // 범례 시작 = max(LEFT + 110, 제목 끝 + 여백) — 제목 폭은 그린 뒤 실제 폭으로(W-19, fitLegend 일 때만 — CH1&2 는 LEFT + 110 그대로)
   const titleRef = useRef<SVGTextElement | null>(null);
@@ -160,12 +161,17 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend =
         </g>
       ))}
       <line x1={LEFT} x2={LEFT + pw} y1={TOP + ph} y2={TOP + ph} stroke="#C9CED6" />
-      {xTicks.map((t) => (
-        <g key={t}>
-          <line x1={x(t)} x2={x(t)} y1={TOP + ph} y2={TOP + ph + 4} stroke="#C9CED6" />
-          <text x={x(t)} y={TOP + ph + 15} fontSize={FSPX.small} fill="#5B6470" textAnchor="middle">{hm(t)}</text>
-        </g>
-      ))}
+      {xTicks.map((t) => {
+        // 시간 글자 반 폭(“17:35” — 12px 숫자 5자 ≈ 30px)보다 끝에 가까우면 안쪽으로 정렬(edgeTicks 일 때만)
+        const half = 17, xt = x(t);
+        const anchor = !edgeTicks ? "middle" : xt - half < LEFT ? "start" : xt + half > LEFT + pw ? "end" : "middle";
+        return (
+          <g key={t}>
+            <line x1={xt} x2={xt} y1={TOP + ph} y2={TOP + ph + 4} stroke="#C9CED6" />
+            <text x={edgeTicks && anchor === "start" ? Math.max(xt, LEFT) : xt} y={TOP + ph + 15} fontSize={FSPX.small} fill="#5B6470" textAnchor={anchor}>{hm(t)}</text>
+          </g>
+        );
+      })}
       {lines.map((l) => (
         <path key={l.key} d={path(l)} fill="none" stroke={l.color} strokeWidth={l.dashed ? 1.5 : 2} strokeLinejoin="round" strokeLinecap="round"
           strokeDasharray={l.dashed ? "4 3" : undefined} opacity={l.dashed ? 0.85 : 1} />
@@ -208,9 +214,10 @@ const trendDefs = (pressureTarget: string): TrendDef[] => [
   { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", "heater.sv2"]] },
 ];
 
-export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세", fitLegend = false }: {
+export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세", fitLegend = false, edgeTicks = false }: {
   trend: TrendPt[]; equipment: string; runId: string | null; local: boolean; nowMs: number; pressureTarget?: string;
   fitLegend?: boolean;        // W-19 챔버K 만 — 범례를 제목 끝 뒤로(Panel 참고)
+  edgeTicks?: boolean;        // W-19 챔버K 만 — 끝 시간 글자 안쪽 정렬(Panel 참고). CH1&2 는 넘기지 않아 그대로
   defs?: TrendDef[];          // 없으면 챔버K 그래프(압력·밸브 위치·파워·히터) — 챔버12 는 챔버별 열(값이 바뀌지 않게 메모해서)
   title?: string;
 }) {
@@ -278,7 +285,7 @@ export default function Chk2Trend({ trend, equipment, runId, local, nowMs, press
         {range !== "run" && <p className={`mb-1 ${FS.small} text-[#5B6470]`}>이 화면을 연 뒤부터 쌓은 값입니다(2초 간격).</p>}
         {range === "run" && rows === null ? <Empty>1분 요약을 읽는 중…</Empty>
           : !panels.length ? <Empty>그릴 값이 없습니다. 이번 공정이 쓰는 압력·파워·히터 값이 들어오면 그립니다</Empty>
-          : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} fitLegend={fitLegend} />)}
+          : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} fitLegend={fitLegend} edgeTicks={edgeTicks} />)}
       </div>
     </Card>
   );
