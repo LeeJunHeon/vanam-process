@@ -17,6 +17,7 @@ import { AlertTriangle, Code2, Cloud, CloudOff, Laptop, Lock, LockOpen, LogIn, W
 import Chk2Hmi from "./Chk2Hmi";
 import { StatusBand, StatusBar, type ConnInfo } from "./Chk2Status";
 import Chk2Run from "./Chk2Run";
+import Chk2SettingsDrawer, { type DevKey } from "./Chk2SettingsDrawer";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
 import Chk2Config from "./Chk2Config";
 import Chk2LocalConfig from "./Chk2LocalConfig";
@@ -51,9 +52,11 @@ const SEND_ERROR: Record<string, string> = {
   network: "웹 서버에 닿지 않음",
 };
 
-export type TabKey = "run" | "hmi" | "manual" | "recipe" | "log" | "config";
+export type TabKey = "status" | "run" | "hmi" | "manual" | "recipe" | "log" | "config";
+// W-21: 상태(장비 박스 + 알림 — 기본 탭) / 운전(대기: 다음 공정, 공정·수동 조작 중: 공정 화면). 공정이 시작·끝나도 탭은 저절로 바뀌지 않는다
 const WEB_TABS: { key: TabKey; label: string; title: string }[] = [
-  { key: "run", label: "운전", title: "공정 상태·주요 값·다음 공정·장비 카드" },
+  { key: "status", label: "상태", title: "장비 박스와 알림" },
+  { key: "run", label: "운전", title: "다음 공정, 공정 중이면 공정 순서·주요 값·추세" },
   { key: "hmi", label: "HMI", title: "장비 계통도와 PLC 버튼" },
   { key: "manual", label: "수동 조작", title: "가스·압력·셔터·파워를 하나씩 조작합니다." },
   { key: "recipe", label: "레시피", title: "공정·히터 레시피 목록과 편집" },
@@ -147,7 +150,8 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const [plcPending, setPlcPending] = useState<Record<string, { want: boolean; at: number }>>({});
   const [detail, setDetail] = useDetailPref();
   const tabs = local ? LOCAL_TABS : WEB_TABS;
-  const [tab, setTabState] = useState<TabKey>("run");
+  const [tab, setTabState] = useState<TabKey>("status");
+  const [drawer, setDrawer] = useState<DevKey | null>(null);          // W-21 장비 설정 서랍
   const [tabTo, setTabTo] = useState<TabKey | null>(null);           // 저장 안 한 레시피가 있을 때 가려는 탭
   const [recipeReq, setRecipeReq] = useState<{ id: string | null; n: number } | null>(null);
   const [logTab, setLogTab] = useState<"events" | "commands" | "runs">("events");
@@ -462,8 +466,9 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
 
       <Tabs tabs={shownTabs} value={curTab} onChange={(t) => goTab(t)} right={detailBtn} />
 
-      {curTab === "run" && (
+      {(curTab === "status" || curTab === "run") && (
         <Chk2Run equipment={equipment} bundle={d.bundle} st={st} runBlocks={d.runBlocks} editBase={d.editBase} feed={d.feed} trend={d.trend}
+          view={curTab === "status" ? "status" : "run"} onSettings={setDrawer}
           recipes={local ? null : recipes} lock={lock} canKey={canKey} onAsk={setAsk} nowMs={now + d.offsetMs} skewMs={skew}
           onHmi={() => goTab("hmi")} onLog={() => goTab("log")}
           onManual={shownTabs.some((t) => t.key === "manual") ? () => goTab("manual") : undefined}
@@ -475,7 +480,8 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
           onAsk={setAsk} note={mimicNote} viewOnly={local && !plcLocal} />
       )}
       {curTab === "manual" && (
-        <Chk2Manual bundle={d.bundle} st={st} lock={lock} onAsk={setAsk} onHmi={() => goTab("hmi")} />
+        <Chk2Manual bundle={d.bundle} st={st} lock={lock} onAsk={setAsk} onHmi={() => goTab("hmi")} onSettings={setDrawer} nowMs={now + d.offsetMs}
+          onConfig={shownTabs.some((t) => t.key === "config") ? () => goTab("config") : undefined} />
       )}
       {curTab === "recipe" && !local && (
         <Chk2Recipes bundle={d.bundle} st={st} recipes={recipes} lock={lock} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef}
@@ -504,6 +510,13 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {curTab === "config" && local && <Chk2LocalConfig bundle={d.bundle} st={st} />}
 
+      {drawer && (
+        <Chk2SettingsDrawer dev={drawer} bundle={d.bundle} st={st} onClose={() => setDrawer(null)}
+          editor={!local && !neverConnected ? (key) => (
+            <Chk2Config equipment={equipment} bundle={d.bundle} st={st} perms={perms ?? null} connected={connected}
+              reloadSchema={d.loadSchema} notify={notify} startOpen onlyKeys={[key]} />
+          ) : undefined} />
+      )}
       {tabTo && (
         <SimpleConfirm title="저장하지 않음" ok="버리고 나가기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 탭을 바꿀까요?"
           onCancel={() => setTabTo(null)}

@@ -147,13 +147,14 @@ function VersionDetail({ v }: { v: Version }) {
   );
 }
 
-export default function Chk2Config({ equipment, bundle, st, perms, connected, reloadSchema, notify, startOpen = false, plainHead = false, term, keyInDetail = false, valueText }: {
+export default function Chk2Config({ equipment, bundle, st, perms, connected, reloadSchema, notify, startOpen = false, plainHead = false, term, keyInDetail = false, valueText, onlyKeys }: {
   equipment: string; bundle: Bundle | null; st: StateData | null; perms: Perms | null; connected: boolean;
   reloadSchema: () => Promise<void>; notify: (n: Omit<Notice, "id" | "at">) => void;
   startOpen?: boolean;     // W-15 챔버K — 탭을 열면 바로 펼침(기본: 접힘, 지금 동작)
   plainHead?: boolean;     // W-15 챔버K — 맨 위 한 줄 "설정 버전 n · 바꾼 값은 관리자가 적용합니다"(기본: 없음)
   term?: (t: string) => string;   // W-19 CH1&2 — 설정 이름·설명을 용어표 말로(기본: 묶음 글 그대로 — 챔버K 그대로)
   keyInDetail?: boolean;          // W-19 CH1&2 — 설정 키(대문자 이름) 줄을 상세 보기에서만(기본: 늘 — 챔버K 그대로)
+  onlyKeys?: string[];            // W-21 챔버K 장비 설정 서랍 — 이 키만 편집 표에 보인다(적용·검사·확인창·기록은 그대로). 기본: 모든 키
   valueText?: (key: string, v: unknown) => string | null;   // W-19 CH1&2 — 지금 값·기본값 칸의 보이는 글(null 이면 원래 표시, 기본: 없음 — 챔버K 그대로)
 }) {
   const { detail } = useChk2Mode();
@@ -253,6 +254,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
   const busyNow = !!st && (bundle?.states?.find((s) => s.name === st.procState)?.kind === "active" || !!st.heaterRecipe);
 
   const shown = params.filter((p) => {
+    if (onlyKeys) return onlyKeys.includes(p.key);
     if (onlyChanged) return changed.includes(p.key);
     if (q.trim()) {
       const t = q.trim().toLowerCase();
@@ -373,6 +375,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
           {tab === "edit" ? (
             <>
               <div className={`flex flex-wrap items-center gap-2 ${FS.small}`}>
+                {!onlyKeys && (<>
                 <select value={group} onChange={(e) => { setGroup(e.target.value); setQ(""); setOnlyChanged(false); }}
                   className="rounded-md border border-[#D9DDE3] px-1 py-0.5">
                   {groups.map((g) => (
@@ -382,6 +385,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                   ))}
                 </select>
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="키·라벨 찾기" className="w-40 rounded-md border border-[#D9DDE3] px-1.5 py-0.5" />
+                </>)}
                 <label className="flex items-center gap-1"><input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} /> 바꾼 것만({changed.length})</label>
                 {busyNow && <Tag kind="warn">공정·히터 운전 중이라 등급 높음 값은 장비가 거부하고, 멈춰 있을 때 적용하는 값은 끝난 뒤 적용</Tag>}
                 <span className="ml-auto flex items-center gap-1.5">
