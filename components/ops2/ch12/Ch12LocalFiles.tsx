@@ -8,7 +8,8 @@
 //   프리스퍼터 레시피 PRESPUTTER_RECIPE{ch, path}. 웹 화면은 포털 레시피 목록 그대로(이 칸 없음).
 import { useCallback, useEffect, useState } from "react";
 import { FileText, Folder, FolderUp, RefreshCw } from "lucide-react";
-import { Card, type Ask } from "../chk/kit";
+import { Btn, type Ask } from "../chk/kit";
+import { DevCard } from "../chk/Chk2Devices";
 import { KINDS, chArgs, hasKind, pickKind } from "./logic";
 import type { Ch12Bundle } from "./types";
 import { CARD, placeName } from "@/lib/ops2/ch12/terms";
@@ -80,9 +81,17 @@ export function LocalFiles({ bundle, can, onAsk, fetcher, initial }: {
   const go = (dir: string) => { setBusy(true); void load(dir); };
   const targets = fileTargets(bundle, pick);
   return (
-    <Card title={<><FileText size={15} /> {CARD.localFiles}</>}
-      right={<button onClick={() => go(list?.dir ?? "")} disabled={busy} className="rounded p-1 text-[#8A929D] hover:bg-[#EEF0F3]" aria-label="새로 읽기"><RefreshCw size={13} /></button>}>
-      <p className="mb-1 truncate font-mono text-[12px] text-[#5B6470]" title={list?.abs}>{list ? list.abs : "시작 폴더 읽는 중…"}</p>
+    <DevCard title={CARD.localFiles}
+      chip={<button onClick={() => go(list?.dir ?? "")} disabled={busy} className="rounded p-1 text-[#8A929D] hover:bg-[#EEF0F3]" aria-label="새로 읽기"><RefreshCw size={13} /></button>}
+      note={pick ? <p className="break-all text-[#1B1F24]">선택된 파일: <span className="font-mono">{pick.full}</span></p> : <p>파일을 고르면 아래에 불러올 곳 버튼이 나옵니다.</p>}
+      actions={pick && targets.length ? targets.map((t) => (
+        <Btn key={t.label} disabled={!can(t.kind)}
+          onClick={() => onAsk({ kind: t.kind, label: t.label, detail: pick.name, args: t.args, key: `${t.kind}@${t.label}`, lines: [`파일: ${pick.full}`] })}>
+          {t.label}
+        </Btn>
+      )) : undefined}>
+      {/* 시작 폴더 경로 — 자르지 않고 줄을 바꿔 다 보인다(W-20) */}
+      <p className="mb-1 break-all font-mono text-[12px] text-[#5B6470]" title={list?.abs}>{list ? list.abs : "시작 폴더 읽는 중…"}</p>
       {err && <p className="mb-1 rounded-lg bg-[#FEE4E2] px-2 py-1 text-[12px] text-[#B42318]">{err}</p>}
       {list && (
         <ul className="max-h-56 overflow-y-auto rounded-lg border border-[#E3E6EA] text-[12px]">
@@ -95,7 +104,7 @@ export function LocalFiles({ bundle, can, onAsk, fetcher, initial }: {
               <button onClick={() => (e.kind === "dir" ? go(e.path) : setPick(e))}
                 className={`flex w-full items-center gap-1.5 px-2 py-1 text-left hover:bg-[#F5F6F8] ${pick?.path === e.path ? "bg-[#E8EEFC] font-semibold" : ""}`}>
                 {e.kind === "dir" ? <Folder size={13} className="text-[#B54708]" /> : <FileText size={13} className="text-[#8A929D]" />}
-                <span className="truncate">{e.name}</span>
+                <span className="min-w-0 break-all">{e.name}</span>
                 {e.size !== null && <span className="ml-auto shrink-0 text-[12px] text-[#8A929D]">{(e.size / 1024).toFixed(1)} KB</span>}
               </button>
             </li>
@@ -104,21 +113,6 @@ export function LocalFiles({ bundle, can, onAsk, fetcher, initial }: {
         </ul>
       )}
       {list?.truncated && <p className="text-[12px] text-[#8A929D]">항목이 많아 일부만 보입니다</p>}
-      {pick && (
-        <div className="mt-2 space-y-1">
-          <p className="truncate text-[12px] text-[#1B1F24]">선택된 파일: <span className="font-mono">{pick.full}</span></p>
-          <div className="flex flex-wrap gap-1.5">
-            {targets.map((t) => (
-              <button key={t.label} disabled={!can(t.kind)}
-                onClick={() => onAsk({ kind: t.kind, label: t.label, detail: pick.name, args: t.args, key: `${t.kind}@${t.label}`,
-                                       lines: [`파일: ${pick.full}`] })}
-                className="rounded-lg border border-[#D9DDE3] bg-white px-2 py-1 text-[12px] font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40">
-                {t.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-    </Card>
+    </DevCard>
   );
 }

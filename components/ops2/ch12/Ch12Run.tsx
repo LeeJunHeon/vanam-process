@@ -1,13 +1,15 @@
 "use client";
 
-// 챔버12 운전 탭(2026-11-18 — 챔버K Chk2Run 구성). CH1·CH2 를 나란히(1280 이상 두 열), 챔버마다 위에서부터:
-//   상태·조작(공정 상태·블록·남은 시간·ETA·엔진 상태 글 + STOP·공정 시작·적재 해제·오류 해제, 웹은 '다음 공정' 레시피 고르기·적재) →
-//   공정 순서(블록 목록 — 끝남·지금·남음, 건너뛰기·일시정지/재개·시퀀스 편집) → 공정 중 값 바꾸기(챔버K Chk2Adjust) → 주요 값(칸마다 목표·큰 값·막대) →
-//   추세(챔버K Chk2Trend — 챔버 열) → 장비 카드(묶음 블록 순서, 꺼진 장비는 접힘)·OES/RGA·공정 목표값 → 알림·로그(이 챔버 평소 보기 줄).
-// 그 아래: CH2 히터·두께 · 플라즈마 클리닝 · TSP · 프리스퍼터 예약 · 로봇 연결 · 장비 공통 조작 · 장비 응답 시간(노트북 화면은 + 장비 폴더 레시피).
-// 1366×768 에서 상태 띠 + 탭 + 두 챔버 상태·조작 칸이 첫 화면에 보이게 조작 칸을 맨 위에, 줄 수를 적게 둔다.
+// 챔버12 운전 탭(2026-11-18 — 챔버K Chk2Run 구성, W-20 — 챔버K W-20 장비 박스 틀·대기 화면 격자).
+// 운전 탭 영역(컨테이너 run) 1360px 이상: 왼쪽 3/4 = CH1·CH2 칸(1280 이상 나란히), 오른쪽 1/4 = 알림 띠 하나(두 챔버·공통, 왼쪽 높이를 따름),
+//   그 아래 공통 장비 박스(Loadlock · Plasma Cleaning · TSP · 프리스퍼터 예약 · 로봇 연결 · 장비 공통 조작 · 노트북 레시피 파일 · 장비 응답 시간).
+//   더 좁으면 챔버 칸 → 공통 장비 → 알림(맨 아래).
+// 챔버 칸(컨테이너 ch): 대기 = 머리 카드(상태·조작) → 다음 공정 → 장비 박스 격자. 공정 중(정지 중 포함) = 머리 카드 → 공정 순서 →
+//   공정 중 값 바꾸기 → 주요 값(칸마다 목표·큰 값·막대) → 추세 → 장비 박스 격자 → OES/RGA 그래프 → 공정 목표값.
+// 장비 박스(Ch12Devices — 챔버K DevCard 틀): 진공 · 셔터·인터락 · 가스·압력 · Ion Gauge · 파워 · 히터(CH2) · 두께 모니터 · OES · RGA,
+//   격자는 칸 폭 950px 3개 · 650px 2개 · 그 밖 1개.
 import { useEffect, useMemo, useState } from "react";
-import { ListOrdered, Pause, Play, SkipForward, Square, Upload, X } from "lucide-react";
+import { FileEdit, ListOrdered, Pause, Play, SkipForward, Square, Upload, X } from "lucide-react";
 import { FS, Btn, Card, Chip, Empty, KV, RangeBar, Tile, Val, type Ask } from "../chk/kit";
 import Chk2Adjust from "../chk/Chk2Adjust";
 import Chk2Trend, { type TrendDef } from "../chk/Chk2Trend";
@@ -18,9 +20,9 @@ import { reasonLabel, type AdjustState, type FieldDef, type StateData } from "..
 import type { FeedItem, SendResult, TrendPt } from "../chk/useChk2";
 import type { Notice } from "../chk/kit";
 import type { RecipeFull, RecipeItem } from "../chk/useRecipes";
-import { BlockCard } from "./BlockCard";
-import { ChamberLog } from "./Ch12Logs";
-import { CommonOps, HeaterThicknessPanel, PcPanel, PresputterPanel, RobotPanel, TspPanel, type LockFn } from "./Ch12Aux";
+import { ChamberDevices, LoadlockBox12 } from "./Ch12Devices";
+import { RunAlerts } from "./Ch12Logs";
+import { CommonOps, PcPanel, PresputterPanel, RobotPanel, TspPanel, type LockFn } from "./Ch12Aux";
 import { hasRowContent, loadPayload, rowLine } from "./Ch12Recipes";
 import { Spectra } from "./Ch12Spectra";
 import Ch12Timing from "./Ch12Timing";
@@ -127,7 +129,8 @@ function KeyValues({ bundle, st, ch, running }: { bundle: Ch12Bundle | null; st:
   return (
     <Card title="주요 값" right={<span className={`${FS.small} text-[#5B6470]`}>{running ? "이번 공정이 쓰는 장비" : "지원 장비"}</span>}>
       {shown.length ? (
-        <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">{shown.map((d) => <KeyTile key={d.value} d={d} bundle={bundle} snap={snap} ch={ch} />)}</div>
+        // 칸 수는 챔버 칸 폭 기준(컨테이너 ch, W-20 — 알림 띠로 칸이 좁아져도 이름이 잘리지 않게): 480px 2개 · 900px 3개
+        <div className="grid gap-2 @min-[480px]/ch:grid-cols-2 @min-[900px]/ch:grid-cols-3">{shown.map((d) => <KeyTile key={d.value} d={d} bundle={bundle} snap={snap} ch={ch} />)}</div>
       ) : <Empty>값을 아직 받지 못했습니다</Empty>}
       <p className={`mt-2 ${FS.small} text-[#5B6470]`}>▲ 목표 · │ 현재</p>
     </Card>
@@ -197,21 +200,22 @@ function Seq({ bundle, st, ch, lock, onAsk, onEditSeq, label }: {
 }
 
 // ───────────── 챔버 칸 ─────────────
-/** 장비 카드 계통(챔버K 장비 카드 배치와 같은 생각 — 가스·압력 / 파워 / 측정) */
-const SYSTEMS: { key: string; kinds: string[] }[] = [
-  { key: "gas", kinds: ["mfc", "ig"] },
-  { key: "power", kinds: ["dcpulse", "rfpulse", "dc", "rf"] },
-  { key: "measure", kinds: ["stm100", "oes", "rga"] },
-];
 export type ChamberProps = {
   bundle: Ch12Bundle | null; st: Ch12State | null; ch: Ch; connected: boolean; lock: LockFn; onAsk: (a: Ask) => void;
   feed: FeedItem[]; trend: TrendPt[]; nowMs: number; skewMs: number; equipment: string; local: boolean;
   recipes: RecipeItem[] | null; getRecipe?: (id: string) => Promise<RecipeFull | null>; onEditSeq: () => void; onLog?: () => void;
+  plcOk?: boolean; send?: (kind: string, args: Record<string, unknown>, label?: string) => Promise<SendResult>;
+  notify?: (n: Omit<Notice, "id" | "at">) => void;
+  onHmi?: () => void; onConfig?: () => void;        // W-20 장비 박스 [HMI 열기]·[설정 열기] — 탭이 없으면 넘기지 않는다
+  onEditRecipe?: (id: string | null) => void;       // W-20 다음 공정 [레시피 열기]·[레시피 편집] — 레시피 탭이 있을 때만
 };
 
-function NextRecipe({ bundle, ch, recipes, getRecipe, lock, onAsk, label }: {
-  bundle: Ch12Bundle | null; ch: Ch; recipes: RecipeItem[]; getRecipe?: (id: string) => Promise<RecipeFull | null>; lock: LockFn;
-  onAsk: (a: Ask) => void; label: string;
+/** 다음 공정(대기, W-20 — 챔버K 다음 공정 카드와 같게): 적재된 레시피가 없으면 머리 오른쪽 한 줄, 고르기 줄(레시피 고르기 · [레시피 열기]/
+ *  [레시피 편집](레시피 탭이 있을 때만) · [적재]), 고른 레시피 요약은 아래 전체 폭. 적재 명령·인자·잠금·확인창은 W-19 와 같다.
+ *  노트북 화면(웹 레시피 목록 없음)은 고르기 대신 안내 한 줄 */
+function NextProcess({ bundle, st, ch, recipes, getRecipe, lock, onAsk, label, onEdit }: {
+  bundle: Ch12Bundle | null; st: Ch12State | null; ch: Ch; recipes: RecipeItem[] | null; getRecipe?: (id: string) => Promise<RecipeFull | null>;
+  lock: LockFn; onAsk: (a: Ask) => void; label: string; onEdit?: (id: string | null) => void;
 }) {
   const [id, setId] = useState("");
   const [full, setFull] = useState<RecipeFull | null>(null);
@@ -221,26 +225,55 @@ function NextRecipe({ bundle, ch, recipes, getRecipe, lock, onAsk, label }: {
     void getRecipe(id).then((r) => { if (!off) setFull(r); });
     return () => { off = true; };
   }, [id, getRecipe]);
+  const loaded = engineOf(st, ch)?.recipe_name;
   const kLoad = pickKind(bundle, KINDS.load);
-  const list = recipes.filter((r) => r.kind === (ch as unknown as RecipeItem["kind"]));
+  const list = (recipes ?? []).filter((r) => r.kind === (ch as unknown as RecipeItem["kind"]));
   const item = list.find((r) => r.id === id);
   const rows = (full && full.id === id ? (full.rows as Row[]).filter(hasRowContent) : []);
   const p = full && full.id === id ? loadPayload(rows, full.name) : null;
   const why = !id ? "레시피를 고르세요" : !p ? "레시피를 읽는 중" : item?.check?.errors ? `웹 검사 오류 ${item.check.errors}개(레시피 탭에서 고치세요)` : !rows.length ? "행 없음" : p.why || null;
+  const blockRows = rows.filter((r) => Array.isArray(r.blocks));
+  const steps = blockRows.reduce((n, r) => n + (r.blocks as unknown[]).length, 0);
+  const first = rows.find((r) => !Array.isArray(r.blocks));
   return (
-    <div className="flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-3">
-      <select value={id} onChange={(e) => { setId(e.target.value); setFull(null); }} aria-label={`${label} 공정 레시피 고르기`}
-        className={`h-10 min-w-0 flex-1 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body}`}>
-        <option value="">{label} 공정 레시피 고르기…</option>
-        {list.map((r) => <option key={r.id} value={r.id}>{r.name}{r.check?.errors ? ` (오류 ${r.check.errors})` : ""}</option>)}
-      </select>
-      <Btn kind="primary" lock={lock(kLoad, `${kLoad}@${ch}`) ?? why}
-        onClick={() => p && full && onAsk({ kind: kLoad, key: `${kLoad}@${ch}`, label: `${label} 레시피 적재`, detail: `'${full.name}'`,
-          args: chArgs(bundle, kLoad, ch, p.args), lines: [`${rows.length}행`, ...rows.slice(0, 3).map((r) => (Array.isArray(r.blocks) ? `단계 ${(r.blocks as unknown[]).length}개` : rowLine(r)))],
-          note: "장비에 행 목록을 올리고 장비가 다시 검사합니다. 시작은 '공정 시작'으로 합니다." })}>
-        <Upload size={14} /> 적재
-      </Btn>
-    </div>
+    <Card title={CARD.next} right={!loaded && <span className={`${FS.body} text-[#5B6470]`}>장비에 적재된 공정 레시피 없음</span>}>
+      {!recipes ? (
+        <p className={`${FS.body} text-[#5B6470]`}>{`레시피 고르기·적재는 웹 화면에서 합니다. 장비 폴더의 레시피 파일은 아래 '${CARD.localFiles}'에서 고릅니다.`}</p>
+      ) : (
+        <div className="space-y-3">
+          <div className="min-w-0">
+            <p className={`mb-1 ${FS.small} text-[#5B6470]`}>공정 레시피</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <select value={id} onChange={(e) => { setId(e.target.value); setFull(null); }} aria-label={`${label} 공정 레시피 고르기`}
+                className={`h-10 min-w-0 flex-1 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body}`}>
+                <option value="">{label} 공정 레시피 고르기…</option>
+                {list.map((r) => <option key={r.id} value={r.id}>{r.name}{r.check?.errors ? ` (오류 ${r.check.errors})` : ""}</option>)}
+              </select>
+              {onEdit && <Btn onClick={() => onEdit(id || null)}><FileEdit size={14} /> {id ? "레시피 편집" : "레시피 열기"}</Btn>}
+              <Btn kind="primary" lock={lock(kLoad, `${kLoad}@${ch}`) ?? why}
+                onClick={() => p && full && onAsk({ kind: kLoad, key: `${kLoad}@${ch}`, label: `${label} 레시피 적재`, detail: `'${full.name}'`,
+                  args: chArgs(bundle, kLoad, ch, p.args), lines: [`${rows.length}행`, ...rows.slice(0, 3).map((r) => (Array.isArray(r.blocks) ? `단계 ${(r.blocks as unknown[]).length}개` : rowLine(r)))],
+                  note: "장비에 행 목록을 올리고 장비가 다시 검사합니다. 시작은 '공정 시작'으로 합니다." })}>
+                <Upload size={14} /> 적재
+              </Btn>
+            </div>
+          </div>
+          {full && id && full.id === id && (
+            <div className="space-y-2 rounded-[10px] border border-[#E3E6EA] p-3" data-next-summary={ch}>
+              <div className="flex flex-wrap gap-1.5">
+                {item?.check ? (item.check.errors ? <Chip tone="alarm">검사 오류 {item.check.errors}</Chip> : item.check.warnings ? <Chip tone="warn">경고 {item.check.warnings}</Chip> : <Chip>검사 통과</Chip>)
+                  : <Chip>검사 없음</Chip>}
+                <Chip>{rows.length}행</Chip>
+                {steps > 0 && <Chip>단계 {steps}개</Chip>}
+              </div>
+              {first && <p className={`${FS.body} text-[#1B1F24]`}>{rowLine(first)}</p>}
+              {item?.check?.first && item.check.errors > 0 && <p className={`${FS.small} text-[#B42318]`}>{item.check.first}</p>}
+              {p?.why && <p className={`${FS.small} text-[#B42318]`}>{p.why}</p>}
+            </div>
+          )}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -251,6 +284,7 @@ export function ChamberRun(p: ChamberProps) {
   const cdef = bundle?.chambers?.find((c) => c.id === ch);
   const info = stateInfo(bundle, cs?.procState, ch);
   const running = isRunning(bundle, cs);
+  const busy = running || info.kind === "stopping";          // 공정 중 배치(W-20) — 공정 중·정지 중. 대기면 머리 → 다음 공정 → 장비 박스
   const eng = engineOf(st, ch);
   const snap = st?.snapshot;
   const label = placeName(bundle, ch);
@@ -266,8 +300,6 @@ export function ChamberRun(p: ChamberProps) {
   const alarms = [...(cs?.alarms ?? []).map((r) => ({ ruleId: r, text: alarmName(r), tip: reasonTip(asChk(bundle), r, detail) })),
     ...(st?.alarms ?? []).filter((a) => a.chamber === ch && !(cs?.alarms ?? []).includes(a.ruleId))
       .map((a) => ({ ruleId: a.ruleId, text: a.code ? reasonLabel(asChk(bundle), a.code) : a.ruleId, tip: reasonTip(asChk(bundle), a.code, detail) }))];
-  const blocks = (cdef?.blocks ?? []).map((n) => bundle?.snapshot?.blocks?.find((b) => b.name === n)).filter((b) => !!b)
-    .filter((b) => !(ch === "ch2" && ["ch2.heater", "ch2.thk", "ch2.stm100"].includes(b.name)));          // CH2 히터·두께는 아래 칸
   const targets = (bundle?.snapshot?.process ?? []).filter((f) => (cdef?.targets ?? []).includes(f.column))
     .filter((f) => snap?.[f.column] !== null && snap?.[f.column] !== undefined);
   // 공정 중 값 바꾸기 — 챔버K 화면을 이 챔버 값으로(인자에 ch, 기다림 단위도 챔버별)
@@ -278,11 +310,8 @@ export function ChamberRun(p: ChamberProps) {
   const adjSt = { procState: running ? "__RUN__" : "IDLE", runId: cs?.runId ?? null, adjust: adjList } as StateData;
   const adjBundle = useMemo(() => (bundle ? { ...asChk(bundle)!, states: [{ name: "__RUN__", label: "진행", kind: "active" }] } : null), [bundle]);
   const queue = eng?.queue as { index?: number; total?: number; mode?: boolean } | null | undefined;
-  const FOLD = new Set(["dcpulse", "rfpulse", "stm100", "oes", "rga", "dc", "rf"]);
-  const BIG: Record<string, string[]> = { mfc: ["ar_sccm", "o2_sccm", "n2_sccm", "pressure_mtorr"], ig: ["pressure_torr"], dcpulse: ["p_w", "v_v", "i_a"],
-    rfpulse: ["fwd_w", "ref_w"], dc: ["dc1_p", "dc1_v", "dc1_i"], rf: ["fwd_w", "ref_w"] };
   return (
-    <div className="flex min-w-0 flex-col gap-3" data-chamber={ch}>
+    <div className="@container/ch flex min-w-0 flex-col gap-3" data-chamber={ch} data-layout={busy ? "run" : "idle"}>
       <Card>
         <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div className="min-w-0 flex-1">
@@ -347,8 +376,11 @@ export function ChamberRun(p: ChamberProps) {
             <Btn lock={lock(kErr, key(kErr))} onClick={() => ask({ kind: kErr, label: `${label} 오류 표시 해제`, args: chArgs(bundle, kErr, ch) })}>오류 해제</Btn>
           )}
         </div>
-        {!running && p.recipes && <NextRecipe bundle={bundle} ch={ch} recipes={p.recipes} getRecipe={p.getRecipe} lock={lock} onAsk={onAsk} label={label} />}
       </Card>
+
+      {!busy && <NextProcess bundle={bundle} st={st} ch={ch} recipes={p.recipes} getRecipe={p.getRecipe} lock={lock} onAsk={onAsk} label={label}
+        onEdit={p.onEditRecipe} />}
+      {busy && <>
 
       <Seq bundle={bundle} st={st} ch={ch} lock={lock} onAsk={onAsk} onEditSeq={p.onEditSeq} label={label} />
 
@@ -365,30 +397,15 @@ export function ChamberRun(p: ChamberProps) {
       <Chk2Trend trend={p.trend} equipment={p.equipment} runId={cs?.runId ?? null} local={p.local} nowMs={nowMs}
         defs={trendDefs(bundle, ch)} title={`${label} ${CARD.trend}`} edgeTicks />
 
-      {/* 장비 카드 — 챔버K 장비 카드처럼 계통별 열(가스·압력 · 파워 · 측정), 칸이 넓으면 두 열. 이름의 챔버 앞말은 뺀다 */}
-      <div className="@container">
-        <div className="grid grid-cols-1 items-start gap-3 @[720px]:grid-cols-2">
-          {SYSTEMS.map((sys) => {
-            const list = blocks.filter((b) => sys.kinds.includes(b.name.split(".").pop() ?? ""));
-            if (!list.length) return null;
-            return (
-              <div key={sys.key} className={`flex min-w-0 flex-col gap-3 ${sys.key === "measure" ? "@[720px]:col-start-1" : ""}`} data-system={sys.key}>
-                {list.map((b) => {
-                  const kind = b.name.split(".").pop() ?? "";
-                  const gases = cdef?.gases ?? [];
-                  const big = (BIG[kind] ?? []).filter((n) => b.fields.some((f) => f.name === n))
-                    .filter((n) => kind !== "mfc" || !/_sccm$/.test(n) || gases.includes(n.split("_")[0]));        // 그 챔버 가스 라인만
-                  return <BlockCard key={b.name} def={b} snap={snap} link={st?.links?.[b.name]} big={big} foldable={FOLD.has(kind)} strip={label} />;
-                })}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-      <Spectra feed={feed} st={st} ch={ch} />
-      {targets.length > 0 && (
+      </>}
+      {/* 장비 박스(W-20 — 챔버K DevCard 틀): 진공 · 셔터·인터락 · 가스·압력 · Ion Gauge · 파워 · 히터(CH2) · 두께 모니터 · OES · RGA.
+          격자는 이 챔버 칸 폭 기준(컨테이너 ch) 950px 이상 3개, 650px 이상 2개, 그 밖 1개 — 이름이 잘리지 않는 폭 */}
+      <ChamberDevices ctx={{ bundle, st, lock, onAsk, onHmi: p.onHmi, onConfig: p.onConfig }} ch={ch} plcOk={p.plcOk ?? true} feed={feed}
+        send={p.send} notify={p.notify} grid="grid grid-cols-1 gap-3 @min-[650px]/ch:grid-cols-2 @min-[950px]/ch:grid-cols-3" />
+      {busy && <Spectra feed={feed} st={st} ch={ch} />}
+      {busy && targets.length > 0 && (
         <Card title="공정 목표값" right={<span className={`${FS.small} text-[#5B6470]`}>그 시각 엔진이 장비에 요청한 값</span>}>
-          <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-x-4 @min-[480px]/ch:grid-cols-2 @min-[900px]/ch:grid-cols-3">
             {targets.map((f) => (
               <KV key={f.column} k={fieldName(bundle, f.column, label)} title={fieldTipOf(bundle, f.column, detail)}>
                 <b className="tabular-nums text-[#133A7C]">{short(snap?.[f.column])}</b><span className={`ml-1 ${FS.small} text-[#5B6470]`}>{f.unit}</span>
@@ -397,7 +414,6 @@ export function ChamberRun(p: ChamberProps) {
           </div>
         </Card>
       )}
-      <ChamberLog bundle={bundle} feed={feed} ch={ch} alarms={alarms} onLog={p.onLog} />
     </div>
   );
 }
@@ -414,22 +430,33 @@ export type RunProps = Omit<ChamberProps, "ch" | "onEditSeq"> & {
 export default function Ch12Run(p: RunProps) {
   const { bundle, st, lock, onAsk, feed, nowMs } = p;
   const cmn = { bundle, st, lock, onAsk };
+  // 운전 탭 영역(컨테이너 run, W-20 — 챔버K 대기 화면과 같은 기준): 1360px 이상이면 왼쪽 3/4 = CH1·CH2 칸, 오른쪽 1/4 = 알림 띠
+  //   (두 챔버·공통 알림 하나 — 높이는 왼쪽 묶음을 따르고 목록 안에서 스크롤), 공통 장비는 그 아래 전체 폭.
+  //   더 좁으면 CH1·CH2 칸 → 공통 장비 → 알림(맨 아래, 목록 최대 240px). 챔버 칸마다 있던 '알림·로그' 카드는 없앰
   return (
-    <div className="space-y-3">
-      <div className="grid items-start gap-3 min-[1280px]:grid-cols-2">
-        {(["ch1", "ch2"] as const).map((ch) => <ChamberRun key={ch} {...p} ch={ch} onEditSeq={() => p.onEditSeq(ch)} />)}
-      </div>
-      <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-        <HeaterThicknessPanel {...cmn} plcOk={p.plcOk} feed={feed} send={p.send} notify={p.notify} />
-        <PcPanel {...cmn} recipes={p.pcRecipes} getRecipe={p.getRow} />
-        <TspPanel {...cmn} nowMs={nowMs} />
-      </div>
-      <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-        <PresputterPanel {...cmn} />
-        <RobotPanel bundle={bundle} st={st} feed={feed} />
-        <CommonOps {...cmn} plcOk={p.plcOk} />
-        {p.local && p.localCan && <LocalFiles bundle={bundle} can={p.localCan} onAsk={onAsk} />}
-        <Ch12Timing st={st} bundle={bundle} />
+    <div className="@container/run">
+      <div className="grid grid-cols-1 gap-3 @min-[1360px]/run:grid-cols-4">
+        <div className="min-w-0 @min-[1360px]/run:col-span-3">
+          <div className="grid items-start gap-3 min-[1280px]:grid-cols-2">
+            {(["ch1", "ch2"] as const).map((ch) => <ChamberRun key={ch} {...p} ch={ch} onEditSeq={() => p.onEditSeq(ch)} />)}
+          </div>
+        </div>
+        <div className="relative order-last min-w-0 @min-[1360px]/run:order-none" data-alerts="">
+          <RunAlerts bundle={bundle} st={st} feed={feed} onLog={p.onLog} />
+        </div>
+        {/* 공통 장비(W-20 — 챔버 장비 박스와 같은 틀·같은 격자 기준: 이 영역 폭 950px 이상 3개, 650px 이상 2개, 그 밖 1개) */}
+        <div className="@container/common min-w-0 @min-[1360px]/run:col-span-4">
+          <div className="grid grid-cols-1 gap-3 @min-[650px]/common:grid-cols-2 @min-[950px]/common:grid-cols-3" data-common="">
+            <LoadlockBox12 ctx={{ ...cmn, onHmi: p.onHmi }} plcOk={p.plcOk} />
+            <PcPanel {...cmn} recipes={p.pcRecipes} getRecipe={p.getRow} />
+            <TspPanel {...cmn} nowMs={nowMs} />
+            <PresputterPanel {...cmn} />
+            <RobotPanel bundle={bundle} st={st} feed={feed} />
+            <CommonOps {...cmn} plcOk={p.plcOk} />
+            {p.local && p.localCan && <LocalFiles bundle={bundle} can={p.localCan} onAsk={onAsk} />}
+            <Ch12Timing st={st} bundle={bundle} />
+          </div>
+        </div>
       </div>
     </div>
   );

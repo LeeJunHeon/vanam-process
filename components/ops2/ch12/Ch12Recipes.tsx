@@ -91,9 +91,10 @@ function V1RowForm({ b, row, onRow, readOnly }: { b: Ch12Bundle | null; row: Row
   );
 }
 
-export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirtyRef }: {
+export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirtyRef, openReq }: {
   bundle: Ch12Bundle | null; recipes: ReturnType<typeof useRecipes>; can: (kind: string) => boolean;
   onAsk: (a: Ask) => void; notify: (n: Omit<Notice, "id" | "at">) => void; dirtyRef: MutableRefObject<boolean>;
+  openReq?: { id: string | null; n: number } | null;   // 운전 탭 다음 공정 [레시피 편집](W-20) — 이 레시피를 연다(n 이 바뀔 때마다)
 }) {
   const { detail } = useChk2Mode();
   const [d, setD] = useState<Draft | null>(null);
@@ -128,6 +129,14 @@ export default function Ch12Recipes({ bundle, recipes, can, onAsk, notify, dirty
     setD({ ...nd, base: snapOf(nd) });
     setOpenRow(null);
   }, [recipes, notify]);
+  const reqN = openReq?.n;
+  useEffect(() => {
+    if (!reqN || !openReq?.id) return;
+    const id = openReq.id;
+    const t = setTimeout(() => void open(id), 0);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 요청(n)마다 한 번
+  }, [reqN]);
   const fresh = () => {
     const nd = { id: null, kind: newKind, name: "", updatedAt: null,
       rows: newKind === "pc" ? [{ use_ch: "1", process_name: "", base_pressure: "", gas_flow: "", working_pressure: "", rf_power: "", process_time: "" } as Row]
