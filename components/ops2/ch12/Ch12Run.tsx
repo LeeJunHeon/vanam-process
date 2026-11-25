@@ -129,7 +129,8 @@ function KeyValues({ bundle, st, ch, running }: { bundle: Ch12Bundle | null; st:
   return (
     <Card title="주요 값" right={<span className={`${FS.small} text-[#5B6470]`}>{running ? "이번 공정이 쓰는 장비" : "지원 장비"}</span>}>
       {shown.length ? (
-        <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">{shown.map((d) => <KeyTile key={d.value} d={d} bundle={bundle} snap={snap} ch={ch} />)}</div>
+        // 칸 수는 챔버 칸 폭 기준(컨테이너 ch, W-20 — 알림 띠로 칸이 좁아져도 이름이 잘리지 않게): 480px 2개 · 900px 3개
+        <div className="grid gap-2 @min-[480px]/ch:grid-cols-2 @min-[900px]/ch:grid-cols-3">{shown.map((d) => <KeyTile key={d.value} d={d} bundle={bundle} snap={snap} ch={ch} />)}</div>
       ) : <Empty>값을 아직 받지 못했습니다</Empty>}
       <p className={`mt-2 ${FS.small} text-[#5B6470]`}>▲ 목표 · │ 현재</p>
     </Card>
@@ -404,7 +405,7 @@ export function ChamberRun(p: ChamberProps) {
       {busy && <Spectra feed={feed} st={st} ch={ch} />}
       {busy && targets.length > 0 && (
         <Card title="공정 목표값" right={<span className={`${FS.small} text-[#5B6470]`}>그 시각 엔진이 장비에 요청한 값</span>}>
-          <div className="grid grid-cols-2 gap-x-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-x-4 @min-[480px]/ch:grid-cols-2 @min-[900px]/ch:grid-cols-3">
             {targets.map((f) => (
               <KV key={f.column} k={fieldName(bundle, f.column, label)} title={fieldTipOf(bundle, f.column, detail)}>
                 <b className="tabular-nums text-[#133A7C]">{short(snap?.[f.column])}</b><span className={`ml-1 ${FS.small} text-[#5B6470]`}>{f.unit}</span>
