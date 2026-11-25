@@ -330,9 +330,13 @@ export type Ask = {
   key?: string;            // 결과를 기다리는 동안 막는 단위(없으면 kind — 공정 중 수정은 항목마다)
 };
 
+/** 정지 쪽 조작인가(W-21 챔버K 색 규칙) — 정지 표시(stop)이거나 이름이 STOP·정지·끄기·끝내기 */
+export const isStopLike = (a: Pick<Ask, "stop" | "label">) => !!a.stop || /STOP|정지|끄기|끝내기/.test(a.label);
+
 /** 확인창 한 번 — 실행하면 onOk. Esc 취소, 정지 쪽은 열리면 실행 버튼에 포커스(Enter 실행) */
 export function ConfirmDialog({ ask, onOk, onCancel }: { ask: Ask | null; onOk: () => void; onCancel: () => void }) {
   const okRef = useRef<HTMLButtonElement | null>(null);
+  const { chkColors } = useChk2Mode();   // W-21 챔버K — 빨강은 정지·끄기·끝내기만(시작·실행·켜기·적용은 파랑). CH1&2 는 지금 규칙 그대로
   useEffect(() => {
     if (!ask) return;
     if (ask.stop) okRef.current?.focus();
@@ -365,7 +369,7 @@ export function ConfirmDialog({ ask, onOk, onCancel }: { ask: Ask | null; onOk: 
           <Btn kind="ghost" onClick={onCancel}>취소</Btn>
           <button ref={okRef} onClick={onOk}
             className={`h-10 rounded-[10px] px-4 font-semibold text-white ${FS.body} outline-offset-2 focus:outline-2 focus:outline-[#1D4ED8] ${
-              ask.danger || ask.stop || ask.red ? "bg-[#B42318]" : "bg-[#1D4ED8]"}`}>
+              (chkColors ? isStopLike(ask) : ask.danger || ask.stop || ask.red) ? "bg-[#B42318]" : "bg-[#1D4ED8]"}`}>
             실행
           </button>
         </div>

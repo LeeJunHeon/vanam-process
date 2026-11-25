@@ -35,6 +35,8 @@ import { useRecipes } from "./useRecipes";
 
 const STORE_KEY = "vanam-process:chk2-device";
 const LATE_MS = 3_000;
+const HOLD_KINDS = ["PROCESS_PAUSE", "PROCESS_RESUME", "PROCESS_SKIP"];
+const HOLD_MS = 3_000;
 const LOST_MS = 10_000;
 const SKEW_WARN_MS = 3_000;
 const PLC_PENDING_MS = 10_000;     // PLC 버튼 "전환 중" 최대
@@ -145,7 +147,9 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const recipes = useRecipes(equipment, !local);
   const [now, setNow] = useState(() => Date.now());
   const [ask, setAsk] = useState<Ask | null>(null);
-  const [inflight, setInflight] = useState<Record<string, number>>({});   // 결과를 기다리는 명령(종류 또는 PLC_BUTTON:target)
+  const [inflight, setInflight] = useState<Record<string, number>>({});
+  // W-21 — 일시정지·재개·건너뛰기는 받은 뒤 1초 상태가 바뀔 때까지(최대 3초) 같은 버튼을 다시 누르지 못하게
+  const [holdUntil, setHoldUntil] = useState<Record<string, number>>({});   // 결과를 기다리는 명령(종류 또는 PLC_BUTTON:target)
   const [notices, setNotices] = useState<Notice[]>([]);
   const [plcPending, setPlcPending] = useState<Record<string, { want: boolean; at: number }>>({});
   const [detail, setDetail] = useDetailPref();
@@ -228,7 +232,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
     if (!perms.canOperate || !perms.kinds.includes(kind)) return "권한 없음 · 장비 담당자·관리자만 조작합니다";
     if (bench && !benchOk(kind)) return "읽기 전용이라 잠김";
     if (STOP_KINDS.includes(kind)) return connected || webOnline ? null : "장비 끊김";
-    if (inflight[key]) return "결과를 기다리는 중";
+    if (inflight[key] || (holdUntil[key] ?? 0) > now) return "결과를 기다리는 중";
     if (!connected) return local && !d.streamUp ? "노트북 프로그램 연결 끊김" : "장비 끊김";
     if (PLC_KINDS.has(kind) && !plcOk) return "PLC 값이 오래됨";
     return null;
@@ -277,6 +281,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       return next;
     });
     const b = r.body;
+    if (r.ok && b.status === "accepted" && HOLD_KINDS.includes(a.kind)) setHoldUntil((m) => ({ ...m, [key]: Date.now() + HOLD_MS }));
     if (!r.ok) {
       notify({ tone: "bad", title: `${what}: 보낼 수 없었음`,
                text: `${SEND_ERROR[b.error ?? ""] ?? b.error ?? `HTTP ${r.status}`}${b.detail ? ` · ${b.detail}` : ""}` });
@@ -355,7 +360,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   // hello 를 받기 전 — 연결된 적 없는 장비도 전체 화면이 잠깐 보였다 바뀌지 않게 자리표시만(못 받으면 오류 안내)
   if (!d.hello) {
     return (
-      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail, chkWords: true }}>
+      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail, chkWords: true, chkColors: true }}>
         {d.authLost ? <Issue level="alarm"><LogIn size={14} className="mr-1 inline" />로그인이 끊겼습니다. 새로고침하세요. 조작이 잠겼습니다.</Issue>
           : d.error ? <Issue level="alarm">{d.error}</Issue>
           : <section className={`animate-pulse rounded-[12px] border border-[#D9DDE3] bg-white p-6 text-center ${FS.body} text-[#5B6470]`}>장비 정보를 읽는 중…</section>}
@@ -390,7 +395,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   );
 
   return (
-    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail, chkWords: true }}>
+    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail, chkWords: true, chkColors: true }}>
       {local && (
         <div className={`flex flex-wrap items-center gap-2 rounded-[12px] bg-[#3A424D] px-4 py-2 ${FS.body} text-white`}>
           <Laptop size={15} /> <b>노트북 화면</b>

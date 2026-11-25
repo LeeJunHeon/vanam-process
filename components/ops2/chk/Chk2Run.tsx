@@ -254,7 +254,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
             <span className="text-[#5B6470]">· {loaded.rows ?? "-"}행</span>
             {!loadedWeb && <Chip>웹 목록에 없는 이름</Chip>}
             <span className="ml-auto flex gap-2">
-              <Btn size="lg" kind="dangerSolid" lock={loaded.listActive ? "진행 중" : lock("RECIPE_START")} onClick={() => void askStart()}>
+              <Btn size="lg" kind="primary" lock={loaded.listActive ? "진행 중" : lock("RECIPE_START")} onClick={() => void askStart()}>
                 <Play size={14} /> 적재 시작
               </Btn>
               <Btn lock={lock("RECIPE_CLEAR")}
@@ -292,7 +292,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
                     <option value="">히터 레시피 고르기…</option>
                     {list.filter((r) => r.kind === "heater").map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
-                  <Btn kind="dangerSolid" lock={runLock}
+                  <Btn kind="primary" lock={runLock}
                     onClick={() => hfull && onAsk({ kind: "HEATER_RECIPE_RUN", label: "히터 레시피 실행", detail: `'${hfull.name}'`,
                       args: { name: hfull.name, steps: hfull.rows, gas: hfull.gas }, red: true,
                       lines: heaterLines(hfull.name, hfull.rows as Row[], hfull.gas as Row | null), note: "히터를 켜고 단계대로 온도를 올립니다." })}>
@@ -368,7 +368,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
           <KeyValues bundle={bundle} st={st} blocks={runBlocks} />
           <Chk2Trend trend={trend} equipment={equipment} runId={st?.runId ?? null} local={local} nowMs={nowMs}
             pressureTarget={pressureTargetCol(snap, bundle)} fitLegend edgeTicks />
-          <Chk2Adjust bundle={bundle} st={st} skewMs={skewMs} canKey={canKey} onAsk={onAsk} plain />
+          <Chk2Adjust bundle={bundle} st={st} skewMs={skewMs} canKey={canKey} onAsk={onAsk} plain feed={feed} />
         </div>
         <div className="grid min-w-0 items-start gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">
           <DeviceStates bundle={bundle} snap={snap} />

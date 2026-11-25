@@ -346,7 +346,7 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk, onConfig, onSettings
           {full && <Btn lock={lock("HEATER_SV")} onClick={() => setModal("sv")}>목표 바꾸기…</Btn>}
           {full && <Btn lock={lock("HEATER_OFF")} onClick={() => onAsk({ kind: "HEATER_OFF", label: "히터 끄기" })}>끄기</Btn>}
           {fault && full && (
-            <Btn kind="danger" lock={lock("HEATER_RESET")}
+            <Btn lock={lock("HEATER_RESET")}
               onClick={() => onAsk({ kind: "HEATER_RESET", label: "히터 이상 리셋", detail: "원인을 먼저 확인하세요", danger: true })}>이상 리셋</Btn>
           )}
           {gas && gas !== "IDLE" && !m.webOnly("HEATER_GAS_RELEASE") && (

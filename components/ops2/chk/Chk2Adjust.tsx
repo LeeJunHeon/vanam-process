@@ -11,6 +11,8 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
 import { useChk2Mode } from "./mode";
+import { personWord } from "@/lib/ops2/chk/plain";
+import type { FeedItem } from "./useChk2";
 import { fmtDur } from "./text";
 import { FS, Card, type Ask } from "./kit";
 import { paramValue, rangeText, type Range } from "./logic";
@@ -79,8 +81,9 @@ function whereOf(a: AdjustState | undefined, plain = false): { text: string; ton
   return plain ? { ...w, text: w.text.replace(/블록/g, "단계") } : w;       // W-17 챔버K(plain) — 운전 화면은 단계
 }
 
-function Row({ it, bundle, a, skewMs, canSend, onSend, plain }: {
+function Row({ it, bundle, a, skewMs, canSend, onSend, plain, last }: {
   it: AdjustItemDef; bundle: Bundle | null; a: AdjustState | undefined; skewMs: number; plain?: boolean;
+  last?: { old: unknown; new: unknown } | null;      // W-21 챔버K — 이번 공정 마지막 수정(old → new, 기록 PROCESS_ADJUST)
   canSend: boolean; onSend: (v: number | boolean, now: number | null) => void;
 }) {
   const [text, setText] = useState("");
@@ -90,7 +93,8 @@ function Row({ it, bundle, a, skewMs, canSend, onSend, plain }: {
   const where = whereOf(a, plain);
   const isBool = it.param.type === "bool";
   const now = a ? num(a.value) : null;
-  const changed = !!a?.adjusted && !isBool && a.value !== a.recipe;
+  // 챔버K(plain, W-21): 이번 공정에서 한 번이라도 바꿨으면 값이 레시피와 같아져도 마지막 수정을 계속 보인다
+  const changed = !!a?.adjusted && !isBool && (plain || a.value !== a.recipe);
   const send = canSend && where.send && (!isBool || !a || a.scope === "live");   // 대기 끝내기는 지금 대기 블록일 때만
   return (
     <tr className="border-t border-[#E3E6EA] align-top">
@@ -105,7 +109,8 @@ function Row({ it, bundle, a, skewMs, canSend, onSend, plain }: {
         {a && !isBool && <p className={`${FS.small} text-[#5B6470]`}>레시피 {fmt(num(a.recipe))}</p>}
         {changed && (
           <p className={`${FS.small} font-semibold text-[#1D4ED8]`}>
-            수정됨 · {a!.adjusted!.by ?? "?"} · {deviceTime(a!.adjusted!.t, skewMs)}
+            수정됨 · {plain ? personWord(a!.adjusted!.by) || "?" : a!.adjusted!.by ?? "?"} · {deviceTime(a!.adjusted!.t, skewMs)}
+            {plain && last && ` (${fmt(num(last.old))} → ${fmt(num(last.new))})`}
           </p>
         )}
       </td>
@@ -136,9 +141,10 @@ function Row({ it, bundle, a, skewMs, canSend, onSend, plain }: {
   );
 }
 
-export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk, plain = false }: {
+export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk, plain = false, feed }: {
   bundle: Bundle | null; st: StateData | null; skewMs: number;
   canKey: (kind: string, key: string) => boolean; onAsk: (a: Ask) => void;
+  feed?: FeedItem[];        // W-21 챔버K — 마지막 수정의 이전 값 → 새 값(기록 PROCESS_ADJUST). 없으면 글만
   plain?: boolean;          // W-17 챔버K — 블록 → 단계, 램프 → 승온(기본은 지금 동작 — CH1&2 그대로)
 }) {
   const [open, setOpen] = useState(false);
@@ -150,6 +156,16 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk, plain = 
   const runId = st.runId ?? null;
   const list = Array.isArray(st.adjust) ? st.adjust : null;
   const of = (it: AdjustItemDef) => list?.find((a) => a.device === it.device && a.item === it.item);
+  // 이번 공정의 마지막 받아들인 수정(항목마다) — 기록 줄 PROCESS_ADJUST(context.data device·item·old·new·result)
+  const lastOf = (it: AdjustItemDef): { old: unknown; new: unknown } | null => {
+    for (let i = (feed?.length ?? 0) - 1; i >= 0; i--) {
+      const e = feed![i];
+      const c = e.type === "event" && e.data.code === "PROCESS_ADJUST" && typeof e.data.context === "object" && e.data.context
+        ? (e.data.context as Record<string, unknown>).data as Record<string, unknown> | undefined : undefined;
+      if (c && c.device === it.device && c.item === it.item && ["applied", "scheduled", "confirmed"].includes(String(c.result))) return { old: c.old, new: c.new };
+    }
+    return null;
+  };
   // 장비 지금 값이 없으면(옛 장비) 모두 쓰는 쪽으로
   const using = items.filter((it) => { const a = of(it); return !a || a.scope === "live" || a.scope === "future"; });
   const unused = items.filter((it) => !using.includes(it));
@@ -166,7 +182,7 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk, plain = 
               const key = `PROCESS_ADJUST:${it.key}`;
               const a = of(it);
               return (
-                <Row key={it.key} it={it} bundle={bundle} a={a} skewMs={skewMs} plain={plain}
+                <Row key={it.key} it={it} bundle={bundle} a={a} skewMs={skewMs} plain={plain} last={plain && feed ? lastOf(it) : null}
                   canSend={canKey("PROCESS_ADJUST", key)}
                   onSend={(v, now) => onAsk({
                     kind: "PROCESS_ADJUST", key, label: `공정 중 수정 · ${nameOf(it, plain)}`,

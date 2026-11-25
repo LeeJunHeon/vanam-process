@@ -287,7 +287,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
             {why && <span className={`${FS.small} text-[#5B6470]`}>{why}</span>}
             {draft.kind === "process"
               ? <Btn kind="primary" lock={loadWhy} onClick={() => { setReveal(true); askLoadFull({ name: draft.name, rows: draft.rows.map((r) => r.data) }); }}><Upload size={14} /> 적재</Btn>
-              : <Btn kind="dangerSolid" lock={runWhy} onClick={() => { setReveal(true); askHeaterRun(); }}><Flame size={14} /> 히터 레시피 실행</Btn>}
+              : <Btn kind="primary" lock={runWhy} onClick={() => { setReveal(true); askHeaterRun(); }}><Flame size={14} /> 히터 레시피 실행</Btn>}
           </div>
           {errCount > 0 && <Issue level="warn">오류를 고쳐야 적재·실행할 수 있습니다(저장은 됩니다). &apos;오류 {errCount}&apos;를 누르면 첫 오류로 갑니다.</Issue>}
           {reveal && pCheck && pCheck.listErrors.length > 0 && <Issue level="alarm">{pCheck.listErrors.join(" · ")}</Issue>}
