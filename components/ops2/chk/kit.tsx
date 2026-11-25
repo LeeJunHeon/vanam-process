@@ -216,12 +216,13 @@ export function Empty({ children }: { children: ReactNode }) {
 }
 
 /** 탭 — 선택은 #1D4ED8 밑줄·#E8EEFC 배경 */
-export function Tabs<K extends string>({ tabs, value, onChange, right, small }: {
+export function Tabs<K extends string>({ tabs, value, onChange, right, small, wrap }: {
   tabs: { key: K; label: ReactNode; badge?: ReactNode; title?: string }[]; value: K; onChange: (k: K) => void; right?: ReactNode; small?: boolean;
+  wrap?: boolean;     // W-21 챔버K — 좁은 화면에서 탭을 가로로 밀지 않고 줄을 바꿔 다 보이게(오른쪽 버튼과 겹치지 않음). 기본: 지금처럼 가로 스크롤
 }) {
   return (
-    <div className="flex min-w-0 items-end gap-1 border-b border-[#D9DDE3]">
-      <div className="flex min-w-0 items-end gap-1 overflow-x-auto overflow-y-hidden" role="tablist">
+    <div className={`flex min-w-0 items-end gap-1 border-b border-[#D9DDE3] ${wrap ? "flex-wrap" : ""}`}>
+      <div className={`flex min-w-0 items-end gap-1 ${wrap ? "flex-wrap" : "overflow-x-auto overflow-y-hidden"}`} role="tablist">
       {tabs.map((t) => (
         <button key={t.key} role="tab" aria-selected={value === t.key} onClick={() => onChange(t.key)} title={t.title}
           className={`-mb-px flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-[10px] border-b-2 font-semibold ${

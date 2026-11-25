@@ -203,7 +203,7 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk, plain = 
     <Card title={
       <button onClick={() => setOpen((o) => !o)} className="flex min-w-0 items-center gap-1.5" aria-expanded={open}>
         {open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}<SlidersHorizontal size={15} /> <span className="shrink-0 whitespace-nowrap">공정 중 값 바꾸기</span>
-        <span className={`min-w-0 truncate text-left ${FS.body} font-normal text-[#5B6470]`}>— {using.length ? using.map((x) => nameOf(x, plain)).join(" · ") : "지금 바꿀 수 있는 항목 없음"}</span>
+        <span className={`min-w-0 ${plain ? "" : "truncate"} text-left ${FS.body} font-normal text-[#5B6470]`}>— {using.length ? using.map((x) => nameOf(x, plain)).join(" · ") : "지금 바꿀 수 있는 항목 없음"}</span>
       </button>}
       right={<span className={`${FS.small} text-[#5B6470]`}>이번 공정에만 · 레시피·설정은 그대로</span>}>
       {open && (

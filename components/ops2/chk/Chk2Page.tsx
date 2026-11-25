@@ -469,7 +469,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       <Notices list={notices} onClose={(id) => setNotices((l) => l.filter((n) => n.id !== id))} />
 
-      <Tabs tabs={shownTabs} value={curTab} onChange={(t) => goTab(t)} right={detailBtn} />
+      <Tabs tabs={shownTabs} value={curTab} onChange={(t) => goTab(t)} right={detailBtn} wrap />
 
       {(curTab === "status" || curTab === "run") && (
         <Chk2Run equipment={equipment} bundle={d.bundle} st={st} runBlocks={d.runBlocks} editBase={d.editBase} feed={d.feed} trend={d.trend}

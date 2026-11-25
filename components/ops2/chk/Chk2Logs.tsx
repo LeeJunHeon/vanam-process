@@ -54,15 +54,16 @@ export function EventFeed({ bundle, feed, fill = false, plain = false, commands 
       ) : (
         <div ref={box}
           onScroll={() => { const el = box.current; if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
-          className={`${fill ? "h-[calc(100vh-260px)] min-h-[320px]" : "h-64"} space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 [overflow-anchor:none]`}>
+          className={`@container/log ${fill ? "h-[calc(100vh-260px)] min-h-[320px]" : "h-64"} space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 [overflow-anchor:none]`}>
+          {/* W-21 — 목록 폭 560px 미만이면 한 줄을 두 줄로(시각·출처·이름 / 내용) — 내용 칸이 몇 글자 폭으로 눌리지 않게 */}
           {shown.map((r) => (
-            <p key={r.e.id} className={`flex gap-2 ${FS.small} leading-snug`} title={r.desc}>
+            <p key={r.e.id} className={`flex flex-wrap gap-x-2 @min-[560px]/log:flex-nowrap ${FS.small} leading-snug`} title={r.desc}>
               <span className="shrink-0 font-mono tabular-nums text-[#8A929D]">{fmtKst(r.e.ts)}</span>
-              {(r.source || plain) && <span className="w-24 shrink-0 truncate text-[#5B6470]">{r.source ?? ""}</span>}
+              {(r.source || plain) && <span className="shrink-0 text-[#5B6470] @min-[560px]/log:w-24 @min-[560px]/log:truncate">{r.source ?? ""}</span>}
               <span className={`flex shrink-0 items-center gap-1 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.level === "warn" ? <AlertTriangle size={11} /> : r.level === "error" || r.level === "critical" ? <AlertOctagon size={11} /> : null}{r.kind}
               </span>
-              <span className={`min-w-0 ${r.level === "info" ? "text-[#1B1F24]" : LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
+              <span className={`min-w-0 basis-full @min-[560px]/log:basis-auto ${r.level === "info" ? "text-[#1B1F24]" : LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.text}
                 {detail && <span className="ml-1.5 font-mono text-[11px] text-[#8A929D]">{plain ? r.raw : r.code ?? r.raw}</span>}
               </span>
