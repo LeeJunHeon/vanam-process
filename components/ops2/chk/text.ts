@@ -218,9 +218,12 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
   if (source === "uplink") {
     text = "";                                         // 주소·오류 이름이 든 장비 문장은 상세 보기에서만
   } else if (source === "safety" && kind === "seq_done" && steps.length) {
+    // 상태별로 센다(W-19) — 실패(error)가 하나라도 있으면 '실패 N' 이 늘 보인다
     const n = (k: string) => steps.filter((x) => x === k).length;
-    const other = steps.length - n("ok") - n("not_needed");
-    text = `${steps.length}단계 · 실행 ${n("ok")}${n("not_needed") ? ` · 필요 없음 ${n("not_needed")}` : ""}${other ? ` · 그 밖 ${other}` : ""}`;
+    const known = ["ok", "not_needed", "sent", "error"];
+    const etc = steps.filter((x) => !known.includes(x)).length;
+    text = [`${steps.length}단계`, `실행 ${n("ok")}`, n("not_needed") ? `필요 없음 ${n("not_needed")}` : "",
+      n("sent") ? `확인 중 ${n("sent")}` : "", n("error") ? `실패 ${n("error")}` : "", etc ? `기타 ${etc}` : ""].filter(Boolean).join(" · ");
   } else if (source === "safety" && kind === "seq_start") {
     text = /^(\d+)단계$/.test(msg.trim()) ? msg.trim() : "";
   } else if (source === "ig" && kind === "filament_result") {
