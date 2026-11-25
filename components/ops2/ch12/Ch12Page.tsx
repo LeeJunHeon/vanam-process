@@ -148,6 +148,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const [notices, setNotices] = useState<Notice[]>([]);
   const [plcPending, setPlcPending] = useState<Record<string, { want: boolean; at: number }>>({});
   const [seqFor, setSeqFor] = useState<"ch1" | "ch2" | null>(null);
+  const [recipeReq, setRecipeReq] = useState<{ id: string | null; n: number } | null>(null);   // 운전 탭 [레시피 열기·편집](W-20)
   const [detail, setDetail] = useDetailPref();
   const tabs = local ? LOCAL_TABS : WEB_TABS;
   const [tab, setTabState] = useState<TabKey>("run");
@@ -386,14 +387,15 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
           getRecipe={fullOf} getRow={rowOf} pcRecipes={pcRecipes} onEditSeq={setSeqFor} onLog={() => goTab("log")} send={d.send} notify={notify}
           localCan={local ? localCan : undefined}
           onHmi={shownTabs.some((t) => t.key === "hmi") ? () => goTab("hmi") : undefined}
-          onConfig={shownTabs.some((t) => t.key === "config") ? () => goTab("config") : undefined} />
+          onConfig={shownTabs.some((t) => t.key === "config") ? () => goTab("config") : undefined}
+          onEditRecipe={shownTabs.some((t) => t.key === "recipe") ? (id) => { setRecipeReq({ id, n: Date.now() }); goTab("recipe"); } : undefined} />
       )}
       {curTab === "hmi" && (
         <Ch12Hmi bundle={bundle} snapshot={snap} st={st} plcOk={plcOk} lockOf={(t) => lock("PLC_BUTTON", `PLC_BUTTON:${t}`)} pending={pending}
           onAsk={setAsk} note={mimicNote} />
       )}
       {curTab === "recipe" && !local && (
-        <Ch12Recipes bundle={bundle} recipes={recipes} can={(k) => !lock(k)} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef} />
+        <Ch12Recipes bundle={bundle} recipes={recipes} can={(k) => !lock(k)} onAsk={setAsk} notify={notify} dirtyRef={dirtyRef} openReq={recipeReq} />
       )}
       {curTab === "log" && (
         <div className="space-y-3">

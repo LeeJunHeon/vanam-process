@@ -301,6 +301,23 @@ const chamberProps = (ch) => ({
         && lb.includes("사용하지 않음") && !lb.includes("설정 열기") && !/접어 둠/.test(web), { wb: wb.slice(0, 200), lb: lb.slice(0, 120) });
 }
 {
+  // W-20 ③ 대기 화면 배치 — 대기 칸: 머리 카드 → 다음 공정 → 장비 박스 격자만(주요 값·추세·공정 순서는 공정 중에만), 공정 중 칸은 그대로.
+  //   다음 공정: 적재 없음은 머리 오른쪽 한 줄, [레시피 열기](레시피 탭이 있을 때만). 격자 = 챔버 칸 폭(컨테이너 ch) 950px 3개 · 650px 2개 · 그 밖 1개
+  const idle = render(U.ChamberRun, { ...chamberProps("ch2"), onEditRecipe: noop }), it = textOf(idle);
+  const noEdit = render(U.ChamberRun, chamberProps("ch2"));
+  const run = render(U.ChamberRun, chamberProps("ch1")), rt = textOf(run);
+  const pos = (h, x) => h.indexOf(x);
+  const loaded2 = !!L.engineOf(st, "ch2")?.recipe_name;
+  const idleOk = st.chambers.ch2.procState === "IDLE" && idle.includes('data-layout="idle"') && pos(idle, "대기 중") < pos(idle, ">다음 공정<")
+    && pos(idle, ">다음 공정<") < pos(idle, 'data-devices="ch2"') && !it.includes("주요 값") && !it.includes("추세") && !/>\s?공정 순서</.test(idle)
+    && (loaded2 || it.includes("장비에 적재된 공정 레시피 없음")) && "레시피 열기" in buttons(idle) && !("레시피 열기" in buttons(noEdit));
+  const runOk = run.includes('data-layout="run"') && rt.includes("주요 값") && rt.includes("CH1 추세") && />\s?공정 순서</.test(run) && !/>다음 공정</.test(run)
+    && run.search(/>\s?공정 순서</) < pos(run, 'data-devices="ch1"');
+  const gridOk = /class="@container\/ch [^"]*" data-chamber="ch2"/.test(idle) && /class="[^"]*@min-\[650px\]\/ch:grid-cols-2[^"]*@min-\[950px\]\/ch:grid-cols-3[^"]*" data-devices="ch2"/.test(idle);
+  check("ui:idle-layout — 대기 칸 머리 → 다음 공정 → 장비 박스(주요 값·추세·공정 순서 없음), 공정 중 칸은 그대로, [레시피 열기]는 레시피 탭 있을 때만, 격자는 챔버 칸 폭 기준",
+        idleOk && runOk && gridOk, { idleOk, runOk, gridOk, loaded2 });
+}
+{
   const html = render(U.PresputterPanel, { bundle, st, lock: noLock, onAsk: noop });
   const t = textOf(html), b = buttons(html);
   check("ui:presputter — 프리스퍼터 예약·예약 취소 칸(시각 HH:MM 고르기), 장비가 매일 예약을 잡음·형식 오류는 TIME_FORMAT 거부",
