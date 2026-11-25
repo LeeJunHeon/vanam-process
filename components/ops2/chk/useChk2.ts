@@ -15,6 +15,7 @@
 //   state.run.editBase(묶음 14, 순서 고치기 기준 목록)도 판이 바뀔 때·10 초마다만 — run·판과 함께 기억(editBase).
 //   추세(15분·1시간)는 받은 state 의 주요 값을 2 초 간격으로 브라우저에 쌓는다(1시간까지 — 화면을 연 뒤부터).
 import { useCallback, useEffect, useRef, useState } from "react";
+import { rfDisplaySnap } from "@/lib/ops2/chk/rf";
 import { newerState } from "./logic";
 import type { Bundle, CmdRow, Envelope, EventData, Hello, RunBlock, RunRow, StateData } from "./types";
 
@@ -210,6 +211,8 @@ export function useChk2(equipment: string, mode: Chk2Mode = "web", trendCols: re
       s.addEventListener("state", (ev) => {
         const env = parse(ev) as Envelope<StateData> | null;
         if (!env) return;
+        // RF 표시 규칙(W-22) — 명령이 없고 명령 없는 출력도 아니면 Forward·Reflected 0(읽은 값은 *_raw). 화면·추세가 같은 값을 쓴다
+        if (env.data?.snapshot) env.data.snapshot = rfDisplaySnap(env.data.snapshot);
         setState((cur) => (newerState(cur, env) ? env : cur));
         const run = env.data.run;
         if (run && Array.isArray(run.blocks)) {

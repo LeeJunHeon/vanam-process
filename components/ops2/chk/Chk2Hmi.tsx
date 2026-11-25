@@ -361,7 +361,8 @@ function ValuePanel({ bundle, snap, links, plcOk, ion }: {
     );
   };
   // RF 출력은 묶음 19 rf.out_on(D40 > 0 또는 순방향 ≥ 5 W), 옛 묶음은 지금처럼 DAC 출력 허용 비트
-  const rfOut = snap?.["rf.out_on"] !== undefined ? "rf.out_on" : "rf.dac_enable";
+  // 묶음 23 은 명령 출력(rf.cmd_on — 명령 없이 나오는 출력은 상태 탭 RF 박스가 경고)
+  const rfOut = snap?.["rf.cmd_on"] !== undefined ? "rf.cmd_on" : snap?.["rf.out_on"] !== undefined ? "rf.out_on" : "rf.dac_enable";
   const lamps = ["air", "g1", "g2", "atm", "water"];
   const sec = (title: string, children: ReactNode) => (
     <div className="min-w-0 @[1100px]:border-t @[1100px]:border-[#E3E6EA] @[1100px]:pt-3 @[1100px]:first:border-t-0 @[1100px]:first:pt-0">

@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Cpu, ExternalLink } from "lucide-react";
 import { FS, Btn, Card, Chip } from "@/components/ops2/chk/kit";
 import { useChk2 } from "@/components/ops2/chk/useChk2";
+import { rfState } from "@/lib/ops2/chk/rf";
 import { kindOf, pressureTargetCol } from "@/components/ops2/chk/runview";
 import { chkLines, reasonText } from "@/components/ops2/chk/logView";
 import { RUN_RESULT, type StateData } from "@/components/ops2/chk/types";
@@ -141,6 +142,7 @@ function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onN
         <Chip tone={openShut.length ? "dark" : "neutral"}>{openShut.length ? `${openShut.join("·")} 열림` : "셔터 모두 닫힘"}</Chip>
         <Chip tone={itlOk ? "neutral" : "warn"}>{itlOk ? "인터락 정상" : `${fieldName(b, "plc.mv_interlock")} 꺼짐`}</Chip>
         <Chip tone={alarms.length ? "alarm" : "neutral"}>{alarms.length ? `활성 알람 ${alarms.length}개` : "활성 알람 없음"}</Chip>
+        {rfState(snap) === "uncommanded" && <Chip tone="warn">RF 명령 없이 출력 중</Chip>}
       </div>
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-3">
         <span className={`min-w-0 ${FS.body} text-[#5B6470]`}>

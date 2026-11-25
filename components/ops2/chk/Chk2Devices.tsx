@@ -23,6 +23,7 @@ import { useChk2Mode } from "./mode";
 import type { DevKey } from "./Chk2SettingsDrawer";
 import { kindOf } from "./runview";
 import type { LockFn } from "./Chk2Status";
+import { rfChip, rfState } from "@/lib/ops2/chk/rf";
 
 type Snap = Record<string, unknown> | undefined;
 type Ctx = { bundle: Bundle | null; st: StateData | null; snap: Snap; lock: LockFn; onAsk: (a: Ask) => void;
@@ -446,15 +447,27 @@ export function PowerCard({ name, bundle, snap, st, onManual, onConfig, onSettin
   const off = st?.links?.[name]?.q === "off";
   const bigName = name === "dc" ? "p" : "fwd_w";
   const rows = name === "dc" ? ["v", "i", "set_w"] : name === "rf" ? ["ref_w", "set_w"] : ["ref_w", "set_w", "freq_hz", "duty_pct"];
-  // RF 출력 켜짐은 묶음 19 의 rf.out_on(D40 > 0 또는 순방향 ≥ 5 W — 장비 5-21 ②), 옛 묶음은 칩 없이 지금처럼
-  const bools = name === "dc" ? ["out"] : name === "rfp" ? ["out_on", "itl_open"] : fieldOf(d, "out_on") ? ["out_on"] : [];
+  // RF 출력 칩 — 묶음 23 은 명령 출력(rf.cmd_on)·명령 없는 출력(rf.uncommanded) 규칙(lib/ops2/chk/rf), 묶음 19~22 는 rf.out_on,
+  // 그 전 묶음은 칩 없이 지금처럼
+  const rfc = name === "rf" ? rfChip(snap) : null;
+  const bools = name === "dc" ? ["out"] : name === "rfp" ? ["out_on", "itl_open"]
+    : rfc ? ["cmd_on", "uncommanded", "out_on"] : fieldOf(d, "out_on") ? ["out_on"] : [];
+  const chip = rfc ? <Chip tone={rfc.tone === "warn" ? "warn" : rfc.tone}>{rfc.text}</Chip>
+    : bools[0] && <Chip tone={snap?.[`${name}.${bools[0]}`] === true ? "dark" : "neutral"}>{snap?.[`${name}.${bools[0]}`] === true ? "출력 켜짐" : "출력 꺼짐"}</Chip>;
+  const raw = name === "rf" && rfState(snap) === "off" ? [snap?.["rf.fwd_w_raw"], snap?.["rf.ref_w_raw"]] : null;
   return (
     <DevCard title={d?.label ?? name} sub={blockSub(bundle, name, detail)} off={off} onConfig={onConfig} actions={<ManualBtn onManual={onManual} />}
       onSettings={onSettings && (() => onSettings(name))}
-      chip={<>{bools[0] && !off && <Chip tone={snap?.[`${name}.${bools[0]}`] === true ? "dark" : "neutral"}>{snap?.[`${name}.${bools[0]}`] === true ? "출력 켜짐" : "출력 꺼짐"}</Chip>}
-        <QBadge link={st?.links?.[name]} /></>}
+      chip={<>{!off && chip}<QBadge link={st?.links?.[name]} /></>}
+      note={name === "rf" && rfc?.tone === "warn" && !off
+        ? <Issue level="warn">RF 가 명령 없이 출력 중입니다. RF 전원 앞면(LOCAL)에서 켰는지 확인하세요.</Issue> : undefined}
       big={<Big f={fieldOf(d, bigName)} snap={snap} bundle={bundle} off={off} />}>
       {rows.map((n) => <Row key={n} f={fieldOf(d, n)} snap={snap} bundle={bundle} off={off} />)}
+      {detail && raw && !off && (
+        <p className={`${FS.small} text-[#5B6470]`} title="명령이 없어 화면에는 0 으로 보입니다. 기록에는 읽은 값이 남습니다.">
+          읽은 값 Forward {fmtValue(raw[0], ".1f") || "—"} W · Reflected {fmtValue(raw[1], ".1f") || "—"} W
+        </p>
+      )}
       {detail && name === "rfp" && !off && snap?.["rfp.read_plan"] === "alternate" && (
         <p className={`${FS.small} text-[#5B6470]`} title="읽기가 느려 Forward 와 상태를 2초마다 번갈아 읽습니다.">
           Forward·상태는 {ALT_NOTE}
@@ -497,7 +510,32 @@ export function ShutterCard({ bundle, snap, st, onHmi, onSettings }: Ctx & { onH
           ))}
         </div>
       </div>
+      <MountedRows st={st} />
     </DevCard>
+  );
+}
+
+/** 장착 타겟(W-22 — 재고관리 chamber-slots, state.targets). 읽기가 없으면(묶음 22·주소 없음·sim) 그리지 않는다 */
+export function MountedRows({ st, compact }: { st?: StateData | null; compact?: boolean }) {
+  const t = st?.targets;
+  if (!t) return null;
+  const at = t.readAt ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour12: false, hour: "2-digit", minute: "2-digit" }).format(new Date(t.readAt)) : null;
+  const title = [t.readAt ? `${at} 재고관리에서 읽음` : "아직 읽기 전", t.error ? `마지막 읽기 실패: ${t.error}` : ""].filter(Boolean).join(" · ");
+  return (
+    <div className={compact ? "" : "mt-2 border-t border-[#EEF0F3] pt-2"} title={title}>
+      {(["g1", "g2"] as const).map((g) => {
+        const m = t[g];
+        return (
+          <KV key={g} k={`${g === "g1" ? "Gun1" : "Gun2"} 장착 타겟`}>
+            <span className={`min-w-0 truncate ${FS.body} ${m ? "font-semibold text-[#1B1F24]" : "text-[#5B6470]"}`}
+              title={m ? [m.text, m.barcode && `바코드 ${m.barcode}`, m.purity && `순도 ${m.purity}`].filter(Boolean).join(" · ") : undefined}>
+              {m ? m.text : t.readAt ? "없음" : "—"}
+            </span>
+          </KV>
+        );
+      })}
+      {t.error && !t.readAt && <p className={`${FS.small} text-[#5B6470]`}>재고관리에서 장착 타겟을 읽지 못했습니다.</p>}
+    </div>
   );
 }
 

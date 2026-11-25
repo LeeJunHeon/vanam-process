@@ -18,6 +18,7 @@ import Chk2Hmi from "./Chk2Hmi";
 import { StatusBand, StatusBar, type ConnInfo } from "./Chk2Status";
 import Chk2Run from "./Chk2Run";
 import Chk2SettingsDrawer, { type DevKey } from "./Chk2SettingsDrawer";
+import Chk2DevParams from "./Chk2DevParams";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
 import Chk2Config from "./Chk2Config";
 import Chk2LocalConfig from "./Chk2LocalConfig";
@@ -517,6 +518,13 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
 
       {drawer && (
         <Chk2SettingsDrawer dev={drawer} bundle={d.bundle} st={st} onClose={() => setDrawer(null)}
+          controller={st?.devParams && ["gas", "pressure", "ig"].includes(drawer) ? (
+            <Chk2DevParams dev={drawer === "ig" ? "ig" : "mfc"} bundle={d.bundle} st={st}
+              canWrite={!local && !!perms?.isAdmin && (perms?.kinds ?? []).includes("DEVICE_PARAM_WRITE")}
+              writeLock={lock("DEVICE_PARAM_WRITE")} readLock={local ? "노트북 화면은 보기만 합니다" : lock("DEVICE_PARAMS_READ")}
+              onAsk={setAsk} onRead={() => setAsk({ kind: "DEVICE_PARAMS_READ", label: "컨트롤러 값 다시 읽기",
+                note: "MFC 컨트롤러에 질의만 보내 저장된 값을 다시 읽습니다. 공정·수동 조작 중이면 끝난 뒤 읽습니다." })} />
+          ) : undefined}
           editor={!local && !neverConnected ? (key) => (
             <Chk2Config equipment={equipment} bundle={d.bundle} st={st} perms={perms ?? null} connected={connected}
               reloadSchema={d.loadSchema} notify={notify} startOpen onlyKeys={[key]} />

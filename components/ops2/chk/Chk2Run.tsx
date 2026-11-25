@@ -23,7 +23,9 @@ import type { DevKey } from "./Chk2SettingsDrawer";
 import Chk2Seq from "./Chk2Seq";
 import Chk2Trend from "./Chk2Trend";
 import Chk2Adjust from "./Chk2Adjust";
-import Chk2LocalNext from "./Chk2LocalNext";
+import Chk2LocalNext, { targetMismatch } from "./Chk2LocalNext";
+import { MountedRows } from "./Chk2Devices";
+import { rfState } from "@/lib/ops2/chk/rf";
 import { ExpandedView, fmtSec } from "./Chk2BlockEditor";
 import { argRange, paramValue } from "./logic";
 import { enumLabel, fieldText } from "./text";
@@ -66,7 +68,9 @@ function KeyTile({ d: d0, bundle, snap }: { d: KeyDef; bundle: Bundle | null; sn
   const v = num(snap?.[d.value]), t = d.target ? num(snap?.[d.target]) : null;
   const unit = f?.unit ?? "";
   const txt = f ? fieldText(f, snap?.[d.value], snap, bundle?.snapshot?.blocks) : { text: "", alt: null, warn: false };
-  const lim = LIMIT_PARAM[d.key] ? num(paramValue(bundle, LIMIT_PARAM[d.key]))
+  // RF 상한은 묶음 23 의 운전 상한(RF_OPERATING_MAX_W — RF_MAX_POWER 는 환산 기준), 옛 묶음은 RF_MAX_POWER
+  const lim = d.key === "rf" && num(paramValue(bundle, "RF_OPERATING_MAX_W")) !== null ? num(paramValue(bundle, "RF_OPERATING_MAX_W"))
+    : LIMIT_PARAM[d.key] ? num(paramValue(bundle, LIMIT_PARAM[d.key]))
     : d.key === "ar" ? argRange(bundle, "HEATER_ON", "ar_flow")?.max ?? null : d.key === "o2" ? argRange(bundle, "HEATER_ON", "o2_flow")?.max ?? null : null;
   const band = bandOf(bundle, d.key, t);
   const max = scaleMax(t, v, lim);
@@ -90,6 +94,7 @@ function KeyTile({ d: d0, bundle, snap }: { d: KeyDef; bundle: Bundle | null; sn
         {d.key !== "ig" ? <><span>0</span><span>{fmtN(max)} {unit}</span></> : <span>로그 값이라 막대 없음</span>}
       </p>
       {extra && <p className={`mt-1 truncate ${FS.small} text-[#5B6470]`}>{extra}</p>}
+      {d.key === "rf" && rfState(snap) === "uncommanded" && <p className="mt-1"><Chip tone="warn">명령 없이 출력 중</Chip></p>}
     </Tile>
   );
 }
@@ -248,6 +253,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   return (
     <Card title="다음 공정" right={!loaded && <span className={`${FS.body} text-[#5B6470]`}>장비에 적재된 공정 레시피 없음</span>}>
       <div className="@container/next space-y-3">
+        {st?.targets && <MountedRows st={st} compact />}
         {loaded && (
           <div className={`flex flex-wrap items-center gap-2 rounded-[10px] border border-[#E3E6EA] px-3 py-2 ${FS.body}`}>
             <span className="text-[#5B6470]">장비에 적재됨</span><b className="text-[#1B1F24]">{loaded.name || "이름 없음"}</b>
@@ -277,7 +283,9 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
               <Btn onClick={() => onEdit(pid || null)}><FileEdit size={14} /> {pid ? "레시피 편집" : "레시피 열기"}</Btn>
               <Btn size="lg" kind="primary" lock={loadLock}
                 onClick={() => full && onAsk({ kind: "RECIPE_LOAD", label: "공정 레시피 적재", detail: `'${full.name}'`,
-                  args: { name: full.name, rows: full.rows }, lines: processLines(full.name, full.rows as Row[], chk),
+                  // id·updatedAt — 공정 기록에 웹 레시피·웹 수정 시각이 남는다(W-22, 옛 장비는 모르는 인자라 무시)
+                  args: { name: full.name, rows: full.rows, id: full.id, updatedAt: full.updatedAt },
+                  lines: [...processLines(full.name, full.rows as Row[], chk), ...targetMismatch(full.rows as Record<string, unknown>[], st)],
                   note: "장비에 행 목록을 올립니다(검사 뒤 적재). 시작은 '적재 시작'." })}>
                 <Upload size={14} /> 적재
               </Btn>
