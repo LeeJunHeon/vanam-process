@@ -338,6 +338,24 @@ const chamberProps = (ch) => ({
         left && grid4 && band && one && order, { left, grid4, band, one, order });
 }
 {
+  // W-20 ⑤ 공통 장비 — 챔버 장비 박스와 같은 틀(DevCard)·같은 격자 기준(영역 폭 950px 3개 · 650px 2개 · 그 밖 1개).
+  //   읽는 순서 Loadlock → Plasma Cleaning → TSP → 프리스퍼터 예약 → 로봇 연결 → 장비 공통 조작 → (노트북 레시피 파일) → 장비 응답 시간
+  const runP = { ...chamberProps("ch1"), plcOk: true, pcRecipes: [], getRow: async () => null, onEditSeq: noop, send: async () => ({}), notify: noop, onHmi: noop };
+  const titlesOf = (h) => [...h.slice(h.indexOf('data-common=""')).matchAll(/<h3 class="min-w-0 truncate[^"]*">([^<]*)<\/h3>/g)].map((m) => m[1]);
+  const web = render(U.Ch12Run, runP), loc = render(U.Ch12Run, { ...runP, local: true, localCan: () => true });
+  const want = ["Loadlock", "Plasma Cleaning", "TSP", "프리스퍼터 예약", "로봇 연결", "장비 공통 조작", "장비 응답 시간"];
+  const wantLoc = ["Loadlock", "Plasma Cleaning", "TSP", "프리스퍼터 예약", "로봇 연결", "장비 공통 조작", "노트북 레시피 파일", "장비 응답 시간"];
+  const grid = /class="grid grid-cols-1 gap-3 @min-\[650px\]\/common:grid-cols-2 @min-\[950px\]\/common:grid-cols-3" data-common=""/.test(web);
+  const seg = web.slice(web.indexOf('data-common=""'));
+  const ll = seg.slice(0, seg.indexOf("</section>"));
+  const llOk = ll.includes("HMI 열기") && ll.indexOf("mt-auto") < ll.indexOf("HMI 열기") && /인터락/.test(ll) && ll.includes("4Pin 올림");
+  const pcSeg = seg.slice(seg.indexOf(">Plasma Cleaning</h3>")), pcBox = pcSeg.slice(0, pcSeg.indexOf("</section>"));
+  const pcOk = pcBox.indexOf("mt-auto") < pcBox.indexOf(">시작<") || pcBox.indexOf("mt-auto") < pcBox.search(/<\/svg> ?시작/);
+  check("ui:common-boxes — 공통 장비 박스(챔버K DevCard 틀) 읽는 순서·격자 기준(950·650), Loadlock 상태·인터락·[HMI 열기], 버튼은 맨 아래 줄",
+        JSON.stringify(titlesOf(web)) === JSON.stringify(want) && JSON.stringify(titlesOf(loc)) === JSON.stringify(wantLoc) && grid && llOk && pcOk,
+        { web: titlesOf(web), loc: titlesOf(loc), grid, llOk, pcOk });
+}
+{
   const html = render(U.PresputterPanel, { bundle, st, lock: noLock, onAsk: noop });
   const t = textOf(html), b = buttons(html);
   check("ui:presputter — 프리스퍼터 예약·예약 취소 칸(시각 HH:MM 고르기), 장비가 매일 예약을 잡음·형식 오류는 TIME_FORMAT 거부",

@@ -1,11 +1,13 @@
 "use client";
 
-// 챔버12 운전 탭(2026-11-18 — 챔버K Chk2Run 구성). CH1·CH2 를 나란히(1280 이상 두 열), 챔버마다 위에서부터:
-//   상태·조작(공정 상태·블록·남은 시간·ETA·엔진 상태 글 + STOP·공정 시작·적재 해제·오류 해제, 웹은 '다음 공정' 레시피 고르기·적재) →
-//   공정 순서(블록 목록 — 끝남·지금·남음, 건너뛰기·일시정지/재개·시퀀스 편집) → 공정 중 값 바꾸기(챔버K Chk2Adjust) → 주요 값(칸마다 목표·큰 값·막대) →
-//   추세(챔버K Chk2Trend — 챔버 열) → 장비 카드(묶음 블록 순서, 꺼진 장비는 접힘)·OES/RGA·공정 목표값 → 알림·로그(이 챔버 평소 보기 줄).
-// 그 아래: CH2 히터·두께 · 플라즈마 클리닝 · TSP · 프리스퍼터 예약 · 로봇 연결 · 장비 공통 조작 · 장비 응답 시간(노트북 화면은 + 장비 폴더 레시피).
-// 1366×768 에서 상태 띠 + 탭 + 두 챔버 상태·조작 칸이 첫 화면에 보이게 조작 칸을 맨 위에, 줄 수를 적게 둔다.
+// 챔버12 운전 탭(2026-11-18 — 챔버K Chk2Run 구성, W-20 — 챔버K W-20 장비 박스 틀·대기 화면 격자).
+// 운전 탭 영역(컨테이너 run) 1360px 이상: 왼쪽 3/4 = CH1·CH2 칸(1280 이상 나란히), 오른쪽 1/4 = 알림 띠 하나(두 챔버·공통, 왼쪽 높이를 따름),
+//   그 아래 공통 장비 박스(Loadlock · Plasma Cleaning · TSP · 프리스퍼터 예약 · 로봇 연결 · 장비 공통 조작 · 노트북 레시피 파일 · 장비 응답 시간).
+//   더 좁으면 챔버 칸 → 공통 장비 → 알림(맨 아래).
+// 챔버 칸(컨테이너 ch): 대기 = 머리 카드(상태·조작) → 다음 공정 → 장비 박스 격자. 공정 중(정지 중 포함) = 머리 카드 → 공정 순서 →
+//   공정 중 값 바꾸기 → 주요 값(칸마다 목표·큰 값·막대) → 추세 → 장비 박스 격자 → OES/RGA 그래프 → 공정 목표값.
+// 장비 박스(Ch12Devices — 챔버K DevCard 틀): 진공 · 셔터·인터락 · 가스·압력 · Ion Gauge · 파워 · 히터(CH2) · 두께 모니터 · OES · RGA,
+//   격자는 칸 폭 950px 3개 · 650px 2개 · 그 밖 1개.
 import { useEffect, useMemo, useState } from "react";
 import { FileEdit, ListOrdered, Pause, Play, SkipForward, Square, Upload, X } from "lucide-react";
 import { FS, Btn, Card, Chip, Empty, KV, RangeBar, Tile, Val, type Ask } from "../chk/kit";
@@ -18,7 +20,7 @@ import { reasonLabel, type AdjustState, type FieldDef, type StateData } from "..
 import type { FeedItem, SendResult, TrendPt } from "../chk/useChk2";
 import type { Notice } from "../chk/kit";
 import type { RecipeFull, RecipeItem } from "../chk/useRecipes";
-import { ChamberDevices } from "./Ch12Devices";
+import { ChamberDevices, LoadlockBox12 } from "./Ch12Devices";
 import { RunAlerts } from "./Ch12Logs";
 import { CommonOps, PcPanel, PresputterPanel, RobotPanel, TspPanel, type LockFn } from "./Ch12Aux";
 import { hasRowContent, loadPayload, rowLine } from "./Ch12Recipes";
@@ -441,12 +443,12 @@ export default function Ch12Run(p: RunProps) {
         <div className="relative order-last min-w-0 @min-[1360px]/run:order-none" data-alerts="">
           <RunAlerts bundle={bundle} st={st} feed={feed} onLog={p.onLog} />
         </div>
-        <div className="min-w-0 space-y-3 @min-[1360px]/run:col-span-4">
-          <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
+        {/* 공통 장비(W-20 — 챔버 장비 박스와 같은 틀·같은 격자 기준: 이 영역 폭 950px 이상 3개, 650px 이상 2개, 그 밖 1개) */}
+        <div className="@container/common min-w-0 @min-[1360px]/run:col-span-4">
+          <div className="grid grid-cols-1 gap-3 @min-[650px]/common:grid-cols-2 @min-[950px]/common:grid-cols-3" data-common="">
+            <LoadlockBox12 ctx={{ ...cmn, onHmi: p.onHmi }} plcOk={p.plcOk} />
             <PcPanel {...cmn} recipes={p.pcRecipes} getRecipe={p.getRow} />
             <TspPanel {...cmn} nowMs={nowMs} />
-          </div>
-          <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
             <PresputterPanel {...cmn} />
             <RobotPanel bundle={bundle} st={st} feed={feed} />
             <CommonOps {...cmn} plcOk={p.plcOk} />

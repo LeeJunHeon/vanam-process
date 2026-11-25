@@ -162,6 +162,44 @@ export function VacuumBox12({ ctx, ch }: { ctx: BoxCtx; ch: Ch }) {
   );
 }
 
+// ───────────── Loadlock(공통) ─────────────
+/** Loadlock — 요약 = 진공 준비 / 대기압 / 진공 준비 전(위 띠와 같은 글), 상태 = Rotary·RV·Vent·4Pin 올림·4Pin 내림·대기압 센서·Gauge A,
+ *  인터락(꺼진 것만 이름으로, 모두 켜지면 개수 한 줄), [HMI 열기] */
+export function LoadlockBox12({ ctx, plcOk = true }: { ctx: BoxCtx; plcOk?: boolean }) {
+  const { bundle, st, onHmi } = ctx;
+  const { detail } = useChk2Mode();
+  const snap = st?.snapshot;
+  const title = placeName(bundle, "loadlock");
+  const nm = (t: string) => buttonName(bundle, t, title);
+  const fn = (c: string) => fieldName(bundle, `plc.${c}`, title);
+  const plc = (c: string) => snap?.[`plc.${c}`] === true;
+  const sum = plc("l_vac_ready_sw") ? fn("l_vac_ready_sw") : plc("l_atm") || plc("l_atm_sensor") ? fn("l_atm")
+    : plc("l_vac_not_ready") ? fn("l_vac_not_ready") : plcOk ? "—" : "PLC 값 없음";
+  const itl = (blockOf(bundle, "plc")?.fields ?? []).filter((f) => /^l_.+_인터락$|^l_gauge_a_interlock$/.test(f.name));
+  const offs = itl.filter((f) => snap?.[f.column] === false);
+  const known = itl.some((f) => typeof snap?.[f.column] === "boolean");
+  return (
+    <DevCard title={title} sub={detail ? blockOf(bundle, "plc")?.desc : undefined} chip={<QBadge link={st?.links?.plc} />} summary={sum}
+      states={<>
+        <PlcTag bundle={bundle} snap={snap} col="l_r_p_sw" label={nm("l_r_p_sw")} words="onoff" />
+        <PlcTag bundle={bundle} snap={snap} col="l_r_v_sw" label={nm("l_r_v_sw")} words="open" />
+        <PlcTag bundle={bundle} snap={snap} col="l_vent_lamp" label={nm("l_vent_sw")} words="open" />
+        <PlcTag bundle={bundle} snap={snap} col="l_atm_sensor" label={fn("l_atm_sensor")} words="detect" />
+        <PlcTag bundle={bundle} snap={snap} col="l_pin_up_lamp" label={nm("l_pin_up_sw")} words="onoff" />
+        <PlcTag bundle={bundle} snap={snap} col="l_pin_down_lamp" label={nm("l_pin_down_sw")} words="onoff" />
+        <PlcTag bundle={bundle} snap={snap} col="l_gauge_a" label={fn("l_gauge_a")} words="onoff" />
+      </>}
+      actions={<HmiBtn onHmi={onHmi} />}>
+      <KV k="인터락" title={itl.map((f) => fieldName(bundle, f.column, title)).join(", ")}>
+        <span className={offs.length ? "font-semibold text-[#B54708]" : "text-[#1B1F24]"} data-interlock="loadlock">
+          {!known ? "—" : offs.length ? `꺼짐 ${offs.length}개` : `모두 켜짐 · ${itl.length}개`}
+        </span>
+      </KV>
+      {offs.length > 0 && <p className={`${FS.body} leading-snug text-[#B54708]`}>{offs.map((f) => fieldName(bundle, f.column, title)).join(" · ")}</p>}
+    </DevCard>
+  );
+}
+
 // ───────────── 셔터·인터락 ─────────────
 /** 셔터·인터락 — Main 셔터 · Gun 셔터(CH2 — 공유 건 셔터) · 로딩 센서 · Chuck 위치 · 인터락(이 챔버 PLC 인터락 비트: 꺼진 것만 이름으로,
  *  모두 켜져 있으면 개수 한 줄 — 상세 보기는 전부), [HMI 열기] */
@@ -188,7 +226,6 @@ export function ShutterBox12({ ctx, ch }: { ctx: BoxCtx; ch: Ch }) {
         {shutters.map((c) => <PlcTag key={c} bundle={bundle} snap={snap} col={c} label={nm(c)} words="open" />)}
         <PlcTag bundle={bundle} snap={snap} col={`loading_${n}_sensor_lamp`} label={fieldName(bundle, `plc.loading_${n}_sensor_lamp`, label)} words="detect" />
       </>}
-      note={offs.length > 0 ? <p className="text-[#B54708]">꺼진 인터락이 있으면 그 장비는 PLC 가 움직이지 않습니다.</p> : undefined}
       actions={<HmiBtn onHmi={onHmi} />}>
       <KV k={chuck} title={zpos ? fieldTipOf(bundle, `plc.z${n}_${zpos}_location`, detail) : undefined}>
         <span className="text-[#1B1F24]">{zpos ? fieldName(bundle, `plc.z${n}_${zpos}_location`, `${label} ${chuck}`) : snap?.[`plc.z${n}_up_location`] === undefined ? "—" : "위치 모름"}</span>
