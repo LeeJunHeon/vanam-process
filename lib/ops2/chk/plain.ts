@@ -9,6 +9,18 @@ export function byWord(by: unknown): string {
   return s === "local" ? "노트북" : s === "web" ? "웹" : s;        // 이름 없이 보낸 경로 값(local·web)은 한글로
 }
 
+/** 챔버K 출처 표기(W-21) — 노트북 경로 local·hmi 는 "LOCAL", 웹은 "WEB"(화면 이름 '노트북 화면'은 그대로). CH1&2 는 byWord 그대로 */
+export function srcWord(src: unknown): string {
+  const s = typeof src === "string" ? src.trim() : "";
+  return s === "local" || s === "hmi" ? "LOCAL" : s === "web" ? "WEB" : s;
+}
+/** 챔버K 사람 이름(W-21) — 평소 보기는 이메일의 @ 앞(jhlee@vanam.co.kr → jhlee), 상세 보기는 전체. 경로 값은 LOCAL·WEB */
+export function personWord(by: unknown, detail = false): string {
+  const s = typeof by === "string" ? by.trim() : "";
+  if (s === "local" || s === "hmi" || s === "web") return srcWord(s);
+  return !detail && /^[^@\s]+@[^@\s]+$/.test(s) ? s.split("@")[0] : s;
+}
+
 /** 코드 모양(대문자·밑줄 — UPLINK_AUTH_FAILED, MANUAL_END …) */
 export const CODE_RE = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/g;
 export const isCode = (s: string) => /^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(s) || /^[A-Z]{3,}$/.test(s);

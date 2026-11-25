@@ -35,7 +35,8 @@ G.cases.push(...EXTRA);
 
 const OLD = ["인터록", "이온 게이지", "이오나이저", "필라멘트", "디개스", "방출", "냉각수", "도어", "차단밸브", "메인 밸브", "Main 밸브",
   "건 셔터", "Gun 1", "Gun 2", "순방향", "반사", "설정점", "끄기 순서", "끄기 단계", "감시 신호", "램프", "런 이력", "사건", "로컬",
-  "장비 정의", "실제/설정", "안전·유틸리티", "유틸리티", "셔터·안전", "블록", "스텝"];
+  "장비 정의", "실제/설정", "안전·유틸리티", "유틸리티", "셔터·안전", "블록", "스텝",
+  "가스 도입", "정상 끝 정지", "셔터 딜레이", "Stage0", "Stage1", "Stage2", "Stage3"];      // W-21
 const DEV = [/\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/, /\b[MPD]0?\d{4,5}\b|\bD\d{2,3}\b/, /\bv1\b/, /묶음 ?\d/];
 const RAW = [/\w*Error\b/, /gaierror/i, /localhost/i, /\b\d{1,3}(\.\d{1,3}){3}\b/, /\.invalid\b/, /\b(on|off):/, /\berror\b/, /\bdone\b/, /\baborted\b/];
 // 내용이 비어도 되는 줄 — [출처, 이름, 이유]
@@ -68,6 +69,7 @@ for (const c of G.cases) {
     const fail = (why) => bad.push(`${why}: ${where}`);
     if (!l.source) fail("출처 없음");
     if (!l.kind) fail("이름 없음");
+    if (["노트북", "웹"].includes(l.source)) fail("출처는 LOCAL·WEB(W-21)");
     for (const w of OLD) if (all.includes(w)) fail(`옛 말 ${w}`);
     for (const re of DEV) if (re.test(all)) fail(`코드·주소·v1·묶음 ${all.match(re)[0]}`);
     for (const re of RAW) if (re.test(all)) fail(`영문 오류·주소·날것 ${all.match(re)[0]}`);

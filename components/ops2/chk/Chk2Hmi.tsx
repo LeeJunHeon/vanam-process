@@ -25,6 +25,7 @@ import type { Bundle, FieldDef, Link } from "./types";
 const DANGER = new Set(["vent", "door_up", "door_down"]);
 const FONT = "Pretendard, system-ui, sans-serif";
 const VB_W = 1100, VB_H = 600;
+const MIN_SCALE = 0.8;      // W-21 — 이보다 작게 그리면 글이 겹친다(좁은 화면은 계통도 칸 안 가로 스크롤)
 
 type Props = {
   bundle: Bundle | null;
@@ -54,7 +55,8 @@ function useScale() {
       const w = el.clientWidth;
       if (w <= 0) return;
       const s0 = w / VB_W;
-      setV(s0 <= MAX_SCALE ? { s: Math.max(0.5, s0), spread: 0 } : { s: MAX_SCALE, spread: Math.round((w / MAX_SCALE - VB_W) / 2) });
+      // W-21 — 글자는 화면 px 그대로라 그림이 MIN_SCALE 보다 작아지면 글이 겹친다: 그보다 좁으면 그림을 MIN_SCALE 로 두고 계통도 칸 안에서 가로로 민다
+      setV(s0 <= MAX_SCALE ? { s: Math.max(MIN_SCALE, s0), spread: 0 } : { s: MAX_SCALE, spread: Math.round((w / MAX_SCALE - VB_W) / 2) });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -238,8 +240,9 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
       {note.includes("잠금") && <Lock size={12} />}{note}</span>}>
       <div className={`@container ${plcOk ? "" : "opacity-50"}`}>
         <div className="flex flex-col gap-4 @[1100px]:flex-row @[1100px]:items-start">
-          <div ref={wrap} className="min-w-0 flex-1 pt-2">
-            <svg viewBox={`${-P} 0 ${VB_W + 2 * P} ${VB_H}`} className="block h-auto w-full select-none" role="group" aria-label="챔버K v2 계통도">
+          <div ref={wrap} className="min-w-0 flex-1 overflow-x-auto pt-2">
+            <svg viewBox={`${-P} 0 ${VB_W + 2 * P} ${VB_H}`} className="block h-auto w-full select-none" role="group" aria-label="CHK Sputter 계통도"
+              style={{ minWidth: Math.round((VB_W + 2 * P) * MIN_SCALE) }}>
               {/* 배관(선 굵기 하나 — 열린 구간만 진회색) */}
               {pipe(`M${220 - P},140 H${CL}`, on("ar_valve"))}
               {pipe(`M${220 - P},230 H${CL}`, on("o2_valve"))}

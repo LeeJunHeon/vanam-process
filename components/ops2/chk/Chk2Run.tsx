@@ -19,6 +19,7 @@ import { FS, Btn, Card, Chip, Empty, KV, RangeBar, Tile, Val, type Ask } from ".
 import { StateTag, wordsOf } from "./StateTag";
 import { CARD, fieldName, fieldTipOf } from "@/lib/ops2/chk/terms";
 import { DeviceGrid } from "./Chk2Devices";
+import type { DevKey } from "./Chk2SettingsDrawer";
 import Chk2Seq from "./Chk2Seq";
 import Chk2Trend from "./Chk2Trend";
 import Chk2Adjust from "./Chk2Adjust";
@@ -148,13 +149,14 @@ function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
 /** 알림 — 공정 중(기본): 높이는 내용만큼, 최근 20줄, 목록 최대 320px 안에서 스크롤.
  *  대기(idle, W-20): 최근 60줄. 영역 1360px 이상이면 오른쪽 띠 — 높이는 왼쪽 묶음을 따르고(페이지를 늘이지 않음) 목록이 남은 높이를 채워
  *  스크롤, 그보다 좁으면 맨 아래 한 줄 전체 · 목록 최대 240px */
-function Alerts({ bundle, st, feed, onLog, idle }: { bundle: Bundle | null; st: StateData | null; feed: FeedItem[]; onLog?: () => void; idle?: boolean }) {
+function Alerts({ bundle, st, feed, onLog, idle, bottom }: { bundle: Bundle | null; st: StateData | null; feed: FeedItem[]; onLog?: () => void; idle?: boolean;
+  bottom?: boolean }) {            // W-21 운전 탭 대기 — 알림은 늘 아래 한 줄(목록 최대 240px)
   const alarms = st?.alarms ?? [];
   const n = idle ? 60 : 20;
   const lines = useMemo(() => chkLines(bundle, feed).filter((r) => r.main).slice(-n).reverse(), [bundle, feed, n]);   // 평소 보기 글(코드·local 없음)
   return (
     <Card title={<><BellRing size={15} /> 알림</>} right={onLog && <Btn size="sm" kind="ghost" onClick={onLog}>기록 전체 보기</Btn>}
-      className={idle ? "flex flex-col @min-[1360px]/run:absolute @min-[1360px]/run:inset-0" : ""}>
+      className={idle && !bottom ? "flex flex-col @min-[1360px]/run:absolute @min-[1360px]/run:inset-0" : ""}>
       <p className={`mb-2 ${FS.body} text-[#5B6470]`}>
         활성 알람 {alarms.length ? <Chip tone="alarm">{alarms.length}개</Chip> : <b className="text-[#1B1F24]">없음</b>}
       </p>
@@ -164,7 +166,8 @@ function Alerts({ bundle, st, feed, onLog, idle }: { bundle: Bundle | null; st: 
         </div>
       )}
       {lines.length ? (
-        <ul className={idle ? "max-h-[240px] space-y-1.5 overflow-y-auto pr-1 @min-[1360px]/run:min-h-0 @min-[1360px]/run:max-h-none @min-[1360px]/run:flex-1"
+        <ul className={idle && bottom ? "max-h-[240px] space-y-1.5 overflow-y-auto pr-1"
+          : idle ? "max-h-[240px] space-y-1.5 overflow-y-auto pr-1 @min-[1360px]/run:min-h-0 @min-[1360px]/run:max-h-none @min-[1360px]/run:flex-1"
           : "max-h-[320px] space-y-1.5 overflow-y-auto pr-1"}>
           {lines.map((r) => (
             <li key={r.e.id} className={`${FS.body} leading-snug`} title={r.desc}>
@@ -224,8 +227,8 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   const t = exp.length ? expectedTime(exp) : null;
   const steps = exp.reduce((n, b) => n + b.steps.filter((s) => !s.internal).length, 0);
   const first = full?.rows.find((r) => r && Object.keys(r).length && !("blocks" in r)) as Row | undefined;
-  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정보를 받는 중" : chk?.errors ? `검사 오류 ${chk.errors}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("RECIPE_LOAD");
-  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정보를 받는 중" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("HEATER_RECIPE_RUN");
+  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정보를 받는 중" : chk?.errors ? `검사 오류 ${chk.errors}개를 [레시피 열기]에서 고친 뒤 할 수 있음` : lock("RECIPE_LOAD");
+  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정보를 받는 중" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개를 [레시피 열기]에서 고친 뒤 할 수 있음` : lock("HEATER_RECIPE_RUN");
   const loadedWeb = loaded?.name ? list.find((r) => r.kind === "process" && r.name === loaded.name) : undefined;
 
   const askStart = async () => {
@@ -251,7 +254,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
             <span className="text-[#5B6470]">· {loaded.rows ?? "-"}행</span>
             {!loadedWeb && <Chip>웹 목록에 없는 이름</Chip>}
             <span className="ml-auto flex gap-2">
-              <Btn size="lg" kind="dangerSolid" lock={loaded.listActive ? "진행 중" : lock("RECIPE_START")} onClick={() => void askStart()}>
+              <Btn size="lg" kind="primary" lock={loaded.listActive ? "진행 중" : lock("RECIPE_START")} onClick={() => void askStart()}>
                 <Play size={14} /> 적재 시작
               </Btn>
               <Btn lock={lock("RECIPE_CLEAR")}
@@ -289,7 +292,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
                     <option value="">히터 레시피 고르기…</option>
                     {list.filter((r) => r.kind === "heater").map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                   </select>
-                  <Btn kind="dangerSolid" lock={runLock}
+                  <Btn kind="primary" lock={runLock}
                     onClick={() => hfull && onAsk({ kind: "HEATER_RECIPE_RUN", label: "히터 레시피 실행", detail: `'${hfull.name}'`,
                       args: { name: hfull.name, steps: hfull.rows, gas: hfull.gas }, red: true,
                       lines: heaterLines(hfull.name, hfull.rows as Row[], hfull.gas as Row | null), note: "히터를 켜고 단계대로 온도를 올립니다." })}>
@@ -327,17 +330,34 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   );
 }
 
-export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, feed, trend, recipes, lock, canKey, onAsk, onHmi, onLog, onEditRecipe, onManual, onConfig, nowMs, skewMs }: {
+export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, feed, trend, recipes, lock, canKey, onAsk, onHmi, onLog, onEditRecipe, onManual, onConfig, onSettings, nowMs, skewMs, view = "run" }: {
   equipment: string; bundle: Bundle | null; st: StateData | null; runBlocks: RunBlocks | null; editBase: EditBase | null;
   feed: FeedItem[]; trend: TrendPt[];
   recipes: ReturnType<typeof useRecipes> | null; lock: LockFn; canKey: (kind: string, key: string) => boolean; onAsk: (a: Ask) => void;
   onHmi: () => void; onLog?: () => void; onEditRecipe?: (id: string | null) => void; nowMs: number; skewMs: number;
+  view?: "status" | "run";                               // W-21 — 상태 탭(장비 박스 + 알림 띠) / 운전 탭(대기: 다음 공정 + 알림, 공정 중: 공정 화면)
+  onSettings?: (dev: DevKey) => void;                    // W-21 장비 박스 [⚙ 설정] → 장비 설정 서랍
   onManual?: () => void; onConfig?: () => void;          // W-20 장비 박스 [수동 조작 열기]·[설정 열기] — 탭이 없으면 넘기지 않는다
 }) {
   const { local } = useChk2Mode();
   const [wide, setWide] = useState(false);       // 순서 고치기 중 — 공정 순서 칸을 한 줄 전체로
   const kind = kindOf(bundle, st);
   const snap = st?.snapshot;
+  // 상태 탭(W-21) — 공정·수동 조작 여부와 상관없이 같은 화면: 영역 1360px 이상 왼쪽 3/4 장비 박스 | 오른쪽 1/4 알림 띠, 좁으면 알림 아래
+  if (view === "status") {
+    return (
+      <div className="@container/run">
+        <div className="grid grid-cols-1 gap-3 @min-[1360px]/run:grid-cols-4">
+          <div className="min-w-0 @min-[1360px]/run:col-span-3">
+            <DeviceGrid bundle={bundle} st={st} snap={snap} lock={lock} onAsk={onAsk} onHmi={onHmi} onManual={onManual} onConfig={onConfig} onSettings={onSettings} />
+          </div>
+          <div className="relative min-w-0">
+            <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} idle />
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (kind === "active" || kind === "stopping") {
     return (
       <div className="grid items-start gap-3 lg:grid-cols-[minmax(300px,1fr)_minmax(0,2fr)] 2xl:grid-cols-[minmax(320px,1fr)_minmax(0,2fr)_minmax(260px,0.9fr)]">
@@ -348,7 +368,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
           <KeyValues bundle={bundle} st={st} blocks={runBlocks} />
           <Chk2Trend trend={trend} equipment={equipment} runId={st?.runId ?? null} local={local} nowMs={nowMs}
             pressureTarget={pressureTargetCol(snap, bundle)} fitLegend edgeTicks />
-          <Chk2Adjust bundle={bundle} st={st} skewMs={skewMs} canKey={canKey} onAsk={onAsk} plain />
+          <Chk2Adjust bundle={bundle} st={st} skewMs={skewMs} canKey={canKey} onAsk={onAsk} plain feed={feed} />
         </div>
         <div className="grid min-w-0 items-start gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">
           <DeviceStates bundle={bundle} snap={snap} />
@@ -357,23 +377,16 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
       </div>
     );
   }
-  // 대기 — 영역 1360px 이상: 왼쪽 3/4(다음 공정 + 장비 박스) | 오른쪽 1/4 알림 띠(왼쪽 묶음 높이를 따름), 더 좁으면 알림은 맨 아래
+  // 운전 탭 대기(W-21) — 다음 공정(한 줄 전체) + 아래 알림(맨 아래 배치 모양). 장비 박스는 상태 탭
   return (
-    <div className="@container/run">
-      <div className="grid grid-cols-1 gap-3 @min-[1360px]/run:grid-cols-4">
-        <div className="min-w-0 space-y-3 @min-[1360px]/run:col-span-3">
-          {recipes && onEditRecipe ? <NextProcess bundle={bundle} st={st} recipes={recipes} lock={lock} onAsk={onAsk} onEdit={onEditRecipe} />
-            : local ? <Chk2LocalNext bundle={bundle} st={st} lock={lock} onAsk={onAsk} />
-            : <Card title="다음 공정">
-                <KV k="장비에 적재됨"><b className={`${FS.body}`}>{st?.recipe?.name || "없음"}</b></KV>
-                <p className={`mt-2 ${FS.small} text-[#5B6470]`}>레시피 고르기·적재는 웹 화면에서 합니다</p>
-              </Card>}
-          <DeviceGrid bundle={bundle} st={st} snap={snap} lock={lock} onAsk={onAsk} onHmi={onHmi} onManual={onManual} onConfig={onConfig} />
-        </div>
-        <div className="relative min-w-0">
-          <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} idle />
-        </div>
-      </div>
+    <div className="@container/run space-y-3">
+      {recipes && onEditRecipe ? <NextProcess bundle={bundle} st={st} recipes={recipes} lock={lock} onAsk={onAsk} onEdit={onEditRecipe} />
+        : local ? <Chk2LocalNext bundle={bundle} st={st} lock={lock} onAsk={onAsk} />
+        : <Card title="다음 공정">
+            <KV k="장비에 적재됨"><b className={`${FS.body}`}>{st?.recipe?.name || "없음"}</b></KV>
+            <p className={`mt-2 ${FS.small} text-[#5B6470]`}>레시피 고르기·적재는 웹 화면에서 합니다</p>
+          </Card>}
+      <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} idle bottom />
     </div>
   );
 }

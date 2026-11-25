@@ -96,15 +96,32 @@ export const MODE_NAME = { run: "실제 운전", bench: "읽기 전용", sim: "�
 
 /** 단계 이름(W-18) — 공정 순서 목록·알림·기록 줄·수동 조작 줄·건너뛰기/일시정지 확인창·상태 카드가 모두 이 함수를 쓴다.
  *  이름표가 없으면 종류 이름, 이름표가 종류 이름을 담고 있으면 이름표만("압력 안정화 대기(60초)", "Gun 셔터 열기"),
- *  아니면 "종류 · 이름표"("압력 설정 · Stage1(SP3)", "대기 · Shutter Delay 3s"). 괄호로 감싸지 않는다. 딜레이 행은 "딜레이 행" */
+ *  기본 템플릿 이름표는 화면 이름으로("압력 1단계(SP3)", "Shutter Delay 30초" — LABEL_SHOW), 아니면 "종류 · 이름표". 괄호로 감싸지 않는다. 딜레이 행은 "딜레이 행" */
 export function stepName(b: BundleLike, x: { type?: string | null; label?: string | null }): string {
   const type = x.type ?? "";
   if (type === "delay") return "딜레이 행";
-  const name = b?.blocks?.defs?.find((d) => d.type === type)?.label ?? type;
+  const name0 = b?.blocks?.defs?.find((d) => d.type === type)?.label ?? type;
+  const name = OLD_BLOCK_NAME[name0] ?? name0;
   const tag = (x.label ?? "").trim();
+  const shown = showLabel(tag);
+  if (shown) return shown;
   if (!tag || /^[\d.#]+$/.test(tag) || tag === name) return name;
   if (name && tag.includes(name)) return tag;
   return name ? `${name} · ${tag}` : tag;
+}
+
+/** 옛 묶음(21 이하)의 블록 이름 → 지금 이름(W-21) */
+const OLD_BLOCK_NAME: Record<string, string> = { "가스 도입": "가스 주입", "메인": "증착", "정상 끝 정지": "공정 끝" };
+/** 기본 템플릿이 붙이는 이름표(장비 스텝 문구 — v1 대조라 장비는 그대로) → 화면 이름(W-21). 이 이름은 종류 이름 없이 그대로 쓴다 */
+const LABEL_SHOW: [RegExp, string][] = [
+  [/^SP([1-5])$/, "압력 설정 SP$1"], [/^Stage0\(SP5\)$/, "압력 설정 SP5"], [/^Stage([12])\(SP(\d)\)$/, "압력 $1단계(SP$2)"],
+  [/^Stage3\(SP1=[^)]*\)$/, "작업 압력(SP1)"], [/^Stage0\(SP5\): 압력 안정화 대기\((\d+)초\)$/, "SP5 압력 안정화 $1초"],
+  [/^압력 안정화 대기\((\d+)초\)$/, "압력 안정화 $1초"], [/^Shutter Delay (\d+)s$/, "Shutter Delay $1초"],
+  [/^DC Power 안정화 대기 (\d+)s$/, "DC Power 안정화 $1초"],
+];
+export function showLabel(tag: string): string {
+  for (const [re, to] of LABEL_SHOW) if (re.test(tag)) return tag.replace(re, to);
+  return "";
 }
 
 /** 장비 문장을 대체 글로 쓸 때 옛 말 → 용어표 말(W-18) — 장비가 보내는 글은 그대로 두고 보일 때만 바꾼다 */
@@ -113,6 +130,7 @@ export const OLD_TO_NEW: [RegExp, string][] = [
   [/냉각수/g, "Water"], [/도어/g, "Door"], [/(Ar|O₂|O2) 차단밸브/g, "$1 밸브"], [/차단밸브/g, "밸브"], [/메인 밸브|Main 밸브/g, "MV"],
   [/인터록/g, "인터락"], [/건 셔터/g, "Gun 셔터"], [/Gun (\d)/g, "Gun$1"], [/순방향/g, "Forward"], [/반사파?/g, "Reflected"],
   [/설정점/g, "SP"], [/끄기 순서/g, "정지 순서"], [/끄기 단계/g, "정지 단계"], [/감시 신호/g, "워치독"], [/스텝/g, "단계"],
-  [/블록/g, "단계"], [/램프다운/g, "천천히 내리기"], [/램프업/g, "천천히 올리기"], [/램프/g, "승온"], [/로컬/g, "노트북"],
+  [/블록/g, "단계"], [/가스 도입/g, "가스 주입"], [/정상 끝 정지/g, "공정 끝"], [/셔터 딜레이/g, "Shutter Delay"], [/메인 셔터/g, "Main 셔터"],
+  [/램프다운/g, "천천히 내리기"], [/램프업/g, "천천히 올리기"], [/램프/g, "승온"], [/로컬/g, "노트북"],
 ];
 export const toTerms = (t: string) => OLD_TO_NEW.reduce((x, [re, to]) => x.replace(re, to), t);

@@ -226,7 +226,7 @@ function AutoPreview({ rc, bundle, onDirect, startWhy, onStart, readOnly }: {
         {t && <Chip>예상 {fmtSec(t.sec)}{t.open ? " 이상" : ""}</Chip>}
         <span className="ml-auto flex gap-2">
           {!readOnly && <Btn size="sm" lock={rc?.blocks ? null : "검사 오류를 고친 뒤"} onClick={onDirect}><Wand2 size={13} /> 직접 편집</Btn>}
-          <Btn size="sm" kind="danger" lock={startWhy} onClick={onStart}><Play size={13} /> 이 행만 바로 시작</Btn>
+          <Btn size="sm" kind="primary" lock={startWhy} onClick={onStart}><Play size={13} /> 이 행만 바로 시작</Btn>
         </span>
       </div>
       {rc?.expanded ? <div className="max-h-[32rem] overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2"><ExpandedView exp={rc.expanded} bundle={bundle} /></div>
@@ -270,7 +270,7 @@ function BlockRowPanes({ row, rc, env, bundle, readOnly, onRow, startWhy, onStar
         </label>
         <TopMessages errors={errors} bundle={bundle} />
         <BlockTree tree={tree} onTree={commit} sel={sel} onSel={setSel} env={env} bundle={bundle} readOnly={readOnly} errors={errors} warnings={warnings} />
-        <p className={`${FS.small} text-[#5B6470]`}>끝에 &apos;정상 끝 정지&apos;가 없으면 장비가 자동으로 붙입니다.</p>
+        <p className={`${FS.small} text-[#5B6470]`}>끝에 &apos;공정 끝&apos;이 없으면 장비가 자동으로 붙입니다.</p>
       </div>
       <div className="min-w-0 space-y-3">
         <div className="rounded-[12px] border border-[#D9DDE3] bg-white p-3">
@@ -279,7 +279,7 @@ function BlockRowPanes({ row, rc, env, bundle, readOnly, onRow, startWhy, onStar
               <Btn size="sm" onClick={() => act("up")}><ArrowUp size={13} /> 위로</Btn>
               <Btn size="sm" onClick={() => act("down")}><ArrowDown size={13} /> 아래로</Btn>
               <Btn size="sm" onClick={() => act("copy")}><Copy size={13} /> 복제</Btn>
-              <Btn size="sm" kind="danger" onClick={() => act("delete")}><Trash2 size={13} /> 삭제</Btn>
+              <Btn size="sm" onClick={() => act("delete")}><Trash2 size={13} /> 삭제</Btn>
             </div>
           )}
           <BlockPane tree={tree} sel={sel} env={env} bundle={bundle} readOnly={readOnly} errors={errors} warnings={warnings} onTree={commit} />
@@ -288,7 +288,7 @@ function BlockRowPanes({ row, rc, env, bundle, readOnly, onRow, startWhy, onStar
           <button onClick={() => setPreview((o) => !o)} className={`flex items-center gap-1 ${FS.small} font-semibold text-[#5B6470]`}>
             {preview ? <ChevronDown size={12} /> : <ChevronRight size={12} />} 실행 순서 미리보기
           </button>
-          <span className="ml-auto"><Btn size="sm" kind="danger" lock={startWhy} onClick={onStart}><Play size={13} /> 이 행만 바로 시작</Btn></span>
+          <span className="ml-auto"><Btn size="sm" kind="primary" lock={startWhy} onClick={onStart}><Play size={13} /> 이 행만 바로 시작</Btn></span>
         </div>
         {preview && (rc?.expanded ? <div className="max-h-96 overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2"><ExpandedView exp={rc.expanded} bundle={bundle} /></div>
           : <Empty>{errors.length ? "오류를 고치면 실행 순서가 보입니다" : "블록을 넣으세요"}</Empty>)}

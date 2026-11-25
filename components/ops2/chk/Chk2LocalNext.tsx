@@ -72,7 +72,7 @@ export default function Chk2LocalNext({ bundle, st, lock, onAsk }: {
               <span className="text-[#5B6470]">· {loaded.rows ?? "-"}행</span>
               <span className="ml-auto flex gap-2">
                 {!webOnly("RECIPE_START") && (
-                  <Btn size="lg" kind="dangerSolid" lock={loaded.listActive ? "진행 중" : lock("RECIPE_START")}
+                  <Btn size="lg" kind="primary" lock={loaded.listActive ? "진행 중" : lock("RECIPE_START")}
                     onClick={() => onAsk({ kind: "RECIPE_START", label: "적재 레시피 시작", detail: `'${loaded.name ?? ""}'`, red: true,
                       lines: [`장비에 적재된 '${loaded.name || "이름 없음"}' · ${loaded.rows ?? "-"}행`], note: "공정을 시작합니다. 가스·파워·셔터가 움직입니다." })}>
                     <Play size={14} /> 적재된 레시피 시작

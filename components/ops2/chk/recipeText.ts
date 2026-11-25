@@ -10,7 +10,7 @@ export function rowLine(r: Row): string {
   const gas = [r.ar === true && `Ar ${v(r.ar_flow)} sccm`, r.o2 === true && `O₂ ${v(r.o2_flow)} sccm`].filter(Boolean).join(" + ") || "가스 없음";
   const pw = [r.use_dc === true && `DC ${v(r.dc_power)} W`, r.use_rf === true && `RF ${v(r.rf_power)} W`,
               r.use_rf_pulse === true && `RF Pulse ${v(r.rf_pulse_power)} W`].filter(Boolean).join(" + ") || "파워 없음";
-  const time = `공정 ${v(r.process_time)}분${pyTruthy(r.shutter_delay) ? ` · 셔터 딜레이 ${v(r.shutter_delay)}분` : ""}`;
+  const time = `공정 ${v(r.process_time)}분${pyTruthy(r.shutter_delay) ? ` · Shutter Delay ${v(r.shutter_delay)}분` : ""}`;
   return `${gas} · ${pw} · 압력 ${v(r.working_pressure)} mTorr · ${time}`;
 }
 export const heaterLine = (r: Row) => (r.use_heater === true ? `히터 목표 ${v(r.heater_temp)} °C` : "히터를 쓰지 않음");

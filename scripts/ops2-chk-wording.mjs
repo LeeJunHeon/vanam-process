@@ -26,6 +26,8 @@ const OLD_TERMS = ["인터록", "이온 게이지", "이오나이저", "필라�
   "장비 정의", "실제/설정", "안전·유틸리티", "유틸리티", "셔터·안전",
   // W-19: 챔버12 용어표 옛 말(장비 묶음 16 test_web_labels OLD_TERMS 와 같은 목록)
   "로터리", "터보 펌프", "러핑", "포어라인", "벤트", "게이트 밸브", "로드락", "4핀", "척 모터", "플라즈마 클리닝", "메인 셔터", "시퀀스"];
+// W-21: 챔버K 화면에서 바꾼 말(가스 도입 → 가스 주입, 정상 끝 정지 → 공정 끝, 셔터 딜레이 → Shutter Delay, 레시피 탭 → 레시피 열기) — 챔버K 파일만
+const OLD_TERMS_CHK = ["가스 도입", "정상 끝 정지", "셔터 딜레이", "레시피 탭"];
 // '블록'·'스텝'은 레시피 편집(레시피 탭) 파일에서만 — 챔버12 는 레시피 탭·블록 정의·v1 행 검사·레시피 저장
 const RECIPE_FILES = /(Chk2BlockEditor|Chk2RecipeEditor|Chk2Recipes|recipeText|Ch12Recipes|Ch12BlockEditor)\.tsx?$|lib\/ops2\/(chk|ch12)\/(blocks|recipe|recipes)\.ts$/;
 // 평소 보기 화면 파일 — 한글 글 60자 안, PLC 주소·v1·묶음 번호 없음
@@ -37,6 +39,7 @@ function problems(rel, t) {
   if (bad(t)) out.push("문구 규칙");
   if (!HANGUL.test(t)) return out;
   const old = OLD_TERMS.filter((w) => t.includes(w));
+  if (/ops2\/chk\//.test(rel)) old.push(...OLD_TERMS_CHK.filter((w) => t.includes(w)));
   if (!RECIPE_FILES.test(rel)) for (const w of ["블록", "스텝"]) if (t.includes(w)) old.push(w);
   if (old.length) out.push(`옛 말 ${old.join("·")}`);
   if (isEveryday(rel)) {
@@ -51,6 +54,9 @@ const EXCEPT = [
   // v1 대조 시험(장비 test_bench_fixes)이 v1 과 같기를 요구하는 이온 게이지 상태 이름(묶음이 주는 글을 그대로 보인다)
   ["*", "음수 — 영점·오염 확인"],
   // 장비가 만든 글을 웹이 그대로 다시 만드는 검사·순서 글(골든 web_block_cases·web_template_cases 가 장비 글과 같기를 요구)
+  ["lib/ops2/chk/blocks.ts", "정상 끝 정지 순서"],      // W-21 장비 스텝 문구(v1 대조 — 화면에 보이지 않는 내부 스텝)
+  // 옛 묶음(21 이하) 이름 → 지금 이름 표(terms.ts) — 옛 말을 찾는 쪽이라 그대로
+  ["lib/ops2/chk/terms.ts", "가스 도입"], ["lib/ops2/chk/terms.ts", "정상 끝 정지"],
   ["lib/ops2/chk/blocks.ts", "반복 횟수를 줄일 것"], ["lib/ops2/chk/blocks.ts", "승온 시작"], ["lib/ops2/chk/blocks.ts", "도달 대기 안 함"],
   ["lib/ops2/chk/recipe.ts", "DC 를 쓸 때만"], ["lib/ops2/chk/recipe.ts", "파이썬 램프로 실행"], ["lib/ops2/chk/recipe.ts", "저장된 값을 읽지 못함"],
   // CH1&2 가 같은 부품으로 그리는 글(kit·Chk2Config) — 바꾸면 CH1&2 화면이 달라진다. CH1&2 와 같은 문제로 보고만

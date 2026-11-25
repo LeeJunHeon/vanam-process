@@ -2,6 +2,8 @@
 // 블록 종류: 웹 조작 기록(commands — 같은 cmdId 의 args.block.type) → 없으면(노트북 화면·옛 기록) 바로 뒤에 온 공정 사건(블록 시작·수동 조작)의 type.
 import { logLine, type LogLine } from "./text";
 import { reasonLabel, type Bundle, type CmdRow } from "./types";
+import { buttonName } from "@/lib/ops2/chk/terms";
+import { wordsOf } from "./StateTag";
 import { isCode } from "@/lib/ops2/chk/plain";
 import type { FeedItem } from "./useChk2";
 
@@ -25,6 +27,17 @@ function blockTypeOf(feed: FeedItem[], i: number, byId: Map<string, CmdRow>): st
   return null;
 }
 
+/** PLC 버튼 명령 결과의 대상(W-21) — 웹 조작 기록(같은 cmdId)의 args.target·on → "Gun2 셔터 닫기". 없으면(노트북 화면) 빈 값 */
+function plcTargetOf(bundle: Bundle | null, feed: FeedItem[], i: number, byId: Map<string, CmdRow>): string | null {
+  const d = feed[i].data;
+  if (d.kind !== "PLC_BUTTON") return null;
+  const a = typeof d.cmdId === "string" ? byId.get(d.cmdId)?.args : undefined;
+  if (!isObj(a) || typeof a.target !== "string") return null;
+  const addr = bundle?.plcButtons?.find((x) => x.target === a.target)?.addr ?? a.target;
+  const w = wordsOf(String(addr));
+  return `${buttonName(bundle, a.target)} ${a.on === true ? (w === "open" ? "열기" : "켜기") : (w === "open" ? "닫기" : "끄기")}`;
+}
+
 /** 출처 칸을 같이 보이는 줄(알림·기록)에서는 이름이 출처 낱말로 시작하면 그 낱말을 뺀다(W-18 — "공정 | 시작", "웹 연결 | 끊김").
  *  빼고 나면 어색한 이름은 짧은 이름으로("공정 중 수정" → "값 수정", "공정 중 PLC 버튼" → "PLC 버튼") */
 const AFTER_STRIP: Record<string, string> = { "중 수정": "값 수정", "중 PLC 버튼": "PLC 버튼" };
@@ -38,7 +51,8 @@ export function withoutSource(source: string | undefined, kind: string): string 
 export function chkLines(bundle: Bundle | null, feed: FeedItem[], commands?: CmdRow[]): (LogLine & { e: FeedItem })[] {
   const byId = new Map((commands ?? []).map((c) => [c.id, c]));
   return feed.map((e, i) => {
-    const l = logLine(bundle, e, { plain: true, blockType: e.type === "cmd_result" ? blockTypeOf(feed, i, byId) : null });
+    const l = logLine(bundle, e, { plain: true, blockType: e.type === "cmd_result" ? blockTypeOf(feed, i, byId) : null,
+      target: e.type === "cmd_result" ? plcTargetOf(bundle, feed, i, byId) : null });
     return { e, ...l, kind: withoutSource(l.source, l.kind) };
   });
 }
