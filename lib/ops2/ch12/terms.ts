@@ -54,30 +54,9 @@ const PRE12: [RegExp, string][] = [[/RF (연속 )?정지 램프/g, "RF $1정지 
 export const toTerms12 = (t: string) =>
   OLD_TO_NEW12.reduce((x, [re, to]) => x.replace(re, to), toTerms(PRE12.reduce((x, [re, to]) => x.replace(re, to), t)));
 
-// ───────────── 설정 탭 평소 보기(W-19) ─────────────
-const CODE = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/;
-/** 장비 묶음 설정 이름에 남은 코드 → 이름 */
-const SETTING_CODE_NAME: Record<string, string> = { SW_RF_SELECT: "RF Select", SW_POWER_SELECT: "Power Select", SO_KEEPALIVE: "TCP 연결 유지" };
-/** 설정 이름·설명의 평소 보기 글 — 용어표 말로, PLC 주소(D113·(D150~D160, …))·v1·줄표를 빼고, 대문자 코드가 남은 문장은 뺀다.
- *  장비 묶음 글은 그대로 두고 보일 때만 바꾼다(원문은 상세 보기) */
-export function settingText12(t: string): string {
-  const x = toTerms12(t)
-    .replace(/\bD\d{2,3}(?:\s*[/~×]\s*D?\d{1,3})*\s*(은|는|이|가|을|를)(?=\s)/g,      // 'D142/D143 은 …' → '이 값은 …'
-      (_m, j: string) => `이 값${({ 는: "은", 가: "이", 를: "을" } as Record<string, string>)[j] ?? j}`)
-    .replace(/\(\s*D\d{2,3}(?:\s*[/~]\s*D\d{2,3})*\s*,?\s*/g, "(")
-    .replace(/\bD\d{2,3}(?:\s*[/~×]\s*D?\d{1,3})*\s*/g, "")
-    .replace(/[·\s]*\bM[0-9A-F]{5}~?/g, "")                                   // PLC 코일 주소(M00400~)
-    .replace(/\bv1\s*(은|는|이|가|을|를|과|와)(?=\s)/g,                                   // 'v1 은 …' → '예전 프로그램은 …'
-      (_m, j: string) => `예전 프로그램${({ 는: "은", 가: "이", 를: "을", 와: "과" } as Record<string, string>)[j] ?? j}`)
-    .replace(/\bv1\s*/g, "").replace(/\s*\bE\d{3}\b/g, "").replace(/\s+—\s+/g, ". ").replace(/\(\s*—?\s*\)/g, "").replace(/\s*—\s*/g, " ")
-    .replace(/\bON\b/g, "켜기").replace(/\bOFF\b/g, "끄기")                    // 영문 ON/OFF → 화면 말
-    .replace(/안 ?함(?![가-힣])/g, "하지 않음").replace(/안 ?씀(?![가-힣])/g, "쓰지 않음").replace(/안 ?됨(?![가-힣])/g, "되지 않음")
-    .replace(/못 ?함(?![가-힣])/g, "할 수 없음").replace(/(?<![가-힣])끔(?![가-힣])/g, "꺼짐").replace(/(?<![가-힣])켬(?![가-힣])/g, "켜짐")
-    .replace(/\(\s*\)/g, "")
-    .replace(new RegExp(CODE.source, "g"), (m) => SETTING_CODE_NAME[m] ?? m).replace(/\s{2,}/g, " ").trim();
-  if (!CODE.test(x)) return x;
-  return x.split(/(?<=[.])\s+/).filter((s) => !CODE.test(s)).join(" ").trim();
-}
+// ───────────── 설정 탭(W-19) ─────────────
+// 설정 이름·설명은 평소 보기·상세 보기 모두 용어표 낱말 바꾸기(toTerms12)만 한다 — 장비 글의 문장·숫자·주소는 그대로 보인다.
+// (설명에 남는 코드·주소·v1 은 장비 쪽 설정 help 작업에서 고친다)
 /** 설정 값의 평소 보기 글 — 코드 모양 값(SP3_ON)만 읽는 말로('SP3 켜기'), 나머지는 null(원래 표시). 입력 칸은 원래 값 그대로 */
 export function settingValue12(_key: string, v: unknown): string | null {
   const m = typeof v === "string" ? /^SP(\d)_ON$/.exec(v) : null;
