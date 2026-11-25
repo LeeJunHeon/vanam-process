@@ -34,7 +34,7 @@ const fieldOf = (d: BlockDef | undefined, name: string) => d?.fields.find((f) =>
 
 /** 박스 틀(W-20) — 머리(제목 + 칩) → 모델명 → 큰 값 또는 요약 한 줄 → 라벨-값 줄 → 상태 목록 → 안내 → 맨 아래 버튼 줄.
  *  박스는 격자 줄 높이를 채우고 버튼 줄은 맨 아래(위에 구분선). 꺼진 장비는 칩 '사용하지 않음' · 큰 값 자리 빈 값 · 안내 한 줄 · [설정 열기] */
-function DevCard({ title, sub, chip, big, summary, children, states, actions, actionsEnd, note, off, onConfig }: {
+export function DevCard({ title, sub, chip, big, summary, children, states, actions, actionsEnd, note, off, onConfig }: {
   title: ReactNode; sub?: ReactNode; chip?: ReactNode; big?: ReactNode; summary?: ReactNode; children?: ReactNode; states?: ReactNode;
   actions?: ReactNode; actionsEnd?: ReactNode; note?: ReactNode; off?: boolean; onConfig?: () => void;
 }) {
