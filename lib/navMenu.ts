@@ -4,7 +4,7 @@
 export type Page =
   | "dashboard" | "processes" | "orders" | "substrate" | "activity"
   | "opsDashboard"
-  | "equipCh12" | "equipCh12v2" | "equipChk" | "equipChk2" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline"
+  | "equipCh12" | "equipCh12v2" | "equipChk2" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline"
   | "ops2Admin";
 export type Workspace = "business" | "ops";
 
@@ -28,8 +28,7 @@ export const OPS_NAV: NavItem[] = [
   { key: "opsDashboard", label: "운전 대시보드", icon: "Gauge" },
   { key: "equipCh12", label: "CH1&2 Sputter", icon: "Cpu" },
   { key: "equipCh12v2", label: "CH1&2 v2", icon: "Cpu" },
-  { key: "equipChk", label: "CHK", icon: "Cpu" },
-  { key: "equipChk2", label: "CHK v2", icon: "Cpu" },
+  { key: "equipChk2", label: "CHK Sputter", icon: "Cpu" },      // W-21 — 옛 CHK(v1 화면) 메뉴는 없앰, 옛 주소 ?page=equipChk 는 이리로(PAGE_ALIAS)
   { key: "equipRayvac", label: "Rayvac ALD", icon: "Cpu" },
   { key: "equipNcd", label: "NCD ALD", icon: "Cpu" },
   { key: "equipEvap", label: "Evaporator", icon: "Cpu" },
@@ -52,6 +51,9 @@ const ALL_NAV = [...BUSINESS_NAV, ...OPS_NAV];
 
 // 헤더 제목 = 메뉴 이름
 export const PAGE_TITLE = Object.fromEntries(ALL_NAV.map((n) => [n.key, n.label])) as Record<Page, string>;
+
+/** 옛 주소 → 지금 화면(W-21 — ?page=equipChk 는 CHK Sputter) */
+export const PAGE_ALIAS: Record<string, Page> = { equipChk: "equipChk2" };
 
 export function isPage(v: unknown): v is Page {
   return typeof v === "string" && ALL_NAV.some((n) => n.key === v);

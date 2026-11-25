@@ -239,7 +239,7 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
       <div className={`@container ${plcOk ? "" : "opacity-50"}`}>
         <div className="flex flex-col gap-4 @[1100px]:flex-row @[1100px]:items-start">
           <div ref={wrap} className="min-w-0 flex-1 pt-2">
-            <svg viewBox={`${-P} 0 ${VB_W + 2 * P} ${VB_H}`} className="block h-auto w-full select-none" role="group" aria-label="챔버K v2 계통도">
+            <svg viewBox={`${-P} 0 ${VB_W + 2 * P} ${VB_H}`} className="block h-auto w-full select-none" role="group" aria-label="CHK Sputter 계통도">
               {/* 배관(선 굵기 하나 — 열린 구간만 진회색) */}
               {pipe(`M${220 - P},140 H${CL}`, on("ar_valve"))}
               {pipe(`M${220 - P},230 H${CL}`, on("o2_valve"))}

@@ -97,7 +97,7 @@ export default function Chk2Page() {
   return (
     <div className="min-h-full space-y-3 bg-[#EEF0F3] p-3 text-[#1B1F24] sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className={`${FS.title} font-bold text-[#1B1F24]`}>챔버K v2</h2>
+        <h2 className={`${FS.title} font-bold text-[#1B1F24]`}>CHK Sputter</h2>
         {devices && devices.length > 0 && (
           <select value={picked ?? ""} onChange={(e) => pick(e.target.value)} aria-label="장비 고르기"
             className={`h-10 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body} font-semibold text-[#1B1F24]`}>
