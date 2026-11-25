@@ -384,7 +384,9 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
         <Ch12Run bundle={bundle} st={st} connected={connected} plcOk={plcOk} lock={lock} onAsk={setAsk} feed={d.feed} trend={d.trend}
           nowMs={now + d.offsetMs} skewMs={skew} equipment={equipment} local={local} recipes={local ? null : recipes.list ?? []}
           getRecipe={fullOf} getRow={rowOf} pcRecipes={pcRecipes} onEditSeq={setSeqFor} onLog={() => goTab("log")} send={d.send} notify={notify}
-          localCan={local ? localCan : undefined} />
+          localCan={local ? localCan : undefined}
+          onHmi={shownTabs.some((t) => t.key === "hmi") ? () => goTab("hmi") : undefined}
+          onConfig={shownTabs.some((t) => t.key === "config") ? () => goTab("config") : undefined} />
       )}
       {curTab === "hmi" && (
         <Ch12Hmi bundle={bundle} snapshot={snap} st={st} plcOk={plcOk} lockOf={(t) => lock("PLC_BUTTON", `PLC_BUTTON:${t}`)} pending={pending}

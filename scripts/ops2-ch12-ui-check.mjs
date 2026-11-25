@@ -289,6 +289,18 @@ const chamberProps = (ch) => ({
         { got, order });
 }
 {
+  // W-20 ② 설정에서 꺼진 장비 — 접지 않고 같은 박스: 칩 '사용하지 않음' · 안내 한 줄 · [설정 열기](설정 탭이 있을 때만), 값 줄·버튼은 그리지 않음
+  const st4 = JSON.parse(JSON.stringify(st));
+  st4.links = { ...(st4.links ?? {}), "ch1.rfpulse": { ...(st4.links?.["ch1.rfpulse"] ?? {}), q: "off" } };
+  const boxOf = (h) => { const i = h.indexOf(">RF Pulse</h3>"); return i < 0 ? "" : h.slice(h.lastIndexOf("<div", h.lastIndexOf("<h3", i) - 1), h.indexOf("</h3>", h.indexOf("<h3", i + 20))); };
+  const web = render(U.ChamberRun, { ...chamberProps("ch1"), st: st4, onConfig: noop });
+  const loc = render(U.ChamberRun, { ...chamberProps("ch1"), st: st4 });
+  const wb = textOf(boxOf(web)), lb = textOf(boxOf(loc));
+  check("ui:device-off — 꺼진 장비(블록 품질 off)는 칩 '사용하지 않음'·안내 한 줄·[설정 열기](설정 탭 있을 때만)·값 줄 없음, 옛 '접어 둠' 없음",
+        wb.includes("사용하지 않음") && wb.includes("장비 설정에서 사용하도록 바꾸면 값이 표시됩니다.") && wb.includes("설정 열기") && !wb.includes("Reflected")
+        && lb.includes("사용하지 않음") && !lb.includes("설정 열기") && !/접어 둠/.test(web), { wb: wb.slice(0, 200), lb: lb.slice(0, 120) });
+}
+{
   const html = render(U.PresputterPanel, { bundle, st, lock: noLock, onAsk: noop });
   const t = textOf(html), b = buttons(html);
   check("ui:presputter — 프리스퍼터 예약·예약 취소 칸(시각 HH:MM 고르기), 장비가 매일 예약을 잡음·형식 오류는 TIME_FORMAT 거부",
