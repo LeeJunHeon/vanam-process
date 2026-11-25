@@ -332,7 +332,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
         <div className="min-w-0 space-y-3">
           <KeyValues bundle={bundle} st={st} blocks={runBlocks} />
           <Chk2Trend trend={trend} equipment={equipment} runId={st?.runId ?? null} local={local} nowMs={nowMs}
-            pressureTarget={pressureTargetCol(snap, bundle)} />
+            pressureTarget={pressureTargetCol(snap, bundle)} fitLegend edgeTicks />
           <Chk2Adjust bundle={bundle} st={st} skewMs={skewMs} canKey={canKey} onAsk={onAsk} plain />
         </div>
         <div className="grid min-w-0 items-start gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">

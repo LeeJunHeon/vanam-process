@@ -205,6 +205,8 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     name = code === "ALL_STOP" ? "ALL STOP" : level === "error" || level === "critical" ? "알람" : level === "warn" ? "경고" : "안내";
   }
   if (source === "safety" && kind === "released") name = "해제";
+  // 안전 규칙으로 멈춤(W-19) — 이름은 멈춘 것: 장비 문장이 '수동 조작 중단' 이면 그 말, 아니면 '공정 중단'(내용 = 사유 이름)
+  if (source === "safety" && kind === "abort") name = /수동 조작 중단/.test(msg) ? "수동 조작 중단" : "공정 중단";
   const who = (x: Obj) => {
     const src = x.source === "local" || x.source === "hmi" ? "노트북" : x.source === "web" ? "웹" : s(x.source);
     const by = byWord(x.by);
@@ -216,9 +218,12 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
   if (source === "uplink") {
     text = "";                                         // 주소·오류 이름이 든 장비 문장은 상세 보기에서만
   } else if (source === "safety" && kind === "seq_done" && steps.length) {
+    // 상태별로 센다(W-19) — 실패(error)가 하나라도 있으면 '실패 N' 이 늘 보인다
     const n = (k: string) => steps.filter((x) => x === k).length;
-    const other = steps.length - n("ok") - n("not_needed");
-    text = `${steps.length}단계 · 실행 ${n("ok")}${n("not_needed") ? ` · 필요 없음 ${n("not_needed")}` : ""}${other ? ` · 그 밖 ${other}` : ""}`;
+    const known = ["ok", "not_needed", "sent", "error"];
+    const etc = steps.filter((x) => !known.includes(x)).length;
+    text = [`${steps.length}단계`, `실행 ${n("ok")}`, n("not_needed") ? `필요 없음 ${n("not_needed")}` : "",
+      n("sent") ? `확인 중 ${n("sent")}` : "", n("error") ? `실패 ${n("error")}` : "", etc ? `기타 ${etc}` : ""].filter(Boolean).join(" · ");
   } else if (source === "safety" && kind === "seq_start") {
     text = /^(\d+)단계$/.test(msg.trim()) ? msg.trim() : "";
   } else if (source === "ig" && kind === "filament_result") {
