@@ -63,7 +63,7 @@ export default function Chk2LocalNext({ bundle, st, lock, onAsk }: {
   };
 
   return (
-    <Card title="다음 공정" className="lg:col-span-2">
+    <Card title="다음 공정">
       <div className="space-y-3">
         <div className={`flex flex-wrap items-center gap-2 rounded-[10px] border border-[#E3E6EA] px-3 py-2 ${FS.body}`}>
           {loaded ? (
