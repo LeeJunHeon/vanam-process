@@ -205,6 +205,8 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     name = code === "ALL_STOP" ? "ALL STOP" : level === "error" || level === "critical" ? "알람" : level === "warn" ? "경고" : "안내";
   }
   if (source === "safety" && kind === "released") name = "해제";
+  // 안전 규칙으로 멈춤(W-19) — 이름은 멈춘 것: 장비 문장이 '수동 조작 중단' 이면 그 말, 아니면 '공정 중단'(내용 = 사유 이름)
+  if (source === "safety" && kind === "abort") name = /수동 조작 중단/.test(msg) ? "수동 조작 중단" : "공정 중단";
   const who = (x: Obj) => {
     const src = x.source === "local" || x.source === "hmi" ? "노트북" : x.source === "web" ? "웹" : s(x.source);
     const by = byWord(x.by);
