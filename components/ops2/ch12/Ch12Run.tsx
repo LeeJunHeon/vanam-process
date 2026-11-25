@@ -129,7 +129,7 @@ function KeyValues({ bundle, st, ch, running }: { bundle: Ch12Bundle | null; st:
       {shown.length ? (
         <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">{shown.map((d) => <KeyTile key={d.value} d={d} bundle={bundle} snap={snap} ch={ch} />)}</div>
       ) : <Empty>값을 아직 받지 못했습니다</Empty>}
-      <p className={`mt-2 ${FS.small} text-[#5B6470]`}>막대: ▲ = 목표 · 세로선 = 지금</p>
+      <p className={`mt-2 ${FS.small} text-[#5B6470]`}>▲ 목표 · │ 현재</p>
     </Card>
   );
 }
@@ -313,7 +313,7 @@ export function ChamberRun(p: ChamberProps) {
             {eng?.error && <p className={`${FS.body} font-semibold text-[#B42318]`} title={reasonTip(asChk(bundle), String(eng.error), detail)}>{alarmName(String(eng.error))}</p>}
             <p className={`${FS.body} text-[#5B6470]`}>
               {eng?.recipe_name ? <>적재 <b className="text-[#1B1F24]">{String(eng.recipe_name)}</b>
-                {queue?.mode === true || (queue?.total ?? 0) > 1 ? ` · ${typeof queue?.index === "number" ? queue.index + 1 : "-"}/${queue?.total ?? "-"}행` : ""}</>
+                {queue?.mode === true || (queue?.total ?? 0) > 1 ? ` · 공정 ${typeof queue?.index === "number" ? queue.index + 1 : "-"}/${queue?.total ?? "-"}` : ""}</>
                 : running ? "화면 값으로 시작한 공정(적재 레시피 없음)" : "적재된 레시피 없음"}
             </p>
             {detail && cs?.runId && <p className={`font-mono ${FS.small} text-[#8A929D]`}>run {cs.runId}</p>}

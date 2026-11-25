@@ -2,7 +2,7 @@
 // 이름은 장비 묶음(스냅샷 필드 label·plcButtons·commands·states·eventSources·chambers)에서 읽고, 묶음에 없는 이름(카드 제목·Loadlock·
 // 묶음 이름)과 묶음이 옛것(15 이하)일 때 쓸 이름만 이 파일 한 곳에 둔다. 화면 파일은 이름 글자를 따로 적지 않고 여기서 가져온다.
 // 상태 낱말(켜짐·꺼짐·열림·닫힘)·모드 이름·마우스 설명 함수(label·help·desc 3단)는 챔버K terms 것을 그대로 쓴다.
-import { toTerms } from "@/lib/ops2/chk/terms";
+import { OLD_TO_NEW } from "@/lib/ops2/chk/terms";
 
 export { WORD, MODE_NAME, reasonTip, stepName } from "@/lib/ops2/chk/terms";
 
@@ -42,42 +42,32 @@ export const STATE_FALLBACK: Record<string, { label: string; kind: "idle" | "act
   stopping: { label: "정지 중", kind: "stopping" },
 };
 
-/** 옛 묶음(15 이하)·옛 기록의 옛 말 → 용어표 말. 챔버K toTerms(이온 게이지·도어·메인 밸브·건 셔터·순방향·반사·블록·로컬 …) 위에 챔버12 말 */
-const OLD_TO_NEW12: [RegExp, string][] = [
-  [/플라즈마 클리닝/g, "Plasma Cleaning"], [/로드락/g, "Loadlock"], [/로터리( 펌프)?/g, "Rotary"], [/터보( 펌프)?/g, "Turbo"],
-  [/러핑 밸브/g, "RV"], [/러핑/g, "RV"], [/포어라인 밸브/g, "FV"], [/포어라인/g, "FV"], [/게이트 ?밸브/g, "Gate"], [/게이트/g, "Gate"],
-  [/벤트/g, "Vent"], [/4핀/g, "4Pin"], [/척 모터/g, "Chuck"], [/메인 셔터/g, "Main 셔터"], [/Gun 셔터 G(\d)/g, "Gun$1 셔터"],
-  [/시퀀스 편집/g, "공정 순서 편집"], [/시퀀스/g, "공정 순서"], [/사건/g, "기록"],
-];
-/** 챔버K toTerms 보다 먼저 — RF 파워를 올리고 내리는 '램프'는 승온이 아니라 천천히 올리기·내리기 */
-const PRE12: [RegExp, string][] = [[/RF (연속 )?정지 램프/g, "RF $1정지 천천히 내리기"], [/RF 램프/g, "RF 천천히 올리기"]];
-export const toTerms12 = (t: string) =>
-  OLD_TO_NEW12.reduce((x, [re, to]) => x.replace(re, to), toTerms(PRE12.reduce((x, [re, to]) => x.replace(re, to), t)));
+/** 조사 — 낱말 뒤에 이것만 붙으면(벤트를·게이트가·로드락에서는) 바꾼다. 그 밖의 한글이 이어지면(게이트웨이) 다른 낱말이라 바꾸지 않는다 */
+const JOSA = ["에서", "에게", "으로", "까지", "부터", "보다", "처럼", "마다", "이나", "이랑", "하고", "이다", "입니다", "이며", "이고", "이면", "이라",
+  "은", "는", "이", "가", "을", "를", "의", "에", "께", "로", "와", "과", "도", "만", "나", "랑", "인", "라"].join("|");
+/** 낱말 단위 규칙 — 앞에 한글이 붙어 있으면(이벤트) 바꾸지 않고, 뒤에는 조사만 붙거나 한글이 아닌 글자일 때만 바꾼다(W-19b) */
+const word = (src: string) => new RegExp(`(?<![가-힣])(?:${src})(?=(?:${JOSA})*(?![가-힣]))`, "g");
 
-// ───────────── 설정 탭 평소 보기(W-19) ─────────────
-const CODE = /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/;
-/** 장비 묶음 설정 이름에 남은 코드 → 이름 */
-const SETTING_CODE_NAME: Record<string, string> = { SW_RF_SELECT: "RF Select", SW_POWER_SELECT: "Power Select", SO_KEEPALIVE: "TCP 연결 유지" };
-/** 설정 이름·설명의 평소 보기 글 — 용어표 말로, PLC 주소(D113·(D150~D160, …))·v1·줄표를 빼고, 대문자 코드가 남은 문장은 뺀다.
- *  장비 묶음 글은 그대로 두고 보일 때만 바꾼다(원문은 상세 보기) */
-export function settingText12(t: string): string {
-  const x = toTerms12(t)
-    .replace(/\bD\d{2,3}(?:\s*[/~×]\s*D?\d{1,3})*\s*(은|는|이|가|을|를)(?=\s)/g,      // 'D142/D143 은 …' → '이 값은 …'
-      (_m, j: string) => `이 값${({ 는: "은", 가: "이", 를: "을" } as Record<string, string>)[j] ?? j}`)
-    .replace(/\(\s*D\d{2,3}(?:\s*[/~]\s*D\d{2,3})*\s*,?\s*/g, "(")
-    .replace(/\bD\d{2,3}(?:\s*[/~×]\s*D?\d{1,3})*\s*/g, "")
-    .replace(/[·\s]*\bM[0-9A-F]{5}~?/g, "")                                   // PLC 코일 주소(M00400~)
-    .replace(/\bv1\s*(은|는|이|가|을|를|과|와)(?=\s)/g,                                   // 'v1 은 …' → '예전 프로그램은 …'
-      (_m, j: string) => `예전 프로그램${({ 는: "은", 가: "이", 를: "을", 와: "과" } as Record<string, string>)[j] ?? j}`)
-    .replace(/\bv1\s*/g, "").replace(/\s*\bE\d{3}\b/g, "").replace(/\s+—\s+/g, ". ").replace(/\(\s*—?\s*\)/g, "").replace(/\s*—\s*/g, " ")
-    .replace(/\bON\b/g, "켜기").replace(/\bOFF\b/g, "끄기")                    // 영문 ON/OFF → 화면 말
-    .replace(/안 ?함(?![가-힣])/g, "하지 않음").replace(/안 ?씀(?![가-힣])/g, "쓰지 않음").replace(/안 ?됨(?![가-힣])/g, "되지 않음")
-    .replace(/못 ?함(?![가-힣])/g, "할 수 없음").replace(/(?<![가-힣])끔(?![가-힣])/g, "꺼짐").replace(/(?<![가-힣])켬(?![가-힣])/g, "켜짐")
-    .replace(/\(\s*\)/g, "")
-    .replace(new RegExp(CODE.source, "g"), (m) => SETTING_CODE_NAME[m] ?? m).replace(/\s{2,}/g, " ").trim();
-  if (!CODE.test(x)) return x;
-  return x.split(/(?<=[.])\s+/).filter((s) => !CODE.test(s)).join(" ").trim();
-}
+/** 챔버K toTerms 보다 먼저 — RF 파워를 올리고 내리는 '램프'는 승온이 아니라 천천히 올리기·내리기 */
+const PRE12: [RegExp, string][] = [[/RF (연속 )?정지 램프/, "RF $1정지 천천히 내리기"], [/RF 램프/, "RF 천천히 올리기"]];
+/** 옛 묶음(15 이하)·옛 기록의 옛 말 → 용어표 말(챔버12 말) */
+const OLD_TO_NEW12: [RegExp, string][] = [
+  [/플라즈마 클리닝/, "Plasma Cleaning"], [/로드락/, "Loadlock"], [/로터리( 펌프)?/, "Rotary"], [/터보( 펌프)?/, "Turbo"],
+  [/러핑 밸브/, "RV"], [/러핑/, "RV"], [/포어라인 밸브/, "FV"], [/포어라인/, "FV"], [/게이트 ?밸브/, "Gate"], [/게이트/, "Gate"],
+  [/벤트/, "Vent"], [/4핀/, "4Pin"], [/척 모터/, "Chuck"], [/메인 셔터/, "Main 셔터"], [/Gun 셔터 G(\d)/, "Gun$1 셔터"],
+  [/시퀀스 편집/, "공정 순서 편집"], [/시퀀스/, "공정 순서"], [/사건/, "기록"],
+];
+/** 챔버12 낱말 바꾸기 규칙(차례대로) — RF 램프 · 챔버K OLD_TO_NEW 를 낱말 단위로 감싼 것(챔버K toTerms 는 그대로) · 챔버12 말.
+ *  ops2:ch12-ui 가 이 목록으로 바뀐 자리를 하나씩 따라가 본다(한글이 줄어든 곳은 이 규칙뿐인지) */
+export const TERM_RULES12: [RegExp, string][] = [
+  ...[...PRE12, ...OLD_TO_NEW, ...OLD_TO_NEW12].map(([re, to]): [RegExp, string] => [word(re.source), to]),
+];
+/** 옛 묶음·장비 문장의 옛 말 → 용어표 말(낱말 단위). 장비가 보내는 글은 그대로 두고 보일 때만 바꾼다 */
+export const toTerms12 = (t: string) => TERM_RULES12.reduce((x, [re, to]) => x.replace(re, to), t);
+
+// ───────────── 설정 탭(W-19) ─────────────
+// 설정 이름·설명은 평소 보기·상세 보기 모두 용어표 낱말 바꾸기(toTerms12)만 한다 — 장비 글의 문장·숫자·주소는 그대로 보인다.
+// (설명에 남는 코드·주소·v1 은 장비 쪽 설정 help 작업에서 고친다)
 /** 설정 값의 평소 보기 글 — 코드 모양 값(SP3_ON)만 읽는 말로('SP3 켜기'), 나머지는 null(원래 표시). 입력 칸은 원래 값 그대로 */
 export function settingValue12(_key: string, v: unknown): string | null {
   const m = typeof v === "string" ? /^SP(\d)_ON$/.exec(v) : null;

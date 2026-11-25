@@ -92,7 +92,7 @@ function ChamberCell({ bundle, st, ch, connected, nowMs }: {
       <p className={`mt-0.5 flex flex-wrap gap-x-3 ${FS.body} text-[#5B6470]`}>
         <span>남은 <b className="tabular-nums text-[#133A7C]">{clockOrDash(cs?.remainS ?? step?.remainS)}</b></span>
         <span title={fieldTipOf(bundle, `${ch}.proc.eta_remaining_s`, detail) ?? "공정이 끝날 때까지 남은 예상 시간입니다."}>공정 끝까지 <b className="tabular-nums text-[#133A7C]">{clockOrDash(eta)}</b>
-          <span className={`ml-1 ${FS.small}`}>{etaAt ? `끝 예정 ${etaAt}` : running ? "확정 전" : ""}</span></span>
+          {etaAt || running ? <>{" "}<span className={`ml-1 ${FS.small}`}>{etaAt ? `끝 예정 ${etaAt}` : "확정 전"}</span></> : null}</span>
       </p>
       {prog !== null && (
         <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-[#E3E6EA]" role="progressbar" aria-label={`${label} 진행`}
