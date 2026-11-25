@@ -224,8 +224,8 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   const t = exp.length ? expectedTime(exp) : null;
   const steps = exp.reduce((n, b) => n + b.steps.filter((s) => !s.internal).length, 0);
   const first = full?.rows.find((r) => r && Object.keys(r).length && !("blocks" in r)) as Row | undefined;
-  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정보를 받는 중" : chk?.errors ? `검사 오류 ${chk.errors}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("RECIPE_LOAD");
-  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정보를 받는 중" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개를 레시피 탭에서 고친 뒤 할 수 있음` : lock("HEATER_RECIPE_RUN");
+  const loadLock = !full || !pid ? "레시피를 고르세요" : !env ? "장비 정보를 받는 중" : chk?.errors ? `검사 오류 ${chk.errors}개를 [레시피 열기]에서 고친 뒤 할 수 있음` : lock("RECIPE_LOAD");
+  const runLock = !hfull || !hid ? "히터 레시피를 고르세요" : !env ? "장비 정보를 받는 중" : hchk?.errors.length ? `검사 오류 ${hchk.errors.length}개를 [레시피 열기]에서 고친 뒤 할 수 있음` : lock("HEATER_RECIPE_RUN");
   const loadedWeb = loaded?.name ? list.find((r) => r.kind === "process" && r.name === loaded.name) : undefined;
 
   const askStart = async () => {

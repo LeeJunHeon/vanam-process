@@ -270,7 +270,7 @@ function BlockRowPanes({ row, rc, env, bundle, readOnly, onRow, startWhy, onStar
         </label>
         <TopMessages errors={errors} bundle={bundle} />
         <BlockTree tree={tree} onTree={commit} sel={sel} onSel={setSel} env={env} bundle={bundle} readOnly={readOnly} errors={errors} warnings={warnings} />
-        <p className={`${FS.small} text-[#5B6470]`}>끝에 &apos;정상 끝 정지&apos;가 없으면 장비가 자동으로 붙입니다.</p>
+        <p className={`${FS.small} text-[#5B6470]`}>끝에 &apos;공정 끝&apos;이 없으면 장비가 자동으로 붙입니다.</p>
       </div>
       <div className="min-w-0 space-y-3">
         <div className="rounded-[12px] border border-[#D9DDE3] bg-white p-3">

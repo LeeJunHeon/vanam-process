@@ -24,7 +24,7 @@ import { fmtKst } from "@/lib/ops2/time";
 const LABEL: Record<string, string> = {
   "mfc.ar_flow": "Ar 유량", "mfc.o2_flow": "O₂ 유량", "mfc.wp": "작업 압력(SP1)", "dc.power": "DC 파워", "rf.power": "RF 파워",
   "rfpulse.power": "RF Pulse 파워", "rfpulse.freq_hz": "RF Pulse 주파수", "rfpulse.duty": "RF Pulse 듀티",
-  "heater.target": "히터 목표 온도", "heater.ramp": "히터 램프 속도", "process.main_remaining": "메인 남은 시간",
+  "heater.target": "히터 목표 온도", "heater.ramp": "히터 승온 속도", "process.main_remaining": "증착 남은 시간",
   "process.skip_wait": "지금 대기 끝내기",
 };
 

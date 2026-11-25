@@ -7,7 +7,8 @@
 import { createContext, useCallback, useContext, useState } from "react";
 
 export type ModeInfo = { local: boolean; hmiKinds: readonly string[]; detail: boolean;
-  lockPrefix?: string };      // W-19 CH1&2 — 잠긴 버튼 마우스 설명 앞말(없으면 kit 기본 '잠김 — ' — 챔버K 그대로)
+  lockPrefix?: string;
+  chkWords?: boolean };      // W-21 챔버K — 출처 LOCAL·WEB, 사람 이름은 이메일 @ 앞(같이 쓰는 기록 부품). CH1&2 는 넘기지 않아 그대로      // W-19 CH1&2 — 잠긴 버튼 마우스 설명 앞말(없으면 kit 기본 '잠김 — ' — 챔버K 그대로)
 
 export const Chk2ModeContext = createContext<ModeInfo>({ local: false, hmiKinds: [], detail: false });
 

@@ -24,6 +24,7 @@ import Chk2History from "./Chk2History";
 import Chk2Recipes from "./Chk2Recipes";
 import Chk2Manual from "./Chk2Manual";
 import { FS, Btn, Card, ConfirmDialog, InfoBand, Issue, Notices, SimpleConfirm, Tabs, TipLayer, type Ask, type Notice } from "./kit";
+import { stepName } from "@/lib/ops2/chk/terms";
 import { STALE_SEC_DEFAULT, STOP_KINDS, paramValue, plcFresh } from "./logic";
 import { reasonLabel } from "./types";
 import { useChk2, type Chk2Mode } from "./useChk2";
@@ -243,6 +244,17 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const notify = (n: Omit<Notice, "id" | "at">) =>
     setNotices((l) => [{ ...n, id: `${Date.now()}-${Math.random()}`, at: Date.now() }, ...l].slice(0, 4));
 
+  /** 거부 글(W-21) — 건너뛰기·일시정지가 늦었으면 지금 단계로 말한다. 평소 보기에는 블록 번호·판을 쓰지 않는다(상세 보기에서만) */
+  const rejectText = (kind: string, code: string | null, det: string | null): string => {
+    const cur = st?.step ? `${st.step.no} ${stepName(d.bundle, { type: st.step.type ?? null, label: st.step.label ?? null })}` : "";
+    const plainText = code === "PROCESS_PAUSED" ? "이미 일시정지 중입니다"
+      : (code === "SKIP_STALE" || code === "PAUSE_STALE") && cur
+        ? `이미 다음 단계(${cur})로 넘어가 ${kind === "PROCESS_PAUSE" ? "일시정지하지" : "건너뛰지"} 않았습니다` : "";
+    if (detail) return `${plainText || reasonLabel(d.bundle, code)}${code ? ` (${code})` : ""}${det ? ` — ${det}` : ""}`;
+    const showDet = det && !/블록|판 \d|판\d/.test(det) ? ` — ${det}` : "";
+    return plainText || `${reasonLabel(d.bundle, code)}${showDet}`;
+  };
+
   const run = async () => {
     if (!ask) return;
     const a = ask;
@@ -267,8 +279,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
     } else if (b.status === "accepted") {
       notify({ tone: "ok", title: `${what}: 장비가 받음` });
     } else if (b.status === "rejected") {
-      notify({ tone: "bad", title: `${what}: 거부`,
-               text: `${reasonLabel(d.bundle, b.reasonCode)}${b.reasonCode && detail ? ` (${b.reasonCode})` : ""}${b.detail ? ` — ${b.detail}` : ""}` });
+      notify({ tone: "bad", title: `${what}: 거부`, text: rejectText(a.kind, b.reasonCode ?? null, b.detail ?? null) });
     } else if (b.status === "expired") {
       notify({ tone: "warn", title: `${what}: 만료`, text: reasonLabel(d.bundle, b.reasonCode) });
     } else {
@@ -340,7 +351,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   // hello 를 받기 전 — 연결된 적 없는 장비도 전체 화면이 잠깐 보였다 바뀌지 않게 자리표시만(못 받으면 오류 안내)
   if (!d.hello) {
     return (
-      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail }}>
+      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail, chkWords: true }}>
         {d.authLost ? <Issue level="alarm"><LogIn size={14} className="mr-1 inline" />로그인이 끊겼습니다. 새로고침하세요. 조작이 잠겼습니다.</Issue>
           : d.error ? <Issue level="alarm">{d.error}</Issue>
           : <section className={`animate-pulse rounded-[12px] border border-[#D9DDE3] bg-white p-6 text-center ${FS.body} text-[#5B6470]`}>장비 정보를 읽는 중…</section>}
@@ -375,7 +386,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   );
 
   return (
-    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail }}>
+    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail, chkWords: true }}>
       {local && (
         <div className={`flex flex-wrap items-center gap-2 rounded-[12px] bg-[#3A424D] px-4 py-2 ${FS.body} text-white`}>
           <Laptop size={15} /> <b>노트북 화면</b>
