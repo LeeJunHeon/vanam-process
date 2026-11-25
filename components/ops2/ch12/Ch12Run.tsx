@@ -363,7 +363,7 @@ export function ChamberRun(p: ChamberProps) {
       <KeyValues bundle={bundle} st={st} ch={ch} running={running} />
 
       <Chk2Trend trend={p.trend} equipment={p.equipment} runId={cs?.runId ?? null} local={p.local} nowMs={nowMs}
-        defs={trendDefs(bundle, ch)} title={`${label} ${CARD.trend}`} skipEdgeTick />
+        defs={trendDefs(bundle, ch)} title={`${label} ${CARD.trend}`} edgeTicks />
 
       {/* 장비 카드 — 챔버K 장비 카드처럼 계통별 열(가스·압력 · 파워 · 측정), 칸이 넓으면 두 열. 이름의 챔버 앞말은 뺀다 */}
       <div className="@container">
