@@ -4,7 +4,7 @@
 // 기간 15분·1시간 = stream state 를 브라우저에 쌓은 것(useChk2 trend — 화면을 연 뒤부터), 공정 전체 = 그 run 의 1분 요약(평균).
 // 글자는 그래프 안에 두지 않는다(Chk2SummaryChart 규칙): 마지막 값은 오른쪽 띠에 지시선으로, 눈금은 왼쪽·아래 띠, 범례는 위 띠.
 // 한 그래프 = 단위 하나(두 축 그래프는 쓰지 않는다). 색은 정해진 순서(값과 그 목표는 같은 색 — 목표는 점선).
-import { useEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
 import { FS, FSPX, Card, Empty, Tabs } from "./kit";
 import type { TrendPt } from "./useChk2";
 import type { SummaryRow } from "./Chk2SummaryChart";
@@ -83,9 +83,23 @@ export function layoutTrendLabels(items: (TrendLabelIn | null)[], lo: number, hi
 }
 const fmt = (v: number) => String(Number(v.toPrecision(4)));
 
-function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
+/** 제목 글 폭 어림(측정 전 첫 그림) — 한글·기호는 글자 크기만큼, 나머지는 0.62 배(굵은 글 여유) */
+const titleWidthGuess = (t: string, fs: number) => [...t].reduce((n, c) => n + (c.charCodeAt(0) > 0x2000 ? fs : fs * 0.62), 0);
+const LEGEND_GAP = 12;          // 제목 끝과 범례 사이(W-19)
+
+function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend = false }: {
   title: string; unit: string; lines: Line[]; t0: number; t1: number; width: number; hover: number | null; setHover: (t: number | null) => void;
+  fitLegend?: boolean;          // W-19 챔버K — 범례를 제목 끝 뒤로(긴 제목과 겹치지 않게). 기본은 LEFT + 110 고정 그대로
 }) {
+  // 범례 시작 = max(LEFT + 110, 제목 끝 + 여백) — 제목 폭은 그린 뒤 실제 폭으로(W-19, fitLegend 일 때만 — CH1&2 는 LEFT + 110 그대로)
+  const titleRef = useRef<SVGTextElement | null>(null);
+  const [titleW, setTitleW] = useState(() => titleWidthGuess(title, FSPX.body) + titleWidthGuess(` (${unit})`, FSPX.body));
+  useLayoutEffect(() => {
+    const el = titleRef.current;
+    if (!el || !fitLegend) return;
+    try { const w = el.getBBox().width; if (w > 0 && Math.abs(w - titleW) > 0.5) setTitleW(w); } catch { /* 그리기 전 */ }
+  }, [title, unit, titleW, fitLegend]);
+  const legendX = fitLegend ? Math.max(LEFT + 110, Math.ceil(LEFT + titleW + LEGEND_GAP)) : LEFT + 110;
   const vals = lines.flatMap((l) => l.pts.map((p) => p.v)).filter((v): v is number => v !== null);
   let hi = vals.length ? Math.max(...vals) : 1;
   if (hi <= 0) hi = 1;
@@ -128,7 +142,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
         const px = e.clientX - r.left;
         setHover(px < LEFT || px > LEFT + pw ? null : t0 + ((px - LEFT) / pw) * (t1 - t0));
       }}>
-      <text x={LEFT} y={12} fontSize={FSPX.body} fontWeight={700} fill="#1B1F24">{title}<tspan fontWeight={400} fill="#5B6470"> ({unit})</tspan></text>
+      <text ref={titleRef} x={LEFT} y={12} fontSize={FSPX.body} fontWeight={700} fill="#1B1F24">{title}<tspan fontWeight={400} fill="#5B6470"> ({unit})</tspan></text>
       {lines.reduce<{ x: number; el: ReactElement[] }>((acc, l) => {
         const w = 18 + [...l.label].reduce((n, c) => n + (c.charCodeAt(0) > 0x2000 ? 10 : 6), 0);
         acc.el.push(
@@ -138,7 +152,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover }: {
           </g>);
         acc.x += w + 10;
         return acc;
-      }, { x: LEFT + 110, el: [] }).el}
+      }, { x: legendX, el: [] }).el}
       {yTicks.map((v) => (
         <g key={v}>
           <line x1={LEFT} x2={LEFT + pw} y1={y(v)} y2={y(v)} stroke="#E3E6EA" />
@@ -194,8 +208,9 @@ const trendDefs = (pressureTarget: string): TrendDef[] => [
   { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", "heater.sv2"]] },
 ];
 
-export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세" }: {
+export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세", fitLegend = false }: {
   trend: TrendPt[]; equipment: string; runId: string | null; local: boolean; nowMs: number; pressureTarget?: string;
+  fitLegend?: boolean;        // W-19 챔버K 만 — 범례를 제목 끝 뒤로(Panel 참고)
   defs?: TrendDef[];          // 없으면 챔버K 그래프(압력·밸브 위치·파워·히터) — 챔버12 는 챔버별 열(값이 바뀌지 않게 메모해서)
   title?: string;
 }) {
@@ -263,7 +278,7 @@ export default function Chk2Trend({ trend, equipment, runId, local, nowMs, press
         {range !== "run" && <p className={`mb-1 ${FS.small} text-[#5B6470]`}>이 화면을 연 뒤부터 쌓은 값입니다(2초 간격).</p>}
         {range === "run" && rows === null ? <Empty>1분 요약을 읽는 중…</Empty>
           : !panels.length ? <Empty>그릴 값이 없습니다. 이번 공정이 쓰는 압력·파워·히터 값이 들어오면 그립니다</Empty>
-          : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} />)}
+          : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} fitLegend={fitLegend} />)}
       </div>
     </Card>
   );
