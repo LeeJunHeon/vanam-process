@@ -322,8 +322,8 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi }: {
         </Panel>
         </div>
       </div>
-      {/* 히터·Ion Gauge — 운전 탭 장비 카드와 같은 부품(조작·확인창 그대로) */}
-      <div className="grid items-start gap-3 lg:grid-cols-2">
+      {/* 히터·Ion Gauge — 운전 탭 장비 박스와 같은 부품(조작·확인창 그대로). 두 박스 높이를 맞춘다(W-20 — 버튼 줄은 박스 맨 아래) */}
+      <div className="grid gap-3 lg:grid-cols-2">
         <HeaterCard {...ctx} />
         <IgCard {...ctx} />
       </div>
