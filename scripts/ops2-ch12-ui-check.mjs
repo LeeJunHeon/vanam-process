@@ -161,6 +161,8 @@ await esbuild.build({
       export { logLine } from "./components/ops2/chk/text";
       export * as L from "./components/ops2/ch12/logic";
       export * as T from "./components/ops2/ch12/types";
+      export * as TM from "./lib/ops2/ch12/terms";
+      export * as KT from "./lib/ops2/chk/terms";
       export * as CC from "./lib/ops2/ch12/chatCards";`,
   },
 });
@@ -676,6 +678,64 @@ const chamberProps = (ch) => ({
         && tg.map((x) => x.label).join() === "CH1 적재,CH2 적재,Plasma Cleaning 불러오기,CH1 프리스퍼터 레시피,CH2 프리스퍼터 레시피"
         && tg[0].kind === "RECIPE_LOAD" && tg[0].args.path === csv.full && tg[1].args.ch === 2
         && !tx.some((x) => x.kind === "PC_RECIPE_LOAD"), { files: fx.files, tg });
+}
+
+{
+  // 낱말 바꾸기(W-19b ②) — 묶음 16 의 모든 글(필드·사유·사건·명령·설정·상태·버튼·블록의 이름과 설명)과 sim 흐름의 기록 글에 toTerms12:
+  // (a) 한글 바로 뒤에 영문 용어가 붙은 흔적('이Vent' 꼴) 0, (b) 같은 낱말이 잇달아 나오는 흔적('기록 기록' 꼴) 0,
+  // (c) 한글 글자 수가 줄어든 것은 규칙 목록(TERM_RULES12) 바꾸기뿐, (d) 낱말 속에서 바뀐 자리(앞에 한글·뒤에 조사 아닌 한글) 0.
+  // 챔버K toTerms 는 같은 검사를 돌려 걸린 것을 보여 주기만 한다(고치지 않음 — 챔버K 화면 그대로)
+  const texts = new Set();
+  const add = (x) => { if (typeof x === "string" && x.trim()) texts.add(x); };
+  for (const blk of bundle.snapshot.blocks) { add(blk.label); add(blk.desc); for (const f of blk.fields) { add(f.label); add(f.help); add(f.desc); Object.values(f.enumLabels ?? {}).forEach(add); } }
+  for (const f of bundle.snapshot.process) { add(f.label); add(f.help); add(f.desc); }
+  for (const r of bundle.reasons) { add(r.label); add(r.help); }
+  for (const e of bundle.eventKinds) { add(e.label); add(e.desc); }
+  for (const e of bundle.eventSources) add(e.label);
+  for (const c of bundle.commands) { add(c.label); add(c.desc); (c.args ?? []).forEach((x) => add(x.desc)); }
+  for (const x of bundle.params) { add(x.label); add(x.desc); }
+  for (const x of bundle.states) add(x.label);
+  for (const x of bundle.plcButtons) add(x.label);
+  for (const d of bundle.blocks.defs) { add(d.label); add(d.desc); }
+  const nBundle = texts.size;
+  for (const e of feed) {
+    const d = e.data ?? {}; add(d.message); const c = d.context ?? {}; const cd = c.data ?? {};
+    add(cd.text); add(cd.label); add(cd.message); add(cd.detail); add(c.title); add(c.message);
+    const l = U.ch12LogLine(bundle, e); add(l.text); add(l.kind);
+  }
+  const H = (t) => (t.match(/[가-힣]/g) ?? []).length;
+  const TERM = /[가-힣](?:Plasma Cleaning|Loadlock|Rotary|Turbo|RV|FV|Gate|Vent|4Pin|Chuck|Main 셔터|Gun\d? 셔터|Ion Gauge|Ionizer|Filament|Degas|Emission|Water|Door|MV|Forward|Reflected|SP|Gun\d)/g;
+  const DUP = /(?<![가-힣A-Za-z0-9])([가-힣A-Za-z0-9]{2,})[\s·]+\1(?![가-힣A-Za-z0-9])/g;
+  const n = (re, t) => (t.match(re) ?? []).length;
+  const JOSA = /^(?:(?:에서|에게|으로|까지|부터|보다|처럼|마다|이나|이랑|하고|이다|입니다|이며|이고|이면|이라|은|는|이|가|을|를|의|에|께|로|와|과|도|만|나|랑|인|라))*(?![가-힣])/;
+  const inWord = (t, re) => [...t.matchAll(new RegExp(re.source, "g"))].filter((m) =>
+    /[가-힣]/.test(t[m.index - 1] ?? "") || (/[가-힣]/.test(t[m.index + m[0].length] ?? "") && !JOSA.test(t.slice(m.index + m[0].length))));
+  const scan = (fn, rules, bounded) => {
+    const out = { a: [], b: [], c: [], d: [] };
+    for (const t of texts) {
+      const r = fn(t);
+      if (n(TERM, r) > n(TERM, t)) out.a.push(`${t} → ${r}`);
+      if (n(DUP, r) > n(DUP, t)) out.b.push(`${t} → ${r}`);
+      let x = t, expl = 0;
+      for (const [re, to] of rules) {
+        if (!bounded) for (const m of inWord(x, re)) out.d.push(`${m[0]} @ ${x.slice(Math.max(0, m.index - 6), m.index + m[0].length + 6)}`);
+        x = x.replace(re, (...m) => { const rep = m[0].replace(new RegExp(re.source), to); expl += H(m[0]) - H(rep); return rep; });
+      }
+      if (x !== r || (H(r) < H(t) && H(t) - H(r) !== expl)) out.c.push(`${t} → ${r}`);
+    }
+    return out;
+  };
+  const r12 = scan(U.TM.toTerms12, U.TM.TERM_RULES12, true);
+  // 챔버12 규칙은 낱말 단위로만 맞아야 한다 — 앞에 한글이 붙거나 조사 아닌 한글이 뒤따르는 글('이벤트'·'게이트웨이'·'벤트밸브')
+  const probe = ["이벤트", "게이트웨이", "벤트밸브", "로드락스", "벤트를", "게이트가", "로드락에서는", "4핀 올림", "클램프"].map((t) => [t, U.TM.toTerms12(t)]);
+  const probeOk = probe.map(([t, r]) => `${t}→${r}`).join() === "이벤트→이벤트,게이트웨이→게이트웨이,벤트밸브→벤트밸브,로드락스→로드락스,벤트를→Vent를,게이트가→Gate가,로드락에서는→Loadlock에서는,4핀 올림→4Pin 올림,클램프→클램프";
+  check(`ui:terms-words — 낱말 바꾸기 toTerms12(글 ${texts.size}개 = 묶음 ${nBundle} + 기록 ${texts.size - nBundle}): (a) 한글+영문 붙음 0 · (b) 같은 낱말 잇달아 0 · ` +
+        "(c) 한글이 줄어든 곳은 규칙 목록 바꾸기뿐 · 낱말 속 바꿈 없음(이벤트·게이트웨이 그대로, 벤트를·게이트가 는 바뀜)",
+        texts.size > 1500 && r12.a.length === 0 && r12.b.length === 0 && r12.c.length === 0 && probeOk,
+        { a: r12.a.slice(0, 5), b: r12.b.slice(0, 5), c: r12.c.slice(0, 5), probe });
+  const rk = scan(U.KT.toTerms, U.KT.OLD_TO_NEW, false);
+  console.log(`  (보고) 챔버K toTerms 같은 검사 — (a) ${rk.a.length} · (b) ${rk.b.length} · (c) ${rk.c.length} · 낱말 속 바꿈 ${rk.d.length}` +
+              `${rk.d.length ? ` — ${[...new Set(rk.d)].slice(0, 6).join(" · ")}` : ""} (챔버K 는 고치지 않음)`);
 }
 
 // ───────────── 2) logic.ts ─────────────
