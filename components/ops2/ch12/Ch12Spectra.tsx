@@ -75,7 +75,7 @@ function Axes({ xt, yt, xl, yl, xs, ys }: {
       {xt.map((e) => (
         <g key={`x${e.v}`}>
           <line x1={xs(e.v)} x2={xs(e.v)} y1={MT} y2={H - MB} stroke="#f3f4f6" />
-          <text x={xs(e.v)} y={H - MB + 12} textAnchor="middle" fontSize="9" fill="#374151">{e.t}</text>
+          <text x={xs(e.v)} y={H - MB + 14} textAnchor="middle" fontSize="9" fill="#374151">{e.t}</text>
         </g>
       ))}
       <line x1={ML} x2={ML} y1={MT} y2={H - MB} stroke="#111827" />

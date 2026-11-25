@@ -623,7 +623,7 @@ export function templateBlocks(p: Params, chamber: number, cfg: Cfg, defs: Ch12D
   out.push(B("gas_intro", "", { ar: gs.ar, ar_flow: flow("ar"), o2: gs.o2, o2_flow: flow("o2"), n2: gs.n2, n2_flow: flow("n2") }));
   out.push(B("pressure_ctrl", "", { target: wp, timeout_sec: sc.pressureWaitTimeoutS }));
   const guns = sc.gunShutters.map((x) => x.toLowerCase()).filter((x) => pyTruthy(pyGet(p, `use_${x}`, false)));
-  if (guns.length) out.push(B("shutter", "Gun Shutter 열기", { action: "open", targets: guns }));
+  if (guns.length) out.push(B("shutter", "Gun 셔터 열기", { action: "open", targets: guns }));
   if (pyTruthy(p.use_power_select) && sc.chamber === 2) {
     out.push(B("power_select"));
     const ms = sc.powerSelectSettleMs;
@@ -671,7 +671,7 @@ export function templateBlocks(p: Params, chamber: number, cfg: Cfg, defs: Ch12D
     }
   }
   if (thk) out.push(B("thickness_zero"));
-  if (info.use_ms) out.push(B("shutter", "Main Shutter 열기", { action: "open", targets: ["ms"] }));
+  if (info.use_ms) out.push(B("shutter", "Main 셔터 열기", { action: "open", targets: ["ms"] }));
   if (thk) {
     out.push(B("thickness_main", "", {
       target_nm: pyTruthy(p.thickness) ? pyFloatAny(p.thickness) : 0.0,

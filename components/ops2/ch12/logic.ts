@@ -5,8 +5,9 @@
 import { envOf, type BlockDef, type Cfg, type Ch12Defs, type Ch12Env } from "@/lib/ops2/ch12/blocks";
 import { paramValue } from "../chk/logic";
 import type { FeedItem } from "../chk/useChk2";
+import { STATE_FALLBACK, buttonName, placeName, plcLabel, toTerms12 } from "@/lib/ops2/ch12/terms";
 import {
-  STATE_FALLBACK, asChk, type ArgDef12, type Ch12Bundle, type Ch12State, type ChamberId, type ChamberState, type CommandDef12,
+  asChk, type ArgDef12, type Ch12Bundle, type Ch12State, type ChamberId, type ChamberState, type CommandDef12,
   type EngineState,
 } from "./types";
 
@@ -75,7 +76,7 @@ export function engineOf(st: Ch12State | null, ch: ChamberId): EngineState | und
 export function stateInfo(b: Ch12Bundle | null, name: string | null | undefined, ch?: string): { label: string; kind: string } {
   if (!name) return { label: "상태 없음", kind: "none" };
   const s = b?.states?.find((x) => x.name === name) ?? (ch ? b?.states?.find((x) => x.name === `${ch}.${name}`) : undefined);
-  if (s) return { label: s.label, kind: s.kind };
+  if (s) return { label: toTerms12(s.label), kind: s.kind };
   const f = STATE_FALLBACK[name];
   return f ? { label: f.label, kind: f.kind } : { label: name, kind: "active" };
 }
@@ -92,8 +93,11 @@ export function isRunning(b: Ch12Bundle | null, cs: ChamberState | null): boolea
 export const blockDefOf = (b: Ch12Bundle | null, type: string | null | undefined): BlockDef | undefined =>
   type ? (b?.blocks?.defs as BlockDef[] | undefined)?.find((d) => d.type === type) : undefined;
 
-export const blockLabel = (b: Ch12Bundle | null, type: string | null | undefined): string =>
-  blockDefOf(b, type)?.label ?? type ?? "-";
+/** 단계 종류 이름 — 묶음 blocks.defs label(옛 묶음이면 용어표 말) */
+export const blockLabel = (b: Ch12Bundle | null, type: string | null | undefined): string => {
+  const l = blockDefOf(b, type)?.label;
+  return l ? toTerms12(l) : type ?? "-";
+};
 
 /** 지금 블록을 건너뛸·멈출 수 있는가(블록 정의 — 마지막 판단은 장비: SKIP_NOT_ALLOWED·PAUSE_NOT_ALLOWED) */
 export function blockControl(b: Ch12Bundle | null, cs: ChamberState | null): {
@@ -102,11 +106,11 @@ export function blockControl(b: Ch12Bundle | null, cs: ChamberState | null): {
   const step = cs?.step;
   const def = blockDefOf(b, step?.type);
   const auto = !!step && typeof step.no === "number" && typeof step.total === "number" && step.no > step.total;
-  if (!def) return { def, skip: false, pause: false, auto, why: step?.type ? "정의 없는 블록" : "지금 블록 없음", pauseText: "" };
-  if (auto) return { def, skip: false, pause: false, auto, why: "자동 끝 정지 — 건너뛰기·일시정지 없음", pauseText: "" };
+  if (!def) return { def, skip: false, pause: false, auto, why: step?.type ? "장비 정보에 없는 단계" : "지금 단계 없음", pauseText: "" };
+  if (auto) return { def, skip: false, pause: false, auto, why: "정상 끝 정지라 건너뛰기·일시정지 없음", pauseText: "" };
   return {
     def, auto, skip: def.skippable, pause: def.pausable, pauseText: def.pause || "",
-    why: [!def.skippable && "건너뛸 수 없는 블록", !def.pausable && "멈출 수 없는 블록"].filter(Boolean).join(" · "),
+    why: [!def.skippable && "건너뛸 수 없는 단계", !def.pausable && "멈출 수 없는 단계"].filter(Boolean).join(" · "),
   };
 }
 
@@ -146,20 +150,36 @@ export function whoOf(origin: unknown, by: unknown, byName?: unknown): string {
   return origin === "web" ? `${n}(웹)` : n;
 }
 
-/** PLC 버튼 사건(장비 command/plc_button data) → 화면 로그 글: 'PLC 버튼 · CH1 벤트 켬 · 홍길동(웹)', 공정 중이면
- *  ' (CH1 공정 중 · 메인 공정(시간))', 거부·실패면 ' — 거부: 이유'(이유 = 장비 문구, 없으면 묶음 사유 이름). 계정은 상세 원시 줄에만 */
-export function plcButtonLine(b: Ch12Bundle | null, cd: Record<string, unknown>): string {
-  const who = typeof cd.who === "string" && cd.who ? cd.who : whoOf(cd.origin, cd.by, cd.by_name);
-  let t = `PLC 버튼 · ${String(cd.short || cd.target || "알 수 없는 버튼")} ${cd.on === true ? "켬" : "끔"} · ${who}`;
+/** PLC 버튼 사건(장비 command/plc_button data) → 평소 보기 로그 한 줄의 출처·내용(W-19 ⑤ — 시각 | 출처 | 이름 | 내용).
+ *  출처 = 누른 곳(웹·노트북·로봇), 이름 = 'PLC 버튼'(부르는 쪽), 내용 = 'CH1 Vent 켜기 · 홍길동', 공정 중이면 ' · 진행 중 단계 TEST 모드'
+ *  (버튼 이름에 그 챔버가 없을 때만 'CH2 진행 중 단계 …'), 거부·실패면 ' · 거부 · 사유 이름'. 같은 말이 두 번 나오지 않게(출처 '웹' 이면 이름만).
+ *  장비 문장(사유 원문·계정)은 상세 보기 원시 줄에만 */
+export function plcButtonLine(b: Ch12Bundle | null, cd: Record<string, unknown>): { source: string; text: string } {
+  const origin = String(cd.origin ?? "");
+  const source = origin === "local" ? "노트북" : origin === "robot" ? "로봇" : origin === "web" ? "웹" : "장비";
+  const by = typeof cd.by === "string" ? cd.by : "";
+  const name = origin === "web" ? ((typeof cd.by_name === "string" ? cd.by_name.trim() : "") || (by.includes("@") ? by.split("@")[0] : by)) : "";
+  const target = typeof cd.target === "string" ? cd.target : "";
+  const btn = target && b?.plcButtons?.some((x) => x.target === target) ? buttonName(b, target) : "";
+  const label = btn || (typeof cd.short === "string" && cd.short && cd.short !== target ? toTerms12(cd.short) : "모르는 대상");
+  const parts = [`${label} ${cd.on === true ? "켜기" : "끄기"}`];
+  if (name) parts.push(name);
   const p = (cd.process && typeof cd.process === "object" ? cd.process : null) as Record<string, unknown> | null;
-  if (p?.busy === true) t += ` (${String(p.chamber ?? "").toUpperCase()} 공정 중${p.block ? ` · ${String(p.block)}` : ""})`;
+  if (p?.busy === true) {
+    const ch = typeof p.chamber === "string" ? placeName(b, p.chamber) : "";
+    const blk = typeof p.block === "string" && p.block ? toTerms12(p.block) : "";
+    // '공정 중 시간 기준 메인 공정' 처럼 같은 말이 두 번 나오지 않게 단계가 있으면 '진행 중 단계 <이름>'
+    parts.push(`${ch && !label.startsWith(`${ch} `) ? `${ch} ` : ""}${blk ? `진행 중 단계 ${blk}` : "공정 중"}`);
+  }
   if (cd.result === "rejected" || cd.result === "failed") {
     const code = typeof cd.reason === "string" ? cd.reason : "";
-    const why = (typeof cd.detail === "string" && cd.detail) || b?.reasons?.find((r) => r.code === code)?.label || code;
-    t += ` — ${cd.result === "rejected" ? "거부" : "실패"}${why ? `: ${why}` : ""}`;
+    const why = b?.reasons?.find((r) => r.code === code)?.label;
+    parts.push(cd.result === "rejected" ? "거부" : "실패");
+    if (why && !isCodeLike(why)) parts.push(toTerms12(why));
   }
-  return t;
+  return { source, text: parts.join(" · ") };
 }
+const isCodeLike = (t: string) => /^[A-Z][A-Z0-9]*_[A-Z0-9_]+$/.test(t);
 
 /** 이 장비가 PLC 버튼 사건을 내는가(묶음 eventKinds 에 command/plc_button) — 내면 PLC_BUTTON 명령 결과 줄은 상세에만(같은 일 두 줄 막기) */
 export const hasPlcEvent = (b: Ch12Bundle | null): boolean =>
@@ -241,11 +261,11 @@ export type LockCtx = {
 /** 잠금 이유(없으면 null) — 로그인 끊김 → 권한(노트북은 장비가 이 화면에서 받는 명령 hello.commandKinds) → bench(benchOk 아닌 명령) →
  *  정지 쪽(연결 또는 웹 온라인이면 됨) → 결과 기다리는 중 → 장비 끊김 → PLC 값 오래됨. 마지막 판단은 장비 */
 export function lockReason(c: LockCtx, kind: string, key: string = kind): string | null {
-  if (c.authLost) return "로그인이 끊김 — 새로고침하세요";
+  if (c.authLost) return "로그인이 끊겨 새로고침해야 함";
   if (!c.perms) return "권한 정보를 읽는 중";
-  if (c.local && !c.perms.kinds.includes(kind)) return "노트북 화면에서 받지 않는 조작 — 웹에서";
-  if (!c.perms.canOperate || !c.perms.kinds.includes(kind)) return "권한 없음 — 장비 담당자·관리자만";
-  if (c.bench && !c.benchOk(kind)) return "읽기 전용(bench) — 장비로 보내는 조작은 잠김";
+  if (c.local && !c.perms.kinds.includes(kind)) return "노트북 화면에서 받지 않는 조작이라 웹에서 해야 함";
+  if (!c.perms.canOperate || !c.perms.kinds.includes(kind)) return "권한 없음(장비 담당자·관리자만)";
+  if (c.bench && !c.benchOk(kind)) return "읽기 전용이라 잠김";
   if (STOP_KINDS12.includes(kind)) return c.connected || c.webOnline ? null : "장비 끊김";
   if (c.inflight(key)) return "결과를 기다리는 중";
   if (!c.connected) return c.local && !c.streamUp ? "노트북 프로그램 연결 끊김" : "장비 끊김";
@@ -254,14 +274,8 @@ export function lockReason(c: LockCtx, kind: string, key: string = kind): string
 }
 
 // ───────────── PLC 버튼 이름 ─────────────
-/** 작업자에게 보이는 PLC 버튼 이름 — 묶음 label 끝의 코일 원래 이름 '(L_VAC_READY_SW)' 를 빼고, 이름이 같은 건 셔터는 번호를 붙인다.
- *  원래 이름은 '상세'에서만(부르는 쪽) */
-export function plcName(b: { target: string; label?: string | null; name?: string | null }): string {
-  const m = /^shutter_(\d)_sw$/.exec(b.target);
-  if (m) return `Gun${m[1]} 셔터`;
-  const t = String(b.label ?? "").replace(/\s*\([A-Za-z0-9_]+\)/g, "").trim();
-  return t || b.target;
-}
+/** 작업자에게 보이는 PLC 버튼 이름 — 묶음 label(묶음 16 'CH1 MV'), 옛 묶음 label 의 코일 이름 괄호는 뺀다(terms.plcLabel). 원래 이름은 상세 보기에서만 */
+export const plcName = plcLabel;
 
 /** 버튼의 지금 값 열 — 묶음 addr(있으면) 또는 target, plc.<소문자> */
 export const plcCol = (b: { target: string; addr?: string | null }) => `plc.${String(b.addr || b.target).toLowerCase()}`;

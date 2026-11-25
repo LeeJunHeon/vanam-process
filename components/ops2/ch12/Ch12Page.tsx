@@ -11,7 +11,7 @@
 // 노트북 화면도 PLC 버튼을 보낸다(v2 장비는 HMI 에서도 PLC_BUTTON 을 받는다 — 챔버K 는 웹만) — 웹과 같은 잠금·확인창.
 // 알림창(Ch12Popups — v1 경고 5 s·오류창·호스트 15 s, 중복 억제·동시 5개, 오류창 닫으면 오류 표시 해제)은 두 화면 모두.
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
-import { AlertTriangle, Code2, Laptop, Lock, LogIn, WifiOff } from "lucide-react";
+import { AlertTriangle, Cloud, CloudOff, Code2, Laptop, Lock, LogIn, WifiOff } from "lucide-react";
 import Chk2Config from "../chk/Chk2Config";
 import { CommandLog, RunList } from "../chk/Chk2Logs";
 import { FS, Card, InfoBand, Issue, Notices, SimpleConfirm, Tabs, type Ask, type Notice } from "../chk/kit";
@@ -32,6 +32,7 @@ import Ch12SeqEdit from "./Ch12SeqEdit";
 import { StatusBand12, StatusBar12, type ConnInfo } from "./Ch12Status";
 import { lockReason, plcCol, plcStaleSec } from "./logic";
 import { asCh12, asChk, type Ch12State } from "./types";
+import { settingText12, settingValue12, toTerms12 } from "@/lib/ops2/ch12/terms";
 
 const STORE_KEY = "vanam-process:ch12-device";
 const LATE_MS = 3_000;
@@ -39,11 +40,12 @@ const LOST_MS = 10_000;
 const SKEW_WARN_MS = 3_000;
 const PLC_PENDING_MS = 10_000;
 const OK_NOTICE_MS = 6_000;
+const LOCK_PREFIX = "잠김: ";          // 잠긴 버튼 마우스 설명 앞말(kit Btn — 챔버K 는 '잠김 — ' 그대로)
 
 const SEND_ERROR: Record<string, string> = {
-  device_offline: "장비 연결 끊김(마지막 연락 10 s 넘음)",
-  forbidden: "권한 없음 — 장비 담당자·관리자만 조작",
-  no_schema: "장비 정의를 아직 받지 못함",
+  device_offline: "장비 연결 끊김",
+  forbidden: "권한 없음",
+  no_schema: "장비 정보를 받는 중",
   unknown_kind: "웹에서 낼 수 없는 명령",
   bad_args: "인자 오류",
   config_path: "설정 변경은 설정 화면에서",
@@ -53,8 +55,12 @@ const SEND_ERROR: Record<string, string> = {
 
 export type TabKey = "run" | "hmi" | "recipe" | "log" | "config";
 export const FEED_MAIN_KEEP12 = 1500;
-export const WEB_TABS: { key: TabKey; label: string }[] = [
-  { key: "run", label: "운전" }, { key: "hmi", label: "HMI" }, { key: "recipe", label: "레시피" }, { key: "log", label: "기록" }, { key: "config", label: "설정" },
+export const WEB_TABS: { key: TabKey; label: string; title: string }[] = [
+  { key: "run", label: "운전", title: "CH1·CH2 공정 상태·주요 값·장비 카드와 아래 칸 조작" },
+  { key: "hmi", label: "HMI", title: "장비 계통도와 PLC 버튼" },
+  { key: "recipe", label: "레시피", title: "공정·Plasma Cleaning 레시피 목록과 편집" },
+  { key: "log", label: "기록", title: "로그·조작 기록·공정 이력" },
+  { key: "config", label: "설정", title: "장비 설정 보기와 적용" },
 ];
 export const LOCAL_TABS = WEB_TABS.filter((t) => t.key === "run" || t.key === "hmi" || t.key === "log");
 
@@ -101,11 +107,11 @@ export default function Ch12Page() {
         )}
       </div>
       {devices && !devices.length && (
-        <Card><p className={`${FS.body} text-[#5B6470]`}>등록된 CH1&amp;2 v2 장비(CH12·CH12-SIM)가 없습니다. 장비 관리(v2)에서 장비를 등록하세요.</p></Card>
+        <Card><p className={`${FS.body} text-[#5B6470]`}>등록된 CH1&amp;2 장비가 없습니다. 장비 관리에서 장비를 등록하세요.</p></Card>
       )}
       {picked && <Ch12Device key={picked} equipment={picked} dirtyRef={dirtyRef} />}
       {switchTo && (
-        <SimpleConfirm title="저장 안 함" ok="버리고 바꾸기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 장비를 바꿀까요?"
+        <SimpleConfirm title="저장하지 않음" ok="버리고 바꾸기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 장비를 바꿀까요?"
           onCancel={() => setSwitchTo(null)} onOk={() => { dirtyRef.current = false; setSwitchTo(null); pick(switchTo); }} />
       )}
     </div>
@@ -211,8 +217,8 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
   useEffect(() => {
     clearRef.current = (c) => {
       if (lock(c.kind)) return;
-      void send(c.kind, c.args, "오류창 확인 — 오류 표시 해제").then((r) => {
-        if (!r.ok || r.body.status !== "accepted") notify({ tone: "warn", title: "오류 표시 해제 — 보내지 못함", text: r.body.detail || r.body.error || r.body.reasonCode });
+      void send(c.kind, c.args, "오류창 확인: 오류 표시 해제").then((r) => {
+        if (!r.ok || r.body.status !== "accepted") notify({ tone: "warn", title: "오류 표시 해제: 보낼 수 없었음", text: r.body.detail || r.body.error || reasonLabel(asChk(bundle), r.body.reasonCode) });
       });
     };
   });
@@ -228,12 +234,12 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
     const r = await d.send(a.kind, a.args ?? {}, what.slice(0, 200));
     setInflight((m) => { const next = { ...m }; if ((next[key] = (next[key] ?? 1) - 1) <= 0) delete next[key]; return next; });
     const b = r.body;
-    if (!r.ok) notify({ tone: "bad", title: `${what} — 보내지 못함`, text: `${SEND_ERROR[b.error ?? ""] ?? b.error ?? `HTTP ${r.status}`}${b.detail ? ` · ${b.detail}` : ""}` });
-    else if (b.status === "accepted") notify({ tone: "ok", title: `${what} — 장비가 받음` });
-    else if (b.status === "rejected") notify({ tone: "bad", title: `${what} — 거부`,
-      text: `${reasonLabel(asChk(bundle), b.reasonCode)}${b.reasonCode && detail ? ` (${b.reasonCode})` : ""}${b.detail ? ` — ${b.detail}` : ""}` });
-    else if (b.status === "expired") notify({ tone: "warn", title: `${what} — 만료`, text: reasonLabel(asChk(bundle), b.reasonCode) });
-    else notify({ tone: "warn", title: `${what} — 결과를 기다리는 중`, text: "10 s 안에 결과가 오지 않았습니다. 기록 탭의 조작 기록에서 확인하세요." });
+    if (!r.ok) notify({ tone: "bad", title: `${what}: 보낼 수 없었음`, text: [SEND_ERROR[b.error ?? ""] ?? "", detail ? [b.error, `HTTP ${r.status}`, b.detail].filter(Boolean).join(" · ") : ""].filter(Boolean).join(" · ") });
+    else if (b.status === "accepted") notify({ tone: "ok", title: `${what}: 장비가 받음` });
+    else if (b.status === "rejected") notify({ tone: "bad", title: `${what}: 거부`,
+      text: `${reasonLabel(asChk(bundle), b.reasonCode)}${b.reasonCode && detail ? ` (${b.reasonCode})` : ""}${detail && b.detail ? ` · ${b.detail}` : ""}` });
+    else if (b.status === "expired") notify({ tone: "warn", title: `${what}: 만료`, text: reasonLabel(asChk(bundle), b.reasonCode) });
+    else notify({ tone: "warn", title: `${what}: 결과를 기다리는 중`, text: "10 s 안에 결과가 오지 않았습니다. 기록 탭의 조작 기록에서 확인하세요." });
     if (a.plc && !(r.ok && b.status === "accepted")) {
       const t = a.plc.target;
       setPlcPending((m) => { const next = { ...m }; delete next[t]; return next; });
@@ -247,9 +253,9 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const pcRecipes = useMemo(() => (local ? null : (recipes.list ?? []).filter((r) => (r.kind as string) === "pc")), [local, recipes.list]);
 
   const plcAge = typeof plcLink?.age === "number" ? `${plcLink.age.toFixed(1)} s` : "나이 없음";
-  const mimicNote = !connected ? (local && !d.streamUp ? "노트북 프로그램 연결 끊김 — 조작 잠금" : "장비 끊김 — 조작 잠금")
-    : !plcOk ? `PLC 응답 늦음 — 조작 잠금${detail ? ` (${plcLink?.q ?? "-"} · ${plcAge}, 기준 ${staleSec} s)` : ""}`
-    : bench ? "읽기 전용(bench) — 조작 잠금" : lock("PLC_BUTTON") ? `조회만 — ${lock("PLC_BUTTON")}` : "노드를 눌러 조작";
+  const mimicNote = !connected ? (local && !d.streamUp ? "노트북 프로그램 연결이 끊겨 조작 잠금" : "장비가 끊겨 조작 잠금")
+    : !plcOk ? `PLC 응답이 늦어 조작 잠금${detail ? ` · ${plcLink?.q ?? "-"} · ${plcAge}, 기준 ${staleSec} s` : ""}`
+    : bench ? "읽기 전용이라 조작 잠금" : lock("PLC_BUTTON") ? `조회만 · ${lock("PLC_BUTTON")}` : "기호를 눌러 조작";
 
   const h = d.hello;
   const neverConnected = !!h && !h.instance && !h.webSchemaHash && !h.web?.hasSchema && !h.web?.lastSeenAt && !d.bundle && !d.state;
@@ -267,7 +273,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
       raf = requestAnimationFrame(() => {
         const top = Math.max(scroller ? scroller.getBoundingClientRect().top : 0, 0);
         const r = statusEl.getBoundingClientRect();
-        const next = r.bottom <= top + 1 ? { top: top + 8, left: Math.round(r.left), width: Math.round(r.width) } : null;
+        const next = r.bottom <= top + 1 ? { top, left: Math.round(r.left), width: Math.round(r.width) } : null;
         setBar((b) => (!b && !next) || (b && next && b.top === next.top && b.left === next.left && b.width === next.width) ? b : next);
       });
     };
@@ -279,8 +285,8 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
 
   if (!d.hello) {
     return (
-      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail }}>
-        {d.authLost ? <Issue level="alarm"><LogIn size={14} className="mr-1 inline" />로그인이 끊겼습니다 — 새로고침하세요. 조작이 잠겼습니다.</Issue>
+      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail, lockPrefix: LOCK_PREFIX }}>
+        {d.authLost ? <Issue level="alarm"><LogIn size={14} className="mr-1 inline" />로그인이 끊겼습니다. 새로고침하세요. 조작이 잠겼습니다.</Issue>
           : d.error ? <Issue level="alarm">{d.error}</Issue>
           : <section className={`animate-pulse rounded-[12px] border border-[#D9DDE3] bg-white p-6 text-center ${FS.body} text-[#5B6470]`}>장비 정보를 읽는 중…</section>}
       </Chk2ModeContext.Provider>
@@ -295,7 +301,6 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
     : chipAge <= LATE_MS ? { label: `${who} 연결됨 · ${ageSec ?? 0}초 전`, tone: "neutral" }
     : chipAge <= LOST_MS ? { label: `${who} 늦음 ${ageSec}초`, tone: "warn" } : { label: `${who} 끊김 ${ageSec}초`, tone: "alarm" };
   const links: ConnInfo[] = [
-    ...(local ? [{ label: !up?.enabled ? "웹 연결 안 씀" : up.connected ? "웹 연결" : "웹 끊김", tone: (up?.enabled && !up.connected ? "warn" : "neutral") as ConnInfo["tone"] }] : []),
     ...(neverConnected ? [] : [{ label: plcOk ? "PLC 정상" : "PLC 값 오래됨", tone: (plcOk || !connected ? "neutral" : "warn") as ConnInfo["tone"] }]),
   ];
   const runMode = d.hello.runMode;
@@ -303,38 +308,45 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const shownTabs = neverConnected ? tabs.filter((t) => t.key === "recipe" || t.key === "log") : tabs;
   const curTab = shownTabs.some((t) => t.key === tab) ? tab : shownTabs[0].key;
   const detailBtn = (
-    <button onClick={() => setDetail(!detail)} aria-pressed={detail} title="켜면 원시 코드·키·run id·장비 원래 이름 등 개발용 정보까지 보입니다"
+    <button onClick={() => setDetail(!detail)} aria-pressed={detail} title="개발·점검용 정보를 함께 표시합니다."
       className={`flex h-8 items-center gap-1 rounded-[8px] px-2.5 ${FS.small} font-semibold ${
         detail ? "bg-[#3A424D] text-white" : "border border-[#D9DDE3] bg-white text-[#5B6470] hover:bg-[#F5F6F8]"}`}>
-      <Code2 size={12} /> 상세 보기 {detail ? "켬" : "끔"}
+      <Code2 size={12} /> 상세 보기 {detail ? "켜짐" : "꺼짐"}
     </button>
   );
   const detailInfo = detail && (
     <span className={`flex flex-wrap items-center gap-2 font-mono ${FS.small} text-[#5B6470]`}>
       {d.hello.version && <span>{d.hello.version}</span>}
       {d.hello.instance && <span>실행 {d.hello.instance.slice(0, 8)}</span>}
-      {web && <span>{web.sse ? "명령 통로(SSE)" : "명령 통로 없음 — POST 응답으로만"}</span>}
+      {web && <span>{web.sse ? "명령 통로(SSE)" : "명령 통로 없음(POST 응답으로만)"}</span>}
     </span>
   );
   const localCan = (k: string) => !lock(k);
 
   return (
-    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail }}>
+    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail, lockPrefix: LOCK_PREFIX }}>
       {local && (
         <div className={`flex flex-wrap items-center gap-2 rounded-[12px] bg-[#3A424D] px-4 py-2 ${FS.body} text-white`}>
-          <Laptop size={15} /> <b>노트북 로컬 화면 · CH1&amp;2</b>
-          {up?.enabled && <span className={`ml-auto ${FS.small} text-white/80`}>웹 마지막 성공 {up.lastOkAt ? fmtKst(up.lastOkAt) : "-"} · 보관 {up.queued ?? 0} · 버림 {up.dropped ?? 0}</span>}
+          <Laptop size={15} /> <b>노트북 화면</b>
+          <span className={`ml-auto flex items-center gap-1 rounded-[8px] px-2 py-0.5 ${FS.small} ${
+            !up?.enabled ? "bg-white/10 text-white/80" : up.connected ? "bg-white/15" : "bg-[#B54708] text-white"}`}
+            title={up?.enabled ? `마지막 성공 ${up.lastOkAt ? fmtKst(up.lastOkAt) : "-"}${detail && up.lastError ? ` · ${up.lastError}` : ""}` : undefined}>
+            {up?.enabled && up.connected ? <Cloud size={12} /> : <CloudOff size={12} />}
+            {!up?.enabled ? "웹 연결 사용하지 않음" : up.connected ? "웹 연결됨" : `웹 끊김${(up.queued ?? 0) > 0 ? ` · 미전송 ${up.queued}건` : ""}`}
+            {up?.enabled && detail && ` · 보관 ${up.queued ?? 0} · 버림 ${up.dropped ?? 0}`}
+          </span>
         </div>
       )}
       {neverConnected ? (
         <section className="rounded-[12px] border border-dashed border-[#C9CED6] bg-white p-6 text-center">
           <p className={`${FS.card} font-bold text-[#1B1F24]`}>장비 프로그램(v2) 연결 대기</p>
-          <p className={`mt-1 ${FS.body} text-[#5B6470]`}>이 장비는 아직 v2 프로그램이 웹에 연결된 적이 없습니다. 장비 노트북에서 v2 를 실행하면 화면이 채워집니다.</p>
+          <p className={`mt-1 ${FS.body} text-[#5B6470]`}>장비 노트북에서 프로그램을 실행하면 화면이 채워집니다.</p>
         </section>
       ) : (
         <>
           {bar && statusEl && (
-            <div className="fixed z-30" style={{ top: bar.top, left: bar.left, width: bar.width }}>
+            // 스크롤 영역 맨 위에 틈 없이 붙이고 위·아래 여백(8px)까지 화면 바탕색으로 가린다(챔버K W-16 — 뒤 글자가 비치지 않게)
+            <div className="fixed z-30 bg-[#EEF0F3] pb-2 pt-2" style={{ top: bar.top, left: bar.left, width: bar.width }} data-status-bar="">
               <StatusBar12 bundle={bundle} st={st} connected={connected} lock={lock} onAsk={setAsk} />
             </div>
           )}
@@ -349,17 +361,17 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {bench && (
         <InfoBand icon={<Lock size={15} />}>
-          읽기 전용 모드(bench)입니다. 값은 실제 장비에서 읽고 있습니다. 장비로 보내는 버튼은 잠겨 있고, 레시피 적재와 설정 변경만 할 수 있습니다.
+          읽기 전용입니다. 값은 실제 장비에서 읽고, 장비로 보내는 버튼은 잠겨 있습니다.
         </InfoBand>
       )}
-      {local && !d.streamUp && d.streamEver && <Issue level="alarm"><b>노트북 프로그램 연결 끊김</b> — 다시 붙는 중, 조작이 잠겼습니다. 표시는 마지막 값입니다.</Issue>}
-      {d.authLost && <Issue level="alarm">로그인이 끊겼습니다 — 새로고침하세요. 조작이 잠겼습니다.</Issue>}
+      {local && !d.streamUp && d.streamEver && <Issue level="alarm"><b>노트북 프로그램 연결 끊김</b>. 다시 붙는 중이라 조작이 잠겼습니다. 표시는 마지막 값입니다.</Issue>}
+      {d.authLost && <Issue level="alarm">로그인이 끊겼습니다. 새로고침하세요. 조작이 잠겼습니다.</Issue>}
       {d.error && <Issue level="alarm">{d.error}</Issue>}
-      {web && !web.hasSchema && !neverConnected && <Issue level="warn">장비 정의를 아직 받지 못했습니다 — 장비가 연결되면 받아 옵니다.</Issue>}
-      {perms && !perms.canOperate && !local && !neverConnected && <InfoBand>조회만 — 장비 담당자·관리자만 조작할 수 있습니다.</InfoBand>}
+      {web && !web.hasSchema && !neverConnected && <Issue level="warn">장비 정보를 받는 중입니다. 장비가 연결되면 받아 옵니다.</Issue>}
+      {perms && !perms.canOperate && !local && !neverConnected && <InfoBand>조회만 가능합니다. 장비 담당자·관리자만 조작할 수 있습니다.</InfoBand>}
       {d.state && !connected && (!local || d.streamUp) && (
         <Issue level="alarm">
-          <AlertTriangle size={13} className="mr-1 inline" /><b>장비 끊김 {ageSec}초</b> — 표시는 마지막 값이며 조작이 잠겼습니다.
+          <AlertTriangle size={13} className="mr-1 inline" /><b>장비 끊김 {ageSec}초</b>. 표시는 마지막 값이며 조작이 잠겼습니다.
           {webOnline && perms?.canOperate && " 웹은 장비와 이어져 있어 정지 명령은 보낼 수 있습니다."}
         </Issue>
       )}
@@ -385,29 +397,31 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
         <div className="space-y-3">
           {!local && (
             <Tabs small value={logTab} onChange={setLogTab}
-              tabs={[{ key: "events", label: "로그" }, { key: "commands", label: "조작 기록" }, { key: "runs", label: "공정 이력" }]} />
+              tabs={[{ key: "events", label: "로그", title: "장비가 보낸 기록과 공정 진행" }, { key: "commands", label: "조작 기록", title: "웹·노트북에서 보낸 명령과 결과" },
+                { key: "runs", label: "공정 이력", title: "끝난 공정과 챔버별 공정 기록" }]} />
           )}
           {(local || logTab === "events") && <Ch12EventFeed bundle={bundle} feed={d.feed} />}
-          {!local && logTab === "commands" && <CommandLog bundle={d.bundle} commands={d.commands} />}
+          {!local && logTab === "commands" && <CommandLog bundle={d.bundle} commands={d.commands} plain />}
           {!local && logTab === "runs" && (
             <>
-              <RunList bundle={d.bundle} runs={d.runs} />
+              <RunList bundle={d.bundle} runs={d.runs} plain idInDetail />
               <Ch12History equipment={equipment} bundle={bundle} refreshKey={`${d.runs[0]?.runId ?? ""}-${d.runs[0]?.endedAt ?? ""}`} />
             </>
           )}
-          {local && <p className={`${FS.small} text-[#5B6470]`}>레시피·설정·공정 기록·조작 기록은 웹 화면에서</p>}
+          {local && <p className={`${FS.small} text-[#5B6470]`}>레시피·설정·공정 기록·조작 기록은 웹 화면에서 봅니다.</p>}
         </div>
       )}
       {curTab === "config" && !local && !neverConnected && (
         <Chk2Config equipment={equipment} bundle={d.bundle} st={st as unknown as StateData | null} perms={perms ?? null}
-          connected={connected} reloadSchema={d.loadSchema} notify={notify} />
+          connected={connected} reloadSchema={d.loadSchema} notify={notify} startOpen plainHead keyInDetail
+          term={detail ? toTerms12 : settingText12} valueText={detail ? undefined : settingValue12} />
       )}
 
       {seqFor && (
         <Ch12SeqEdit bundle={bundle} st={st} feed={d.feed} ch={seqFor} can={(k) => !lock(k, `${k}@${seqFor}`)} onAsk={setAsk} onClose={() => setSeqFor(null)} />
       )}
       {tabTo && (
-        <SimpleConfirm title="저장 안 함" ok="버리고 나가기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 탭을 바꿀까요?"
+        <SimpleConfirm title="저장하지 않음" ok="버리고 나가기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 탭을 바꿀까요?"
           onCancel={() => setTabTo(null)} onOk={() => { dirtyRef.current = false; const t = tabTo; setTabTo(null); goTab(t, true); }} />
       )}
       <Ch12Confirm ask={ask} onOk={run} onCancel={cancel} />

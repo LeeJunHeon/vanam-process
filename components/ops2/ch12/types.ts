@@ -39,6 +39,7 @@ export type Ch12Bundle = Omit<Bundle, "blocks" | "recipe" | "commands"> & {
 export type PlcButtonDef12 = {
   target: string; label: string; name?: string; addr?: string; chamber?: string; coil?: number;
   short?: string; procChamber?: "ch1" | "ch2" | null; hazard?: { on?: string | null; off?: string | null };
+  desc?: string;                                                                  // 묶음 16 — 래더 이름·코일(상세 보기에서만)
 };
 
 /** state.chambers[c] — hub.chamber_state(1초 행 <c>.proc.*) */
@@ -47,6 +48,7 @@ export type ChamberState = {
   step: { no: number | null; total: number | null; type: string | null; label: string | null;
           elapsedS: number | null; remainS: number | null } | null;
   remainS: number | null; etaRemainingS: number | null; minTotalS: number | null; paused: boolean | null; alarms: string[];
+  stepLabel?: string | null;                                                      // 묶음 16 — 진행 중 동작의 화면 이름(step_labels)
 };
 
 /** 엔진 web_state(아직 장비가 보내지 않을 수 있다 — 있으면 쓴다). 공정 엔진 state_dict 와 같은 키를 기대한다 */
@@ -56,6 +58,7 @@ export type EngineState = {
   queue?: { index?: number; total?: number; mode?: string } | null; error?: string | null;
   adjust?: unknown; last_result?: unknown;
   process_name?: string | null;                                                  // 지금 공정 이름(공정 중일 때만 — D425)
+  step_label?: string | null;                                                    // 묶음 16 — 진행 중 동작의 화면 이름(text 는 v1 스텝 문구)
   blocks?: unknown[]; started_upto?: number; startedUpto?: number;                  // 시퀀스 편집용(있으면)
   recipe?: { name?: string; rows?: number; row?: number | null; listActive?: boolean; loaded?: boolean } | null;
   [k: string]: unknown;
@@ -82,15 +85,4 @@ export type { Ch12BlockDef };
 export const asChk = (b: Ch12Bundle | null): Bundle | null => b as unknown as Bundle | null;
 export const asCh12 = (b: Bundle | null): Ch12Bundle | null => b as unknown as Ch12Bundle | null;
 
-/** 소유자(owner) 이름 — 1초 행 enumLabels 와 같게 */
-export const OWNER_LABEL: Record<string, string> = { robot: "로봇", web: "웹", local: "로컬" };
-
-/** 공정 상태 이름 — 묶음 states 가 비었을 때(장비 4단계 전) 대신 쓰는 이름. 장비 process_engine·pc_view·tsp_engine 의 이름 */
-export const STATE_FALLBACK: Record<string, { label: string; kind: "idle" | "active" | "stopping" }> = {
-  IDLE: { label: "대기", kind: "idle" }, idle: { label: "대기", kind: "idle" },
-  PREFLIGHT: { label: "시작 전 점검", kind: "active" }, preflight: { label: "시작 전 점검", kind: "active" },
-  RUNNING: { label: "공정 진행", kind: "active" }, run: { label: "진행", kind: "active" },
-  COOLDOWN: { label: "행 사이 대기", kind: "active" }, test: { label: "TEST", kind: "active" },
-  CLEANUP: { label: "정리 중", kind: "stopping" }, STOPPING: { label: "정지 순서", kind: "stopping" },
-  stopping: { label: "정지 중", kind: "stopping" },
-};
+// 조작 주체·공정 상태의 대신 쓰는 이름은 lib/ops2/ch12/terms.ts(OWNER·STATE_FALLBACK) 한 곳에(W-19)

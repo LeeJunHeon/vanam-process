@@ -158,9 +158,10 @@ function dur(a: string | null, b: string | null): string {
   return sec < 3600 ? `${Math.floor(sec / 60)}분 ${sec % 60}초` : `${Math.floor(sec / 3600)}시간 ${Math.floor((sec % 3600) / 60)}분`;
 }
 
-export function RunList({ bundle, runs, plain = false }: {
+export function RunList({ bundle, runs, plain = false, idInDetail = false }: {
   bundle: Bundle | null; runs: RunRow[];
   plain?: boolean;          // W-16 챔버K — 시작한 사람 local → 노트북, 이름 없는 사유 코드는 숨김(상세에서만). 기본은 지금 동작
+  idInDetail?: boolean;     // W-19 CH1&2 — 이름 칸 마우스 설명의 run id 를 상세 보기에서만(기본은 지금 동작 — 챔버K 그대로)
 }) {
   const { detail } = useChk2Mode();
   return (
@@ -182,7 +183,7 @@ export function RunList({ bundle, runs, plain = false }: {
               <tr key={r.runId} className="border-t border-[#E3E6EA] align-top text-[#5B6470]">
                 <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{fmtKst(r.startedAt)}</td>
                 <td className="py-2 pr-3">
-                  <span className="block max-w-[260px] truncate" title={`${r.name ?? ""} · ${r.runId}`}>{runTitle(r)}</span>
+                  <span className="block max-w-[260px] truncate" title={idInDetail && !detail ? undefined : `${r.name ?? ""} · ${r.runId}`}>{runTitle(r)}</span>
                   {r.startedBy && <span className={`${FS.small} text-[#5B6470]`}>{plain ? byWord(r.startedBy) : r.startedBy}</span>}
                   {detail && <span className={`block font-mono ${FS.small} text-[#8A929D]`}>{r.name} · {r.runId}</span>}
                 </td>

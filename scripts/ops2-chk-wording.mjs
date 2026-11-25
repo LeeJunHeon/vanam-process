@@ -1,7 +1,8 @@
-// 챔버K 화면 문구 검사(W-15) — npm run ops2:chk-wording
+// 챔버K·챔버12 화면 문구 검사(W-15, W-19 에 챔버12 더함) — npm run ops2:chk-wording
 // 장비 5-20 ④ 문구 규칙(v2/tests/test_web_labels.py test_screen_texts_follow_wording_rules)과 같은 식을 웹 챔버K 화면 글에 건다:
 //   문장 속 줄표(—) · '안 함/안 씀/안 됨' · '못 함' · '미룸' · '켬/끔'.
-// 보는 곳: components/ops2/chk/**/*.ts(x) · lib/ops2/chk/*.ts 의 화면 글(JSX 글, 따옴표·백틱 글 — 주석·import·className 같은 속성 값은 뺌)과
+// 보는 곳: components/ops2/chk/**/*.ts(x) · lib/ops2/chk/*.ts · (W-19) components/ops2/ch12/**/*.ts(x) · lib/ops2/ch12/*.ts 의 화면 글
+//   (JSX 글, 따옴표·백틱 글 — 주석·import·className 같은 속성 값은 뺌)과
 //   골든 묶음(lib/ops2/chk/golden/bundle*.json 이 있으면 그 화면 이름·설명).
 // 값이 없을 때 쓰는 '—' 한 글자(빈 값 표시)는 문장이 아니라서 본다 — 한글과 같이 쓴 줄표만 걸린다.
 // 예외(EXCEPT): CH1&2 가 같은 글을 쓰는 공유 파일의 글, v1 대조 시험·골든이 v1 과 같기를 요구하는 글. 하나라도 걸리면 exit 1.
@@ -22,10 +23,15 @@ const bad = (t) => BAD.test(t) || dashBad(t) || codeBad(t);
 // W-17: 용어표의 옛 말(장비 5-23 ⑤ 목록 + 화면 말) — 챔버K 화면 글에 없다. '블록'·'스텝'은 레시피 편집 파일에서만
 const OLD_TERMS = ["인터록", "이온 게이지", "이오나이저", "필라멘트", "디개스", "방출", "냉각수", "도어", "차단밸브", "메인 밸브", "Main 밸브",
   "건 셔터", "Gun 1", "Gun 2", "순방향", "반사", "설정점", "끄기 순서", "끄기 단계", "감시 신호", "램프", "런 이력", "사건", "로컬",
-  "장비 정의", "실제/설정", "안전·유틸리티", "유틸리티", "셔터·안전"];
-const RECIPE_FILES = /(Chk2BlockEditor|Chk2RecipeEditor|Chk2Recipes|recipeText)\.tsx?$|lib\/ops2\/chk\/(blocks|recipe)\.ts$/;
+  "장비 정의", "실제/설정", "안전·유틸리티", "유틸리티", "셔터·안전",
+  // W-19: 챔버12 용어표 옛 말(장비 묶음 16 test_web_labels OLD_TERMS 와 같은 목록)
+  "로터리", "터보 펌프", "러핑", "포어라인", "벤트", "게이트 밸브", "로드락", "4핀", "척 모터", "플라즈마 클리닝", "메인 셔터", "시퀀스"];
+// '블록'·'스텝'은 레시피 편집(레시피 탭) 파일에서만 — 챔버12 는 레시피 탭·블록 정의·v1 행 검사·레시피 저장
+const RECIPE_FILES = /(Chk2BlockEditor|Chk2RecipeEditor|Chk2Recipes|recipeText|Ch12Recipes|Ch12BlockEditor)\.tsx?$|lib\/ops2\/(chk|ch12)\/(blocks|recipe|recipes)\.ts$/;
 // 평소 보기 화면 파일 — 한글 글 60자 안, PLC 주소·v1·묶음 번호 없음
-const EVERYDAY = /components\/ops2\/chk\/(Chk2Page|Chk2Status|Chk2Run|Chk2Devices|Chk2Hmi|Chk2Manual|Chk2Logs|Chk2Seq|Chk2Trend|Chk2LocalNext|Chk2LocalConfig|StateTag|logView)\.tsx?$|lib\/ops2\/chk\/(plain|terms)\.ts$/;
+const EVERYDAY = /components\/ops2\/chk\/(Chk2Page|Chk2Status|Chk2Run|Chk2Devices|Chk2Hmi|Chk2Manual|Chk2Logs|Chk2Seq|Chk2Trend|Chk2LocalNext|Chk2LocalConfig|StateTag|logView)\.tsx?$|lib\/ops2\/chk\/(plain|terms)\.ts$/
+  .source + "|" + /components\/ops2\/ch12\/(Ch12Page|Ch12Status|Ch12Run|Ch12Hmi|Ch12Aux|Ch12Thickness|Ch12Logs|Ch12History|Ch12Confirm|Ch12Popups|Ch12LocalFiles|Ch12SeqEdit|Ch12Spectra|Ch12Timing|Ch12Inputs|BlockCard|logic)\.tsx?$|lib\/ops2\/ch12\/terms\.ts$/.source;
+const isEveryday = (rel) => new RegExp(EVERYDAY).test(rel);
 function problems(rel, t) {
   const out = [];
   if (bad(t)) out.push("문구 규칙");
@@ -33,7 +39,7 @@ function problems(rel, t) {
   const old = OLD_TERMS.filter((w) => t.includes(w));
   if (!RECIPE_FILES.test(rel)) for (const w of ["블록", "스텝"]) if (t.includes(w)) old.push(w);
   if (old.length) out.push(`옛 말 ${old.join("·")}`);
-  if (EVERYDAY.test(rel)) {
+  if (isEveryday(rel)) {
     if ([...t.replace(/X/g, "")].length > 60) out.push("60자 넘음");
     if (/\b[MPD]\d{4,5}\b|\bD\d{2}\b|\bv1\b|묶음 ?\d/.test(t)) out.push("주소·v1·묶음 번호");
   }
@@ -77,6 +83,22 @@ const EXCEPT = [
   ["components/ops2/chk/Chk2Config.tsx", "장비 정의를 기다리는 중"],
   //  화면 글이 아니라 검사 오류 글을 가려내는 비교 문자열("블록 " 으로 시작하는 오류는 칸 옆에 따로 보인다)
   ["components/ops2/chk/Chk2Seq.tsx", "블록 "],
+  // W-19 — 챔버12 예외
+  //  확인창 위험 문구: 장비 commands.HAZARD_TEXT(묶음 16 plcHazardText)와 같은 글 — 묶음이 옛것일 때 대신 쓴다. 두 문장 경고라 60자를 넘는다
+  ["components/ops2/ch12/Ch12Hmi.tsx", "사람 위험: Vent·Door·Gate"], ["components/ops2/ch12/Ch12Hmi.tsx", "장비 위험: Turbo·Rotary 끄기"],
+  ["components/ops2/ch12/Ch12Hmi.tsx", "지금 DC Pulse 사용 중입니다. RF Select 는"],
+  //  두께 Factor 창 재료 고르기 첫 항목: 장비 thickness_factors.material_choices 가 보내는 글과 같아야 고른 값을 '재료 없음'으로 읽는다
+  ["components/ops2/ch12/Ch12Thickness.tsx", "(선택 안 함)"],
+  //  장비가 만든 검사·순서 글을 웹이 그대로 다시 만드는 글(골든 web_ch12_blocks·web_ch12_recipe_check·web_ch12_template 이 장비 글과
+  //  같기를 요구 — ops2:golden). 레시피 탭 검사 결과·적재 전 확인에만 보인다
+  ["lib/ops2/ch12/blocks.ts", "뺄 수 없는 단계"], ["lib/ops2/ch12/blocks.ts", "DC2(폐지 — 히터와 배타)"],
+  ["lib/ops2/ch12/blocks.ts", "이 챔버 설정에서 꺼져 있음(SUPPORTS_"], ["lib/ops2/ch12/blocks.ts", "이 챔버에 없는 건 셔터"],
+  ["lib/ops2/ch12/recipe.ts", "CESAR 사양 3-5"], ["lib/ops2/ch12/recipe.ts", "SUPPORTS_HEATER=false 또는 히터 초기화 실패"],
+  ["lib/ops2/ch12/recipe.ts", "메인 공정 구간에 있습니다 —"], ["lib/ops2/ch12/recipe.ts", "기본 램프 속도"], ["lib/ops2/ch12/recipe.ts", "히터 사용 — 목표"],
+  ["lib/ops2/ch12/recipes.ts", "장비가 처리하지 못하는 값"],
+  //  구글챗 카드·보내기 기록(화면 글 아님): v1 ChatNotifier 카드 글과 같아야 한다(ops2:chat-ch12 골든), 버린 행 lastError 는 건수를 세는 열쇠
+  ["lib/ops2/ch12/chatCards.ts", "이어간 블록"], ["lib/ops2/ch12/chatCards.ts", "프로그램 재시작 — 이어가지 못해 안전 정지"],
+  ["lib/ops2/ch12/chatLimits.ts", "대기 상한 초과 — 생략(v1 CHAT_PENDING_MAX)"],
 ];
 const SKIP_ATTR = new Set(["className", "key", "d", "viewBox", "fill", "stroke", "strokeDasharray", "fontFamily", "textAnchor",
   "role", "type", "inputMode", "name", "id", "href", "src", "style", "kind", "tone", "size", "level", "words"]);
@@ -96,7 +118,7 @@ const add = (rel, line, t) => {
   if (p.length && !except(rel, t)) hits.push(`${rel}:${line}  [${p.join(", ")}] ${t.replace(/\s+/g, " ").trim().slice(0, 140)}`);
 };
 
-const LISTS = [...["components/ops2/chk", "lib/ops2/chk"].flatMap((dir) => [...files(join(root, dir))]),
+const LISTS = [...["components/ops2/chk", "lib/ops2/chk", "components/ops2/ch12", "lib/ops2/ch12"].flatMap((dir) => [...files(join(root, dir))]),
   join(root, "lib/ops2/chatText.ts"), join(root, "lib/ops2/chat.ts")];      // 웹 챗 문구(챔버K)
 {
   for (const f of LISTS) {
@@ -138,4 +160,4 @@ if (hits.length) {
   for (const h of hits) console.log(`  ${h}`);
   process.exit(1);
 }
-console.log("챔버K 화면 문구 검사 통과 — 0건");
+console.log("챔버K·챔버12 화면 문구 검사 통과 — 0건");
