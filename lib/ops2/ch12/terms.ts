@@ -27,6 +27,8 @@ export const CARD = {
   map: "계통도", otherButtons: "그 밖의 PLC 버튼", seq: "공정 순서", keyValues: "주요 값", targets: "공정 목표",
   log: "알림·로그", feed: "로그", trend: "추세", heater: "히터", thickness: "두께", presputter: "프리스퍼터 예약", robot: "로봇 연결",
   common: "장비 공통 조작", timing: "장비 응답 시간", localFiles: "노트북 레시피 파일", gasStep: "가스 단계", history: "공정 기록",
+  // 장비 박스(W-20 — 챔버K CARD 와 같은 말)
+  vacuum: "진공", shutter: "셔터·인터락", gas: "가스·압력", next: "다음 공정", alerts: "알림",
 } as const;
 
 /** 조작 주체 이름 — 묶음 <c>.proc.owner enumLabels 와 같게(옛 묶음이면 이 이름) */

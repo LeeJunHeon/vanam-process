@@ -1,28 +1,26 @@
 "use client";
 
-// 챔버12 운전 탭 아래 칸(2026-11-18 — 챔버K kit 틀): CH2 히터·두께 · 플라즈마 클리닝 · TSP · 프리스퍼터 예약 · 로봇 연결 · 장비 공통 조작.
+// 챔버12 운전 탭 아래 칸(2026-11-18 — 챔버K kit 틀): 플라즈마 클리닝 · TSP · 프리스퍼터 예약 · 로봇 연결 · 장비 공통 조작.
 // 입력은 작업자 말로(이름·단위·범위 — 범위는 묶음 파라미터·장비 판단과 같은 값, 범위 밖이면 보내기 전에 막음), 명령 인자를 그대로 그리지 않는다.
 // 조작은 확인창 → 명령(잠금 = 부르는 쪽 lock — 권한·bench·끊김·결과 기다림·PLC 값 오래됨, 챔버K 와 같은 순서·문구). 마지막 판단은 장비.
-// 값은 1초 행 블록(묶음 snapshot — ch2.heater·ch2.thk·ch2.stm100·pc.rf·tsp·tsp.ig)과 엔진 상태(state.heater·state.engines).
+// (CH2 히터·두께는 W-20 부터 CH2 칸 장비 박스 — Ch12Devices) 값은 1초 행 블록(묶음 snapshot — pc.rf·tsp·tsp.ig)과 엔진 상태(state.heater·state.engines).
 import { useMemo, useState } from "react";
-import { Bot, Flame, Play, Sparkles, Square, Timer, Wrench, X } from "lucide-react";
+import { Bot, Play, Sparkles, Square, Timer, Wrench, X } from "lucide-react";
 import { FS, Btn, Card, Chip, Empty, KV, type Ask } from "../chk/kit";
 import { StateBadge, StateTag } from "../chk/StateTag";
 import { paramValue } from "../chk/logic";
 import { useChk2Mode } from "../chk/mode";
-import type { FeedItem, SendResult } from "../chk/useChk2";
-import type { Notice } from "../chk/kit";
+import type { FeedItem } from "../chk/useChk2";
 import { fmtKst } from "@/lib/ops2/time";
 import { BlockCard } from "./BlockCard";
-import { FactorButton } from "./Ch12Thickness";
 import { NumField, TextField, TimeField } from "./Ch12Inputs";
 import { ch12LogLine } from "./Ch12Logs";
 import {
-  KINDS, chArgs, chamberState, checkNum, clockOrDash, engineOf, hasKind, isHHMM, isRunning, paramRange, pickKind, short, stateInfo,
+  KINDS, chArgs, chamberState, checkNum, clockOrDash, engineOf, isHHMM, isRunning, paramRange, pickKind, short, stateInfo,
   type NumRange,
 } from "./logic";
 import { asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types";
-import { CARD, blockName, buttonName, commandName, dropPrefix, fieldName, fieldTipOf, ownerName, placeName, toTerms12 } from "@/lib/ops2/ch12/terms";
+import { CARD, blockName, buttonName, commandName, dropPrefix, fieldName, ownerName, placeName, toTerms12 } from "@/lib/ops2/ch12/terms";
 import type { RecipeItem as RecipeSummary } from "../chk/useRecipes";
 import { PC_FIELDS, pcRowLine } from "@/lib/ops2/ch12/pc";
 
@@ -52,122 +50,6 @@ function ProcLine({ bundle, st, ch }: { bundle: Ch12Bundle | null; st: Ch12State
       {(cs?.alarms ?? []).length > 0 && <Chip tone="alarm">알람 {(cs?.alarms ?? []).length}</Chip>}
       {detail && cs?.runId && <span className={`font-mono ${FS.small} text-[#8A929D]`}>run {cs.runId}</span>}
     </div>
-  );
-}
-
-// ───────────── CH2 히터·두께 ─────────────
-// v1 히터 패널 램프(ui/heater_panel.py _LAMPS) — 윗줄 인터락 조건(켜짐 = 정상), 아랫줄 이상(켜짐 = 이상). 정상은 색 없이(진회색 점), 이상만 색.
-// 이름·마우스 설명은 묶음 필드(ch2.heater.<키> — TC 정상·D/A 정상·Water·진공 인터락·히터 인터락·과온·TC 이상·워치독 이상)
-const LAMPS: [string, "ok" | "err"][] = [
-  ["tc_ok", "ok"], ["da_ok", "ok"], ["water_ok", "ok"], ["vac_ok", "ok"], ["itl", "ok"], ["ot", "err"], ["tc_err", "err"], ["wd_err", "err"],
-];
-const BADGE: Record<string, "dark" | "warn" | "alarm" | "neutral"> = { RUN: "dark", ITL: "warn", FAULT: "alarm", STOP: "neutral" };
-/** 장비 히터 패널 배지(v1 영문 RUN·ITL·FAULT·STOP) → 화면 말 */
-const BADGE_WORD: Record<string, string> = { RUN: "운전", ITL: "인터락", FAULT: "이상", STOP: "정지" };
-const f1 = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v.toFixed(1) : "---");
-
-/** v1 히터 패널 글(장비 state.heater.panel — heater_panel_text, v1 우선순위 문구) + 값·램프 */
-export function HeaterStatus({ he, bundle = null }: { he: Record<string, unknown>; bundle?: Ch12Bundle | null }) {
-  const { detail } = useChk2Mode();
-  const p = (he.panel ?? null) as Record<string, unknown> | null;
-  if (!p) return null;
-  const stale = p.stale === true;
-  const mv = he.mv, lim = he.mv_limit;
-  const badge = String(p.badge ?? "");
-  const tone = stale ? "neutral" : BADGE[badge] ?? "neutral";
-  return (
-    <div className="rounded-[10px] border border-[#E3E6EA] px-3 py-2" data-heater-panel="">
-      <div className={`flex flex-wrap items-baseline gap-x-3 gap-y-1 ${FS.body}`}>
-        <Chip tone={tone}>{BADGE_WORD[badge] ?? toTerms12(badge)}</Chip>
-        {p.owner_text ? <span className="text-[#5B6470]">{toTerms12(String(p.owner_text))}</span> : null}
-        <span className={`${FS.big} font-bold ${stale ? "text-[#8A929D]" : "text-[#133A7C]"}`}>{f1(he.pv)}<span className={`ml-1 ${FS.unit} font-normal text-[#5B6470]`}>°C</span></span>
-        <span className="text-[#5B6470]">목표 <b className="tabular-nums text-[#1B1F24]">{f1(p.sv_show)}</b></span>
-        {typeof p.dev === "number" && <span className="text-[#5B6470]">편차 {p.dev >= 0 ? "+" : ""}{p.dev.toFixed(1)}</span>}
-        <span className="text-[#1B1F24]">{toTerms12(String(p.state_line ?? ""))}</span>
-        <span className="tabular-nums text-[#5B6470]" title={fieldTipOf(bundle, "ch2.heater.mv", detail)}>{fieldName(bundle, "ch2.heater.mv", "CH2")} {typeof mv === "number" && typeof lim === "number" ? `${mv}/${lim}` : "-/-"}</span>
-      </div>
-      <p className={`mt-1 ${FS.body} font-semibold ${badge === "FAULT" && !stale ? "text-[#B42318]" : badge === "ITL" && !stale ? "text-[#B54708]" : "text-[#1B1F24]"}`}
-        data-heater-status="">{toTerms12(String(p.status_text ?? ""))}</p>
-      <div className="mt-1.5 grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2">
-        {LAMPS.map(([k, kind]) => {
-          const col = `ch2.heater.${k}`;
-          const on = he[k] === true;
-          const off = stale || he.ok === null || he.ok === undefined;
-          const bad = !off && (kind === "ok" ? !on : on);
-          return (
-            <StateTag key={k} on={off ? null : on} alert={kind === "err"} words={k === "water_ok" ? "detect" : "onoff"} title={fieldTipOf(bundle, col, detail)}
-              label={<span className={bad ? "font-semibold text-[#B54708]" : ""}>{fieldName(bundle, col, "CH2")}</span>} />
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-export function HeaterThicknessPanel({ bundle, st, lock, onAsk, plcOk, feed = [], send, notify }: Common & {
-  plcOk: boolean; feed?: FeedItem[];
-  send?: (kind: string, args: Record<string, unknown>, label?: string) => Promise<SendResult>;
-  notify?: (n: Omit<Notice, "id" | "at">) => void;
-}) {
-  const snap = st?.snapshot;
-  const heat = blockOf(bundle, "ch2.heater"), thk = blockOf(bundle, "ch2.thk"), stm = blockOf(bundle, "ch2.stm100");
-  const he = st?.heater ?? {};
-  const supports = bundle?.chambers?.find((c) => c.id === "ch2")?.supports;
-  const run = snap?.["ch2.heater.run"] === true || he.run === true;
-  const [t, setT] = useState("");
-  const maxP = num(paramValue(asChk(bundle), "CH2_HEATER_MAX_TEMP"));
-  const svl = num(he.sv_limit);
-  const maxT = maxP !== null && svl !== null && svl > 0 ? Math.min(maxP, svl) : maxP ?? svl;
-  const r: NumRange = { min: 0, max: maxT, unit: "°C" };
-  const c = checkNum(t, r, true);
-  const kOn = pickKind(bundle, KINDS.heaterOnOff), kApply = pickKind(bundle, KINDS.heaterApply), kReset = pickKind(bundle, KINDS.heaterReset);
-  const kZero = pickKind(bundle, KINDS.thkZero);
-  const key = (k: string) => `${k}@ch2`;
-  const can = (k: string) => !lock(k, key(k));
-  const inputBad = !t.trim() ? "목표 온도를 넣으세요" : c.error;
-  return (
-    <Card title={<><Flame size={15} /> {placeName(bundle, "ch2")} {CARD.heater}·{CARD.thickness}</>}
-      right={supports && <span className={`${FS.small} text-[#5B6470]`}>히터 {supports.heater ? "사용" : "꺼짐"} · 두께 모니터 {supports.thickness ? "사용" : "꺼짐"}</span>}>
-      <div className="space-y-3">
-        <HeaterStatus he={he} bundle={bundle} />
-        {heat ? <BlockCard def={heat} snap={snap} link={st?.links?.["ch2.heater"]} big={["pv", "sv", "mv_pct"]} foldable startOpen={false} strip={placeName(bundle, "ch2")} /> : <Missing what="히터 1초 값" />}
-        {(hasKind(bundle, KINDS.heaterOnOff) || hasKind(bundle, KINDS.heaterApply)) && (
-          <div className="space-y-2 rounded-[10px] border border-[#E3E6EA] p-3">
-            <p className={`${FS.body} font-semibold text-[#1B1F24]`}>히터 조작</p>
-            <div className="flex flex-wrap items-end gap-2">
-              <NumField label="목표 온도" value={t} onChange={setT} range={r} />
-              {run ? (
-                <Btn kind="danger" lock={lock(kOn, key(kOn))}
-                  onClick={() => onAsk({ kind: kOn, key: key(kOn), label: "히터 끄기", stop: true, args: {}, note: "히터 운전을 끕니다." })}>
-                  <Square size={14} /> 히터 끄기
-                </Btn>
-              ) : (
-                <Btn kind="dangerSolid" lock={lock(kOn, key(kOn)) ?? inputBad}
-                  onClick={() => c.value !== null && onAsk({ kind: kOn, key: key(kOn), label: "히터 켜기", red: true, args: { target: String(c.value) },
-                    lines: [`목표 ${c.value} °C 로 운전을 켭니다. 승온 속도는 설정 기본값입니다.`] })}>
-                  <Play size={14} /> 히터 켜기
-                </Btn>
-              )}
-              <Btn lock={lock(kApply, key(kApply)) ?? inputBad}
-                onClick={() => c.value !== null && onAsk({ kind: kApply, key: key(kApply), label: "목표 적용", args: { target: String(c.value) },
-                  lines: [`목표 ${c.value} °C`] })}>목표 적용</Btn>
-              <Btn lock={lock(kReset, key(kReset)) ?? (run ? "히터 운전 중이라 먼저 꺼야 함" : null)}
-                onClick={() => onAsk({ kind: kReset, key: key(kReset), label: commandName(bundle, kReset), args: {}, note: "히터 이상 표시(과온·TC 이상·워치독 이상)를 지웁니다." })}>이상 리셋</Btn>
-            </div>
-            {!plcOk && <p className={`${FS.small} text-[#B54708]`}>PLC 값이 오래되어 히터 조작이 잠겼습니다.</p>}
-          </div>
-        )}
-        {thk ? <BlockCard def={thk} snap={snap} link={st?.links?.["ch2.thk"]} big={["eff_nm", "target_nm", "remaining_nm", "pct"]} strip={placeName(bundle, "ch2")} /> : <Missing what="두께 판정" />}
-        {stm && <BlockCard def={stm} snap={snap} link={st?.links?.["ch2.stm100"]} big={["thickness_nm", "rate_nm_s"]} foldable strip={placeName(bundle, "ch2")} />}
-        <div className="flex flex-wrap gap-2">
-          {hasKind(bundle, KINDS.thkZero) && (
-            <Btn lock={lock(kZero, key(kZero))} onClick={() => onAsk({ kind: kZero, key: key(kZero), label: "두께 영점", args: chArgs(bundle, kZero, "ch2"),
-              note: "두께 모니터 영점을 맞춥니다. 공정 중이면 장비가 받지 않습니다." })}>두께 영점</Btn>
-          )}
-          {hasKind(bundle, KINDS.thkWindow) && <FactorButton feed={feed} can={can} send={send} notify={notify} />}
-        </div>
-      </div>
-    </Card>
   );
 }
 

@@ -18,9 +18,9 @@ import { reasonLabel, type AdjustState, type FieldDef, type StateData } from "..
 import type { FeedItem, SendResult, TrendPt } from "../chk/useChk2";
 import type { Notice } from "../chk/kit";
 import type { RecipeFull, RecipeItem } from "../chk/useRecipes";
-import { BlockCard } from "./BlockCard";
+import { ChamberDevices } from "./Ch12Devices";
 import { ChamberLog } from "./Ch12Logs";
-import { CommonOps, HeaterThicknessPanel, PcPanel, PresputterPanel, RobotPanel, TspPanel, type LockFn } from "./Ch12Aux";
+import { CommonOps, PcPanel, PresputterPanel, RobotPanel, TspPanel, type LockFn } from "./Ch12Aux";
 import { hasRowContent, loadPayload, rowLine } from "./Ch12Recipes";
 import { Spectra } from "./Ch12Spectra";
 import Ch12Timing from "./Ch12Timing";
@@ -197,16 +197,13 @@ function Seq({ bundle, st, ch, lock, onAsk, onEditSeq, label }: {
 }
 
 // ───────────── 챔버 칸 ─────────────
-/** 장비 카드 계통(챔버K 장비 카드 배치와 같은 생각 — 가스·압력 / 파워 / 측정) */
-const SYSTEMS: { key: string; kinds: string[] }[] = [
-  { key: "gas", kinds: ["mfc", "ig"] },
-  { key: "power", kinds: ["dcpulse", "rfpulse", "dc", "rf"] },
-  { key: "measure", kinds: ["stm100", "oes", "rga"] },
-];
 export type ChamberProps = {
   bundle: Ch12Bundle | null; st: Ch12State | null; ch: Ch; connected: boolean; lock: LockFn; onAsk: (a: Ask) => void;
   feed: FeedItem[]; trend: TrendPt[]; nowMs: number; skewMs: number; equipment: string; local: boolean;
   recipes: RecipeItem[] | null; getRecipe?: (id: string) => Promise<RecipeFull | null>; onEditSeq: () => void; onLog?: () => void;
+  plcOk?: boolean; send?: (kind: string, args: Record<string, unknown>, label?: string) => Promise<SendResult>;
+  notify?: (n: Omit<Notice, "id" | "at">) => void;
+  onHmi?: () => void; onConfig?: () => void;        // W-20 장비 박스 [HMI 열기]·[설정 열기] — 탭이 없으면 넘기지 않는다
 };
 
 function NextRecipe({ bundle, ch, recipes, getRecipe, lock, onAsk, label }: {
@@ -266,8 +263,6 @@ export function ChamberRun(p: ChamberProps) {
   const alarms = [...(cs?.alarms ?? []).map((r) => ({ ruleId: r, text: alarmName(r), tip: reasonTip(asChk(bundle), r, detail) })),
     ...(st?.alarms ?? []).filter((a) => a.chamber === ch && !(cs?.alarms ?? []).includes(a.ruleId))
       .map((a) => ({ ruleId: a.ruleId, text: a.code ? reasonLabel(asChk(bundle), a.code) : a.ruleId, tip: reasonTip(asChk(bundle), a.code, detail) }))];
-  const blocks = (cdef?.blocks ?? []).map((n) => bundle?.snapshot?.blocks?.find((b) => b.name === n)).filter((b) => !!b)
-    .filter((b) => !(ch === "ch2" && ["ch2.heater", "ch2.thk", "ch2.stm100"].includes(b.name)));          // CH2 히터·두께는 아래 칸
   const targets = (bundle?.snapshot?.process ?? []).filter((f) => (cdef?.targets ?? []).includes(f.column))
     .filter((f) => snap?.[f.column] !== null && snap?.[f.column] !== undefined);
   // 공정 중 값 바꾸기 — 챔버K 화면을 이 챔버 값으로(인자에 ch, 기다림 단위도 챔버별)
@@ -278,9 +273,6 @@ export function ChamberRun(p: ChamberProps) {
   const adjSt = { procState: running ? "__RUN__" : "IDLE", runId: cs?.runId ?? null, adjust: adjList } as StateData;
   const adjBundle = useMemo(() => (bundle ? { ...asChk(bundle)!, states: [{ name: "__RUN__", label: "진행", kind: "active" }] } : null), [bundle]);
   const queue = eng?.queue as { index?: number; total?: number; mode?: boolean } | null | undefined;
-  const FOLD = new Set(["dcpulse", "rfpulse", "stm100", "oes", "rga", "dc", "rf"]);
-  const BIG: Record<string, string[]> = { mfc: ["ar_sccm", "o2_sccm", "n2_sccm", "pressure_mtorr"], ig: ["pressure_torr"], dcpulse: ["p_w", "v_v", "i_a"],
-    rfpulse: ["fwd_w", "ref_w"], dc: ["dc1_p", "dc1_v", "dc1_i"], rf: ["fwd_w", "ref_w"] };
   return (
     <div className="flex min-w-0 flex-col gap-3" data-chamber={ch}>
       <Card>
@@ -365,25 +357,10 @@ export function ChamberRun(p: ChamberProps) {
       <Chk2Trend trend={p.trend} equipment={p.equipment} runId={cs?.runId ?? null} local={p.local} nowMs={nowMs}
         defs={trendDefs(bundle, ch)} title={`${label} ${CARD.trend}`} edgeTicks />
 
-      {/* 장비 카드 — 챔버K 장비 카드처럼 계통별 열(가스·압력 · 파워 · 측정), 칸이 넓으면 두 열. 이름의 챔버 앞말은 뺀다 */}
+      {/* 장비 박스(W-20 — 챔버K DevCard 틀): 진공 · 셔터·인터락 · 가스·압력 · Ion Gauge · 파워 · 히터(CH2) · 두께 모니터 · OES · RGA */}
       <div className="@container">
-        <div className="grid grid-cols-1 items-start gap-3 @[720px]:grid-cols-2">
-          {SYSTEMS.map((sys) => {
-            const list = blocks.filter((b) => sys.kinds.includes(b.name.split(".").pop() ?? ""));
-            if (!list.length) return null;
-            return (
-              <div key={sys.key} className={`flex min-w-0 flex-col gap-3 ${sys.key === "measure" ? "@[720px]:col-start-1" : ""}`} data-system={sys.key}>
-                {list.map((b) => {
-                  const kind = b.name.split(".").pop() ?? "";
-                  const gases = cdef?.gases ?? [];
-                  const big = (BIG[kind] ?? []).filter((n) => b.fields.some((f) => f.name === n))
-                    .filter((n) => kind !== "mfc" || !/_sccm$/.test(n) || gases.includes(n.split("_")[0]));        // 그 챔버 가스 라인만
-                  return <BlockCard key={b.name} def={b} snap={snap} link={st?.links?.[b.name]} big={big} foldable={FOLD.has(kind)} strip={label} />;
-                })}
-              </div>
-            );
-          })}
-        </div>
+        <ChamberDevices ctx={{ bundle, st, lock, onAsk, onHmi: p.onHmi, onConfig: p.onConfig }} ch={ch} plcOk={p.plcOk ?? true} feed={feed}
+          send={p.send} notify={p.notify} grid="grid grid-cols-1 gap-3 @[720px]:grid-cols-2" />
       </div>
       <Spectra feed={feed} st={st} ch={ch} />
       {targets.length > 0 && (
@@ -420,7 +397,6 @@ export default function Ch12Run(p: RunProps) {
         {(["ch1", "ch2"] as const).map((ch) => <ChamberRun key={ch} {...p} ch={ch} onEditSeq={() => p.onEditSeq(ch)} />)}
       </div>
       <div className="grid items-start gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-        <HeaterThicknessPanel {...cmn} plcOk={p.plcOk} feed={feed} send={p.send} notify={p.notify} />
         <PcPanel {...cmn} recipes={p.pcRecipes} getRecipe={p.getRow} />
         <TspPanel {...cmn} nowMs={nowMs} />
       </div>

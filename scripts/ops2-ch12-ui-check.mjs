@@ -140,7 +140,8 @@ await esbuild.build({
   stdin: {
     resolveDir: root, loader: "ts", contents: `
       export { default as Ch12Run, ChamberRun, trendDefs, TREND_COLS12 } from "./components/ops2/ch12/Ch12Run";
-      export { HeaterThicknessPanel, PcPanel, TspPanel, PresputterPanel, RobotPanel, CommonOps, HeaterStatus } from "./components/ops2/ch12/Ch12Aux";
+      export { PcPanel, TspPanel, PresputterPanel, RobotPanel, CommonOps } from "./components/ops2/ch12/Ch12Aux";
+      export { HeaterBox12, ThicknessBox12, ChamberDevices, VacuumBox12, ShutterBox12, GasBox12, PowerBox12 } from "./components/ops2/ch12/Ch12Devices";
       export { StatusBand12 } from "./components/ops2/ch12/Ch12Status";
       export { default as Ch12Hmi, drawnTargets, plcAsk, plcContext, plcChamber, HAZARD_TEXT } from "./components/ops2/ch12/Ch12Hmi";
       export { default as Ch12Confirm, PlcConfirmBody, recordNote, isPlcAsk } from "./components/ops2/ch12/Ch12Confirm";
@@ -254,16 +255,38 @@ const chamberProps = (ch) => ({
   check("ui:popup-line — v1 경고창(시작 가드 '대기 필요' 등)은 로그 줄(경고)로 — 문구 그대로, 시작은 COOLDOWN 거부",
         !!pop && pl.level === "warn" && pop.data.message.startsWith("이전 공정 종료 후 1분 대기 필요합니다.") && t.includes(pl.text.replace(/\s+/g, " "))
         && fx.cmd.start2_cooldown.reason === "COOLDOWN", { pop: pop?.data, cmd: fx.cmd.start2_cooldown });
-  const ht = textOf(render(U.HeaterThicknessPanel, { bundle, st, lock: noLock, onAsk: noop, plcOk: true }));
-  // 히터 레지스터 카드(41칸)는 처음 접어 둠 — PV·목표·MV 는 그 위 히터 상태 줄(v1 히터 패널 글)에. 라벨의 레지스터 주소 '(D112)' 는 상세에서만
+  const ht = textOf(render(U.HeaterBox12, { ctx: { bundle, st, lock: noLock, onAsk: noop }, plcOk: true }));
+  // 히터 레지스터 칸(41칸)은 상세 보기에서 — PV·목표·MV 는 히터 박스(v1 히터 패널 글). 라벨의 레지스터 주소 '(D112)' 는 상세에서만
   const plain = (l) => l.replace(/\s*\((?:[DM]\d+)[^)]*\)/g, "").trim();
   const blocks = (bundle.chambers.find((c) => c.id === "ch2").blocks ?? []).map((n) => bundle.snapshot.blocks.find((x) => x.name === n))
     .filter((x) => x && !["dcpulse", "rfpulse", "stm100", "oes", "rga", "dc", "rf", "heater"].includes(x.name.split(".").pop()));
   const labels = blocks.flatMap((x) => x.fields.slice(0, 2).map((f) => [x.name, plain(f.label)]));
-  const miss = labels.filter(([n, l]) => !(["ch2.thk"].includes(n) ? ht : t).includes(l));
-  const heaterVals = ht.includes(String(L.short(st.snapshot["ch2.heater.pv"]))) && ht.includes("CH2 히터") && !/\(D1\d\d\)/.test(ht);
-  check("ui:chamber-values — 챔버 장비 1초 값 칸(묶음 chambers[].blocks 순서 — 접힌 칸 제외, CH2 두께는 히터·두께 칸, 히터 값은 히터 상태 줄)",
+  const miss = labels.filter(([, l]) => !t.includes(l));
+  const heaterVals = ht.includes(Number(st.heater.pv).toFixed(1)) && ht.includes("히터") && t.includes("히터") && !/\(D1\d\d\)/.test(ht);
+  check("ui:chamber-values — 챔버 장비 박스 1초 값(가스·압력·Ion Gauge·CH2 두께 판정은 CH2 칸 두께 모니터 박스, 히터 값은 CH2 칸 히터 박스)",
         labels.length > 0 && miss.length === 0 && heaterVals, { miss, heaterVals });
+}
+{
+  // W-20 ① 장비 박스 틀 — 챔버K DevCard(머리 제목·칩 → 큰 값/요약 → 줄 → 상태 → 안내 → 맨 아래 버튼 줄, 버튼 없으면 줄 없음) · 읽는 순서
+  const titlesOf = (ch) => {
+    const h = render(U.ChamberRun, chamberProps(ch));
+    const seg = h.slice(h.indexOf(`data-devices="${ch}"`));
+    return [...seg.matchAll(/<h3[^>]*>([^<]*)<\/h3>/g)].map((m) => m[1]);
+  };
+  const want = {
+    ch1: ["진공", "셔터·인터락", "가스·압력", "Ion Gauge", "DC Pulse", "RF Pulse", "두께 모니터", "OES", "RGA"],
+    ch2: ["진공", "셔터·인터락", "가스·압력", "Ion Gauge", "DC Power", "RF Power", "DC Pulse", "RF Pulse", "히터", "두께 모니터", "OES", "RGA"],
+  };
+  const got = { ch1: titlesOf("ch1").slice(0, want.ch1.length), ch2: titlesOf("ch2").slice(0, want.ch2.length) };
+  const ctx = { bundle, st, lock: noLock, onAsk: noop, onHmi: noop };
+  const vac = render(U.VacuumBox12, { ctx, ch: "ch1" }), ig = render(U.PowerBox12, { ctx, ch: "ch1", kind: "dcpulse" });
+  const at = (h, x) => h.indexOf(x);
+  const sum = /펌프 정지|운전</.exec(vac)?.index ?? -1;
+  const order = at(vac, "<h3") < sum && sum < at(vac, ">MV<") && at(vac, ">MV<") < at(vac, "mt-auto")
+    && at(vac, "mt-auto") < at(vac, "HMI 열기") && /border-t[^"]*pt-3/.test(vac);
+  check("ui:device-boxes — 챔버 장비 박스(챔버K DevCard 틀) 읽는 순서·박스 틀 순서(머리 → 요약 → 상태 → 버튼 줄), 버튼 없는 박스는 버튼 줄 없음, 옛 접힘 글 없음",
+        JSON.stringify(got) === JSON.stringify(want) && order && !ig.includes("mt-auto") && !/접어 둠/.test(render(U.ChamberRun, chamberProps("ch2"))),
+        { got, order });
 }
 {
   const html = render(U.PresputterPanel, { bundle, st, lock: noLock, onAsk: noop });
@@ -274,11 +297,12 @@ const chamberProps = (ch) => ({
         && fx.cmd.pre.ok && fx.cmd.pre_bad.reason === "TIME_FORMAT" && fx.cmd.pre_bad.detail === "시간 형식 오류 (HH:MM)", fx.cmd);
 }
 {
-  const html = render(U.HeaterThicknessPanel, { bundle, st, lock: noLock, onAsk: noop, plcOk: true });
+  const ctx = { bundle, st, lock: noLock, onAsk: noop };
+  const html = render(U.HeaterBox12, { ctx, plcOk: true }) + render(U.ThicknessBox12, { ctx, ch: "ch2" });
   const t = textOf(html), b = buttons(html);
-  const pv = st.snapshot["ch2.heater.pv"];
+  const pv = st.heater.pv;
   check("ui:heater-panel — CH2 히터 PV·SV·MV, 목표 온도 칸(범위 0~상한 °C)·켜기(목표를 넣어야)/끄기(RUN 이면)·목표 적용·이상 리셋",
-        typeof pv === "number" && t.includes(String(L.short(pv))) && "히터 켜기" in b && lockText(html, "히터 켜기").includes("목표 온도를 넣으세요")
+        typeof pv === "number" && t.includes(pv.toFixed(1)) && "히터 켜기" in b && lockText(html, "히터 켜기").includes("목표 온도를 넣으세요")
         && "목표 적용" in b && b["이상 리셋"] === false && st.heater?.run === false && t.includes("목표 온도") && /범위 0~\d+ °C/.test(t), { pv, b });
   check("ui:thickness-panel — 두께(ch2.thk)·STM-100(두께·증착률) 값, 두께 영점",
         t.includes("두께") && b["두께 영점"] === false && !!bundle.snapshot.blocks.find((x) => x.name === "ch2.stm100"), b);
@@ -620,7 +644,7 @@ const chamberProps = (ch) => ({
 {
   // 히터 패널 글(v1 ui/heater_panel.py 우선순위 문구 — 장비 heater_panel_text)
   const p = st.heater.panel;
-  const t = textOf(render(U.HeaterThicknessPanel, { bundle, st, lock: noLock, onAsk: noop, plcOk: true }));
+  const t = textOf(render(U.HeaterBox12, { ctx: { bundle, st, lock: noLock, onAsk: noop }, plcOk: true }));
   const badge = { RUN: "운전", ITL: "인터락", FAULT: "이상", STOP: "정지" }[p?.badge] ?? p?.badge;
   check("ui:heater-text — v1 히터 패널 상태 문구·상태 줄·배지(운전·인터락·이상·정지)·소유자·램프(묶음 필드 이름 — 값 표 대신)",
         !!p && t.includes(p.status_text) && t.includes(p.state_line) && t.includes(badge) && t.includes(p.owner_text) && !/\b(RUN|ITL|FAULT|STOP)\b/.test(t.replace("ALL STOP", ""))
