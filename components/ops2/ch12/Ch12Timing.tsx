@@ -3,6 +3,7 @@
 // 챔버12 장비 응답 시간(진단) — 장비가 state.deviceTiming 으로 보내는 '가장 최근 1분 집계'(보냄 → 응답 끝, 장비별 개수·p95·최대·시간 초과).
 // 명령별 자세한 값은 장비의 data/device_timing/timing_YYYYMMDD.csv. 집계 전이거나 기록을 끈 장비는 칸이 없다(자리 표시만).
 import { Card } from "../chk/kit";
+import { CARD } from "@/lib/ops2/ch12/terms";
 import { useChk2Mode } from "../chk/mode";
 import type { Ch12Bundle, Ch12State } from "./types";
 
@@ -18,9 +19,9 @@ export default function Ch12Timing({ st, bundle }: { st: Ch12State | null; bundl
   const t = (st as unknown as { deviceTiming?: DeviceTiming } | null)?.deviceTiming;
   const rows = t?.devices ?? [];
   return (
-    <Card title="장비 응답 시간" right={<span className="text-[12px] text-[#8A929D]">{t?.at ? `최근 집계 ${t.at}` : "집계 전"}</span>} tight>
+    <Card title={CARD.timing} right={<span className="text-[12px] text-[#8A929D]">{t?.at ? `최근 집계 ${t.at}` : "집계 전"}</span>} tight>
       {rows.length === 0 ? (
-        <p className="text-[12px] text-[#8A929D]">아직 집계가 없습니다(기록 주기마다 갱신 — 설정 &gt; 감시 프로그램·진단).</p>
+        <p className="text-[12px] text-[#8A929D]">아직 집계가 없습니다. 기록 주기마다 새로 집계합니다.</p>
       ) : (
         <table className="w-full text-left text-[12px]">
           <thead className="text-[#5B6470]">

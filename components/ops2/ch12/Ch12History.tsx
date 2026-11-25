@@ -7,7 +7,10 @@
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, History, RefreshCw } from "lucide-react";
 import { useChk2Mode } from "../chk/mode";
-import { logLine, runTitle } from "../chk/text";
+import { runTitle } from "../chk/text";
+import { byWord } from "@/lib/ops2/chk/plain";
+import { ch12LogLine } from "./Ch12Logs";
+import type { FeedItem } from "../chk/useChk2";
 import { Card } from "../chk/kit";
 import Chk2SummaryChart, { type PickField, type SummaryRow } from "../chk/Chk2SummaryChart";
 import { RUN_RESULT, reasonLabel } from "../chk/types";
@@ -15,6 +18,7 @@ import { fmtKst } from "@/lib/ops2/time";
 import { blockSummary } from "./Ch12BlockEditor";
 import { blockDefOf, blockLabel, clockOrDash } from "./logic";
 import { asChk, type Ch12Bundle } from "./types";
+import { CARD, blockName, fieldName, fieldTip, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
 
 type RunItem = {
   runId: string; name: string | null; recipeName: string | null; startedBy: string | null; stepNo: number | null;
@@ -27,7 +31,7 @@ type Detail = {
   events: EventRow[]; summaries: SummaryRow[]; truncated?: { events?: boolean; summaries?: boolean };
 };
 
-const CH_LABEL: Record<string, string> = { ch1: "CH1", ch2: "CH2", pc: "플라즈마 클리닝", tsp: "TSP" };
+const CHAMBER_KEYS = ["ch1", "ch2", "pc", "tsp"] as const;
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const kstDay = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Seoul" }).format(new Date(ms));
 const LEVEL_TONE: Record<string, string> = {
@@ -48,7 +52,10 @@ function fieldsFor(b: Ch12Bundle | null, ch: string): (PickField & { blockLabel:
   const names = b?.chambers?.find((c) => c.id === ch)?.blocks ?? [];
   return (b?.snapshot?.blocks ?? []).filter((bl) => names.includes(bl.name) || bl.name.startsWith(`${ch}.`))
     .flatMap((bl) => bl.fields.filter((f) => (f.type === "float" || f.type === "int") && f.summary !== "any" && !f.detail)
-      .map((f) => ({ ...f, block: bl.name, blockLabel: bl.label, label: `${bl.label} · ${f.label}` })));
+      .map((f) => {
+        const t = placeName(b, ch), bn = blockName(b, bl.name, t), fn = fieldName(b, f.column, t);
+        return { ...f, block: bl.name, blockLabel: bn, label: fn.startsWith(bn) || bl.name.endsWith(".mfc") ? fn : `${bn} ${fn}` };
+      }));
 }
 
 function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; runId: string; bundle: Ch12Bundle | null; onBack: () => void }) {
@@ -76,7 +83,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
   const picked = cols ?? all.filter((f) => /pressure|_sccm$|p_w$|fwd_w|dc1_p|thickness_nm|pv$/.test(f.name)).slice(0, 5).map((f) => f.column);
   const fields = all.filter((f) => picked.includes(f.column));
   const blocks = Array.isArray(r.blocks) ? r.blocks.filter(isObj) : [];
-  const lines = d.events.map((e) => ({ e, ...logLine(asChk(bundle), { type: "event", data: { level: e.level, code: e.code, ruleId: e.ruleId, message: e.message, context: e.context } }) }))
+  const lines = d.events.map((e) => ({ e, ...ch12LogLine(bundle, { id: e.msgId, ts: e.ts, instance: "", seq: 0, type: "event", data: { level: e.level, code: e.code, ruleId: e.ruleId, message: e.message, context: e.context } } as FeedItem) }))
     .filter((x) => detail || x.main);
   const t0 = r.startedAt ? Date.parse(r.startedAt) : d.fetchedAt;
   const t1 = r.endedAt ? Date.parse(r.endedAt) : d.fetchedAt;
@@ -84,15 +91,15 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         {back}
-        <span className="rounded bg-[#3A424D] px-1.5 py-0.5 text-[12px] font-semibold text-white">{CH_LABEL[ch] ?? ch}</span>
+        <span className="rounded bg-[#3A424D] px-1.5 py-0.5 text-[12px] font-semibold text-white">{placeName(bundle, ch)}</span>
         <b className="text-[14px] text-[#1B1F24]">{runTitle(r)}</b>
         <ResultBadge r={r} />
-        {r.reasonCode && <span className="text-[12px] text-[#5B6470]">{reasonLabel(asChk(bundle), r.reasonCode)}</span>}
+        {r.reasonCode && <span className="text-[12px] text-[#5B6470]" title={reasonTip(asChk(bundle), r.reasonCode, detail)}>{reasonLabel(asChk(bundle), r.reasonCode)}</span>}
         <button onClick={() => void load()} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] text-[#5B6470] hover:bg-[#F5F6F8]"><RefreshCw size={12} /> 다시 읽기</button>
       </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-4">
         {[["시작", fmtKst(r.startedAt)], ["끝", fmtKst(r.endedAt)], ["소요", r.durationS !== null ? clockOrDash(r.durationS) : "-"],
-          ["누가", r.startedBy ?? "-"], ["설정 버전", r.configVersion ?? "-"], ...(detail ? [["run id", r.runId]] : [])].map(([k, v]) => (
+          ["누가", byWord(r.startedBy) || "-"], ["설정 버전", r.configVersion ?? "-"], ...(detail ? [["run id", r.runId]] : [])].map(([k, v]) => (
           <div key={String(k)}><dt className="text-[#8A929D]">{k}</dt><dd className="truncate font-semibold text-[#1B1F24]">{String(v)}</dd></div>
         ))}
       </dl>
@@ -102,7 +109,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
           {all.map((f) => {
             const on = picked.includes(f.column);
             return (
-              <button key={f.column} onClick={() => setCols(on ? picked.filter((c) => c !== f.column) : [...picked, f.column])}
+              <button key={f.column} onClick={() => setCols(on ? picked.filter((c) => c !== f.column) : [...picked, f.column])} title={fieldTip(f, detail)}
                 className={`rounded-md border px-1.5 py-0.5 text-[12px] ${on ? "border-[#C7D5FB] bg-[#E8EEFC] font-semibold text-[#1D4ED8]" : "border-[#D9DDE3] text-[#5B6470]"}`}>
                 {f.label}{f.unit && ` ${f.unit}`}
               </button>
@@ -113,7 +120,7 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
       </section>
       <div className="grid gap-3 xl:grid-cols-2">
         <section>
-          <h4 className="mb-1 text-[12px] font-bold text-[#1B1F24]">블록 기록({blocks.length})</h4>
+          <h4 className="mb-1 text-[12px] font-bold text-[#1B1F24]">단계 기록({blocks.length})</h4>
           <ol className="max-h-96 space-y-0.5 overflow-y-auto rounded-[10px] bg-[#F5F6F8] p-2 text-[12px]">
             {blocks.map((b, i) => (
               <li key={i} className="flex gap-1.5">
@@ -123,15 +130,15 @@ function RunDetail({ equipment, runId, bundle, onBack }: { equipment: string; ru
                 <span className="truncate text-[#5B6470]">{blockSummary(blockDefOf(bundle, String(b.type)), isObj(b.params) ? b.params : {})}</span>
               </li>
             ))}
-            {!blocks.length && <li className="text-[#8A929D]">블록 기록 없음</li>}
+            {!blocks.length && <li className="text-[#8A929D]">단계 기록 없음</li>}
           </ol>
         </section>
         <section>
           <h4 className="mb-1 text-[12px] font-bold text-[#1B1F24]">로그 {lines.length}</h4>
           <div className="max-h-96 overflow-y-auto rounded-[10px] border border-[#E3E6EA]">
             <table className="w-full text-[12px]"><tbody>
-              {lines.map(({ e, kind, text, raw, level }) => (
-                <tr key={e.msgId} className="border-t border-[#E3E6EA] align-top" title={raw}>
+              {lines.map(({ e, kind, text, raw, level, desc }) => (
+                <tr key={e.msgId} className="border-t border-[#E3E6EA] align-top" title={detail ? raw : desc}>
                   <td className="whitespace-nowrap px-1.5 py-1 tabular-nums text-[#8A929D]">{fmtKst(e.ts).slice(6)}</td>
                   <td className="px-1 py-1"><span className={`whitespace-nowrap rounded px-1 text-[12px] font-semibold ${LEVEL_TONE[level] ?? LEVEL_TONE.info}`}>{kind}</span></td>
                   <td className="px-1.5 py-1 text-[#1B1F24]">{text}</td>
@@ -175,12 +182,12 @@ export default memo(function Ch12History({ equipment, bundle, refreshKey }: { eq
 
   const shown = (list ?? []).filter((r) => !chamber || !r.chamber || r.chamber === chamber);
   return (
-    <Card title={<><History size={15} /> 공정 기록(챔버별)</>}>
+    <Card title={<><History size={15} /> {CARD.history}</>}>
       {open ? <RunDetail equipment={equipment} runId={open} bundle={bundle} onBack={() => setOpen(null)} /> : (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2 text-[12px] text-[#5B6470]">
             <span className="flex overflow-hidden rounded-lg border border-[#D9DDE3]">
-              {[["", "전체"], ["ch1", "CH1"], ["ch2", "CH2"], ["pc", "플라즈마 클리닝"], ["tsp", "TSP"]].map(([k, l]) => (
+              {[["", "전체"], ...CHAMBER_KEYS.map((k) => [k, placeName(bundle, k)])].map(([k, l]) => (
                 <button key={k} onClick={() => setChamber(k)} className={`px-2 py-0.5 ${chamber === k ? "bg-[#3A424D] font-semibold text-white" : "hover:bg-[#F5F6F8]"}`}>{l}</button>
               ))}
             </span>
@@ -205,14 +212,14 @@ export default memo(function Ch12History({ equipment, bundle, refreshKey }: { eq
               <tbody>
                 {shown.map((r) => (
                   <tr key={r.runId} onClick={() => setOpen(r.runId)} className="cursor-pointer border-t border-[#E3E6EA] hover:bg-[#E8EEFC]">
-                    <td className="px-2 py-1.5"><span className="rounded bg-[#EEF0F3] px-1 text-[12px] font-semibold text-[#1B1F24]">{r.chamber ? CH_LABEL[r.chamber] ?? r.chamber : "?"}</span></td>
+                    <td className="px-2 py-1.5"><span className="rounded bg-[#EEF0F3] px-1 text-[12px] font-semibold text-[#1B1F24]">{r.chamber ? placeName(bundle, r.chamber) : "?"}</span></td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">{fmtKst(r.startedAt)}</td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">{fmtKst(r.endedAt)}</td>
                     <td className="px-2 py-1.5"><span className="font-semibold text-[#1B1F24]">{runTitle(r)}</span>
                       {detail && <span className="block font-mono text-[12px] text-[#8A929D]">{r.runId}</span>}</td>
-                    <td className="px-2 py-1.5 text-[#5B6470]">{r.startedBy ?? "-"}</td>
+                    <td className="px-2 py-1.5 text-[#5B6470]">{byWord(r.startedBy) || "-"}</td>
                     <td className="px-2 py-1.5"><ResultBadge r={r} /></td>
-                    <td className="px-2 py-1.5 text-[12px] text-[#5B6470]">{r.reasonCode ? reasonLabel(asChk(bundle), r.reasonCode) : ""}</td>
+                    <td className="px-2 py-1.5 text-[12px] text-[#5B6470]" title={reasonTip(asChk(bundle), r.reasonCode, detail)}>{r.reasonCode ? reasonLabel(asChk(bundle), r.reasonCode) : ""}</td>
                     <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-[#5B6470]">{r.durationS !== null ? clockOrDash(r.durationS) : "-"}</td>
                   </tr>
                 ))}

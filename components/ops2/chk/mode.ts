@@ -6,7 +6,8 @@
 // 보는 사람 브라우저에 기억(localStorage — 막혀 있어도 동작).
 import { createContext, useCallback, useContext, useState } from "react";
 
-export type ModeInfo = { local: boolean; hmiKinds: readonly string[]; detail: boolean };
+export type ModeInfo = { local: boolean; hmiKinds: readonly string[]; detail: boolean;
+  lockPrefix?: string };      // W-19 CH1&2 — 잠긴 버튼 마우스 설명 앞말(없으면 kit 기본 '잠김 — ' — 챔버K 그대로)
 
 export const Chk2ModeContext = createContext<ModeInfo>({ local: false, hmiKinds: [], detail: false });
 

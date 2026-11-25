@@ -106,7 +106,7 @@ export function BlockParams({ def, b, onChange, disabled }: { def: BlockDef; b: 
       <div className="flex items-center gap-2 text-[12px]">
         <span className="w-36 shrink-0 text-[#5B6470]">이름표</span>
         <input disabled={disabled} value={b.label ?? ""} onChange={(e) => onChange({ ...b, label: e.target.value })}
-          className="w-56 rounded-md border border-[#D9DDE3] px-1.5 py-0.5 text-[12px]" placeholder="(비움 — 정의 이름)" />
+          className="w-56 rounded-md border border-[#D9DDE3] px-1.5 py-0.5 text-[12px]" placeholder="(비우면 정의 이름)" />
       </div>
       {!def.params.length && <p className="text-[12px] text-[#8A929D]">값 없음</p>}
     </div>
@@ -138,7 +138,7 @@ export default function Ch12BlockEditor({ blocks, env, onChange, lockUpto = 0, c
   const { detail } = useChk2Mode();
   const [open, setOpen] = useState<number | null>(null);
   if (!env) {
-    return <p className="rounded-lg bg-[#FFFAEB] p-2 text-[12px] text-[#B54708]">장비 블록 정의 판이 이 웹과 달라 웹 검사·편집을 하지 않습니다 — 장비가 검사합니다.</p>;
+    return <p className="rounded-lg bg-[#FFFAEB] p-2 text-[12px] text-[#B54708]">장비 블록 정의 판이 이 웹과 달라 웹 검사·편집은 하지 않고 장비가 검사합니다.</p>;
   }
   const r = checkBlocks(blocks, env);
   const errOf = (i: number) => r.errors.filter((m) => msgBlock(m) === i + 1);

@@ -11,6 +11,7 @@ import { FileText, Folder, FolderUp, RefreshCw } from "lucide-react";
 import { Card, type Ask } from "../chk/kit";
 import { KINDS, chArgs, hasKind, pickKind } from "./logic";
 import type { Ch12Bundle } from "./types";
+import { CARD, placeName } from "@/lib/ops2/ch12/terms";
 
 export type FileEntry = { name: string; path: string; full: string; kind: "dir" | "file"; size: number | null; mtime: number };
 export type Listing = { root: string; dir: string; parent: string | null; abs: string; entries: FileEntry[]; truncated?: boolean };
@@ -23,14 +24,14 @@ export function fileTargets(bundle: Ch12Bundle | null, f: FileEntry | null): { l
   const out: { label: string; kind: string; args: Record<string, unknown> }[] = [];
   const kl = pickKind(bundle, KINDS.load);
   for (const ch of ["ch1", "ch2"] as const) {
-    if (hasKind(bundle, KINDS.load)) out.push({ label: `${ch.toUpperCase()} 적재`, kind: kl, args: chArgs(bundle, kl, ch, { path: f.full }) });
+    if (hasKind(bundle, KINDS.load)) out.push({ label: `${placeName(bundle, ch)} 적재`, kind: kl, args: chArgs(bundle, kl, ch, { path: f.full }) });
   }
   if (f.name.toLowerCase().endsWith(".csv") && hasKind(bundle, ["PC_RECIPE_LOAD"])) {
-    out.push({ label: "PC 불러오기", kind: "PC_RECIPE_LOAD", args: { path: f.full } });
+    out.push({ label: `${placeName(bundle, "pc")} 불러오기`, kind: "PC_RECIPE_LOAD", args: { path: f.full } });
   }
   for (const ch of ["ch1", "ch2"] as const) {
     if (hasKind(bundle, ["PRESPUTTER_RECIPE"])) {
-      out.push({ label: `${ch.toUpperCase()} 프리스퍼터 레시피`, kind: "PRESPUTTER_RECIPE", args: chArgs(bundle, "PRESPUTTER_RECIPE", ch, { path: f.full }) });
+      out.push({ label: `${placeName(bundle, ch)} 프리스퍼터 레시피`, kind: "PRESPUTTER_RECIPE", args: chArgs(bundle, "PRESPUTTER_RECIPE", ch, { path: f.full }) });
     }
   }
   return out;
@@ -79,7 +80,7 @@ export function LocalFiles({ bundle, can, onAsk, fetcher, initial }: {
   const go = (dir: string) => { setBusy(true); void load(dir); };
   const targets = fileTargets(bundle, pick);
   return (
-    <Card title={<><FileText size={15} /> 레시피 파일(장비 폴더)</>}
+    <Card title={<><FileText size={15} /> {CARD.localFiles}</>}
       right={<button onClick={() => go(list?.dir ?? "")} disabled={busy} className="rounded p-1 text-[#8A929D] hover:bg-[#EEF0F3]" aria-label="새로 읽기"><RefreshCw size={13} /></button>}>
       <p className="mb-1 truncate font-mono text-[12px] text-[#5B6470]" title={list?.abs}>{list ? list.abs : "시작 폴더 읽는 중…"}</p>
       {err && <p className="mb-1 rounded-lg bg-[#FEE4E2] px-2 py-1 text-[12px] text-[#B42318]">{err}</p>}
