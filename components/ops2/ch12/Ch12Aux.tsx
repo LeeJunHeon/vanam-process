@@ -15,7 +15,7 @@ import { paramValue } from "../chk/logic";
 import { useChk2Mode } from "../chk/mode";
 import type { FeedItem } from "../chk/useChk2";
 import { fmtKst } from "@/lib/ops2/time";
-import { Big12, blockOf, viewDef } from "./Ch12Devices";
+import { Big12, RfUncmdChip, blockOf, rfShownState, viewDef } from "./Ch12Devices";
 import { NumField, TextField, TimeField } from "./Ch12Inputs";
 import { ch12LogLine } from "./Ch12Logs";
 import {
@@ -102,10 +102,11 @@ export function PcPanel({ bundle, st, lock, onAsk, recipes, getRecipe }: Common 
   const rowCh = row && (Number(row.use_ch) === 2 ? 2 : Number(row.use_ch) === 1 ? 1 : null);
   const pc = placeName(bundle, "pc");
   const rf = rf0 ? viewDef(rf0, detail, pc) : undefined;
+  const shown = rfShownState(st, "pc.rf", detail);                // W-21·22 B — RF 꺼짐이면 Forward·Reflected 0 W(평소 보기)
   return (
     <DevCard title={pc} sub={detail ? rf0?.desc : undefined}
-      chip={<><ProcChip bundle={bundle} st={st} ch="pc" /><QBadge link={st?.links?.["pc.rf"]} /></>}
-      big={rf && <Big12 f={rf.fields.find((f) => f.name === "fwd_w")} snap={snap} bundle={bundle} off={st?.links?.["pc.rf"]?.q === "off"} />}
+      chip={<><ProcChip bundle={bundle} st={st} ch="pc" /><RfUncmdChip snap={snap} block="pc.rf" /><QBadge link={st?.links?.["pc.rf"]} /></>}
+      big={rf && <Big12 f={rf.fields.find((f) => f.name === "fwd_w")} snap={shown?.snapshot} bundle={bundle} off={st?.links?.["pc.rf"]?.q === "off"} />}
       note={<>
         {!recipes && <p>{`레시피는 아래 '${CARD.localFiles}'에서 CSV 를 골라 불러옵니다.`}</p>}
         <p>입력 칸 순서: {PC_FIELDS.map((f) => f.label).join(" · ")}</p>
@@ -124,7 +125,7 @@ export function PcPanel({ bundle, st, lock, onAsk, recipes, getRecipe }: Common 
         <Btn lock={lock(kErr)} onClick={() => onAsk({ kind: kErr, label: commandName(bundle, kErr), args: {} })}>오류 해제</Btn>
       </>}>
       <ProcLine bundle={bundle} st={st} ch="pc" />
-      {rf0 ? <BlockRows bundle={bundle} st={st} name="pc.rf" strip={pc} skip={["fwd_w"]} /> : <Missing what={pc} />}
+      {rf0 ? <BlockRows bundle={bundle} st={shown} name="pc.rf" strip={pc} skip={["fwd_w", "uncommanded"]} /> : <Missing what={pc} />}
       {targets.length > 0 && (
         <div className="mt-1 border-t border-[#E3E6EA] pt-1">
           {targets.map((f) => <KV key={f.column} k={fieldName(bundle, f.column, pc)}><b className="tabular-nums">{short(snap?.[f.column])}</b> {f.unit}</KV>)}

@@ -20,7 +20,7 @@ import { reasonLabel, type AdjustState, type FieldDef, type StateData } from "..
 import type { FeedItem, SendResult, TrendPt } from "../chk/useChk2";
 import type { Notice } from "../chk/kit";
 import type { RecipeFull, RecipeItem } from "../chk/useRecipes";
-import { ChamberDevices, LoadlockBox12 } from "./Ch12Devices";
+import { ChamberDevices, LoadlockBox12, rfView } from "./Ch12Devices";
 import { RunAlerts } from "./Ch12Logs";
 import { CommonOps, PcPanel, PresputterPanel, RobotPanel, TspPanel, type LockFn } from "./Ch12Aux";
 import { hasRowContent, loadPayload, rowLine } from "./Ch12Recipes";
@@ -92,9 +92,12 @@ function KeyTile({ d, bundle, snap, ch }: { d: KeyDef; bundle: Ch12Bundle | null
   const { detail } = useChk2Mode();
   const name = valueName(bundle, d.value, ch);
   const f = fieldOf(bundle, d.value), tf = d.target ? fieldOf(bundle, d.target) ?? (bundle?.snapshot?.process ?? []).find((x) => x.column === d.target) : undefined;
-  const v = num(snap?.[d.value]), t = d.target ? num(snap?.[d.target]) : null;
+  // W-21·22 B — RF Power 가 꺼짐(명령 출력 아님·명령 없는 출력 아님)이면 평소 보기는 0 W(A/D 잡음을 보이지 않음)
+  const rfOff = !detail && d.value === "ch2.rf.fwd_w" && rfView(snap, "ch2.rf") === "off";
+  const raw = rfOff ? 0 : snap?.[d.value];
+  const v = num(raw), t = d.target ? num(snap?.[d.target]) : null;
   const unit = f?.unit ?? "";
-  const txt = f ? fieldText(f, snap?.[d.value], snap, bundle?.snapshot?.blocks) : { text: "", alt: null, warn: false };
+  const txt = f ? fieldText(f, raw, snap, bundle?.snapshot?.blocks) : { text: "", alt: null, warn: false };
   const max = scaleMax(t, v, null);
   return (
     <Tile className="p-3">
@@ -332,7 +335,7 @@ export function ChamberRun(p: ChamberProps) {
                 {typeof step.elapsedS === "number" && <span className="text-[#5B6470]"> · 단계 경과 {clockOrDash(step.elapsedS)}</span>}
               </p>
             )}
-            {/* 지금 동작(W-19 ④) — 장비 묶음 16 의 화면 이름(stepLabel — 'MV 열기'·'RF Pulse 켜기 120 W'). v1 스텝 문구(엔진 text)는 상세 보기에서만 */}
+            {/* 지금 동작(W-19 ④) — 장비 묶음 16 의 화면 이름(stepLabel — 'Main 가스 열기'·'RF Pulse 켜기 120 W'). v1 스텝 문구(엔진 text)는 상세 보기에서만 */}
             {running && stepLabel && (
               <p className={`truncate ${FS.body} text-[#1B1F24]`} title={fieldTipOf(bundle, `${ch}.proc.step_label`, detail)} data-step-label={ch}>
                 <span className="text-[#5B6470]">{fieldName(bundle, `${ch}.proc.step_label`, label)}</span> <b>{stepLabel}</b>

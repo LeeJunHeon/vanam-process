@@ -356,6 +356,29 @@ const chamberProps = (ch) => ({
         { web: titlesOf(web), loc: titlesOf(loc), grid, llOk, pcOk });
 }
 {
+  // W-21·22 B — RF 꺼짐 표시: cmd_on·uncommanded 둘 다 false 면 평소 보기 Forward·Reflected 0 W·'출력 꺼짐'(상세 보기는 읽은 값),
+  //   uncommanded 면 주의 칩 '명령 없는 출력' + 읽은 값, 옛 묶음(필드 없음)은 읽은 값 그대로. CH2 RF·Plasma Cleaning RF
+  const with_ = (o) => { const x = JSON.parse(JSON.stringify(st)); Object.assign(x.snapshot, o); return x; };
+  const off = with_({ "ch2.rf.cmd_on": false, "ch2.rf.uncommanded": false, "ch2.rf.fwd_w": 0.6, "ch2.rf.ref_w": 0.4, "ch2.rf.running": false,
+    "pc.rf.cmd_on": false, "pc.rf.uncommanded": false, "pc.rf.fwd_w": 0.7, "pc.rf.ref_w": 0.3 });
+  const unc = with_({ "ch2.rf.cmd_on": false, "ch2.rf.uncommanded": true, "ch2.rf.fwd_w": 30.2, "ch2.rf.ref_w": 1.1,
+    "pc.rf.cmd_on": false, "pc.rf.uncommanded": true, "pc.rf.fwd_w": 44.2, "pc.rf.ref_w": 0.0 });
+  const rfBox = (stx, detail) => textOf(render(U.PowerBox12, { ctx: { bundle, st: stx, lock: noLock, onAsk: noop }, ch: "ch2", kind: "rf" }, { detail }));
+  const pcBox = (stx) => textOf(render(U.PcPanel, { bundle, st: stx, lock: noLock, onAsk: noop, recipes: [], getRecipe: async () => null }));
+  const oldB = JSON.parse(JSON.stringify(bundle));
+  for (const bl of oldB.snapshot.blocks) bl.fields = bl.fields.filter((f) => f.name !== "cmd_on" && f.name !== "uncommanded");
+  const oldSt = JSON.parse(JSON.stringify(off));
+  for (const k of Object.keys(oldSt.snapshot)) if (/\.rf\.(cmd_on|uncommanded)$/.test(k)) delete oldSt.snapshot[k];
+  const oldT = textOf(render(U.PowerBox12, { ctx: { bundle: oldB, st: oldSt, lock: noLock, onAsk: noop }, ch: "ch2", kind: "rf" }));
+  const a = rfBox(off, false), d = rfBox(off, true), u = rfBox(unc, false), p0 = pcBox(off), pu = pcBox(unc);
+  const has = !!bundle.snapshot.blocks.find((b) => b.name === "ch2.rf")?.fields.some((f) => f.name === "cmd_on");
+  check("ui:rf-off-display — RF 꺼짐(cmd_on·uncommanded 둘 다 false)이면 평소 보기 Forward·Reflected 0.0 W·출력 꺼짐, 상세는 읽은 값, 명령 없는 출력은 주의 칩 + 읽은 값, 옛 묶음은 읽은 값",
+        has && a.includes("0.0 W") && !a.includes("0.6") && !a.includes("0.4") && a.includes("출력 꺼짐") && !a.includes("명령 없는 출력")
+        && d.includes("0.6") && u.includes("명령 없는 출력") && u.includes("30.2") && p0.includes("0.0 W") && !p0.includes("0.7")
+        && pu.includes("명령 없는 출력") && pu.includes("44.2") && oldT.includes("0.6"),
+        { has, a: a.slice(0, 160), u: u.slice(0, 120), old: oldT.slice(0, 120) });
+}
+{
   const html = render(U.PresputterPanel, { bundle, st, lock: noLock, onAsk: noop });
   const t = textOf(html), b = buttons(html);
   check("ui:presputter — 프리스퍼터 예약·예약 취소 칸(시각 HH:MM 고르기), 장비가 매일 예약을 잡음·형식 오류는 TIME_FORMAT 거부",
@@ -834,8 +857,10 @@ const chamberProps = (ch) => ({
   };
   const r12 = scan(U.TM.toTerms12, U.TM.TERM_RULES12, true);
   // 챔버12 규칙은 낱말 단위로만 맞아야 한다 — 앞에 한글이 붙거나 조사 아닌 한글이 뒤따르는 글('이벤트'·'게이트웨이'·'벤트밸브')
-  const probe = ["이벤트", "게이트웨이", "벤트밸브", "로드락스", "벤트를", "게이트가", "로드락에서는", "4핀 올림", "클램프"].map((t) => [t, U.TM.toTerms12(t)]);
-  const probeOk = probe.map(([t, r]) => `${t}→${r}`).join() === "이벤트→이벤트,게이트웨이→게이트웨이,벤트밸브→벤트밸브,로드락스→로드락스,벤트를→Vent를,게이트가→Gate가,로드락에서는→Loadlock에서는,4핀 올림→4Pin 올림,클램프→클램프";
+  // W-21·22 E — v1 '메인 밸브'(가스 Main 밸브 MAIN_n_GAS_SW)는 'Main 가스'로(챔버K 규칙의 'MV' 로 바꾸지 않음), 진공 MV 이름은 그대로
+  const probe = ["이벤트", "게이트웨이", "벤트밸브", "로드락스", "벤트를", "게이트가", "로드락에서는", "4핀 올림", "클램프", "메인 밸브 열기",
+    "[긴급] 메인 밸브 즉시 닫기", "CH1 MV"].map((t) => [t, U.TM.toTerms12(t)]);
+  const probeOk = probe.map(([t, r]) => `${t}→${r}`).join() === "이벤트→이벤트,게이트웨이→게이트웨이,벤트밸브→벤트밸브,로드락스→로드락스,벤트를→Vent를,게이트가→Gate가,로드락에서는→Loadlock에서는,4핀 올림→4Pin 올림,클램프→클램프,메인 밸브 열기→Main 가스 열기,[긴급] 메인 밸브 즉시 닫기→[긴급] Main 가스 즉시 닫기,CH1 MV→CH1 MV";
   check(`ui:terms-words — 낱말 바꾸기 toTerms12(글 ${texts.size}개 = 묶음 ${nBundle} + 기록 ${texts.size - nBundle}): (a) 한글+영문 붙음 0 · (b) 같은 낱말 잇달아 0 · ` +
         "(c) 한글이 줄어든 곳은 규칙 목록 바꾸기뿐 · 낱말 속 바꿈 없음(이벤트·게이트웨이 그대로, 벤트를·게이트가 는 바뀜)",
         texts.size > 1500 && r12.a.length === 0 && r12.b.length === 0 && r12.c.length === 0 && probeOk,
