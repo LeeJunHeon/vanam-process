@@ -75,6 +75,17 @@ export function kick(equipment: string): void {
   for (const c of devices.get(equipment)?.values() ?? []) void pump(c);
 }
 
+/** 웹 레시피가 바뀜(저장·지움, W-22 F) — 그 기준 장비를 쓰는 장비 연결마다 'event: recipes'. 장비는 /uplink/recipes 로 사본을 새로 받는다.
+ *  base = 기준 장비(CHK2) — CHK2·CHK2-SIM 처럼 같은 레시피를 쓰는 장비 모두. 보내지 못한 연결은 다음 연결 때 장비가 다시 받는다. */
+export function notifyRecipes(base: string, baseOf: (equipment: string) => string): number {
+  let n = 0;
+  for (const [eq, m] of devices) {
+    if (baseOf(eq) !== base) continue;
+    for (const c of m.values()) if (c.write("event: recipes\ndata: {}\n\n")) n += 1;
+  }
+  return n;
+}
+
 // ───────────── 브라우저 구독자(/api/ops2/[equipment]/v1/stream) ─────────────
 // ingest 가 커밋한 뒤 그 묶음의 envelope 을 장비별 구독자에게 보낸다. 덩어리는 한 번만 직렬화해 모두에게 같은 바이트.
 // 구독자는 send 가 false 면(끊김·쌓인 것이 상한을 넘은 느린 구독자) 닫는다 — 다시 붙으면 처음 묶음부터.

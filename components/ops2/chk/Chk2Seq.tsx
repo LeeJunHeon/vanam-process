@@ -46,7 +46,8 @@ function SeqItem({ b, bundle, st, current, lock, onAsk, revision, pauseMax }: {
   revision: number; pauseMax: number;
 }) {
   const done = DONE_STATUS.has(b.status);
-  const paused = b.status === "paused";
+  // 지금 단계의 멈춤은 1초 상태로(W-21 — st.run.paused·지금 단계 번호, 단계 목록 run.blocks 는 10초마다라 늦다)
+  const paused = current ? !!st?.run?.paused : b.status === "paused";
   const took = typeof b.start === "number" && typeof b.end === "number" ? b.end - b.start : null;
   const cur = typeof (st?.step?.remainS ?? st?.remainS) === "number" ? (st?.step?.remainS ?? st?.remainS) as number : null;
   const name = nameOf(bundle, b);
@@ -235,7 +236,7 @@ export default function Chk2Seq({ bundle, st, runBlocks, editBase, lock, onAsk, 
       ) : (
         <ol className="space-y-1.5">
           {blocks.map((b, i) => (
-            <SeqItem key={`${b.no}-${i}`} b={b} bundle={bundle} st={st} current={b.status === "running" || b.status === "paused"}
+            <SeqItem key={`${b.no}-${i}`} b={b} bundle={bundle} st={st} current={curNo !== null ? b.no === curNo : b.status === "running" || b.status === "paused"}
               lock={lock} onAsk={onAsk} revision={revision} pauseMax={pauseMax} />
           ))}
         </ol>

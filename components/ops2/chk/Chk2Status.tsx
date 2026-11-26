@@ -16,7 +16,7 @@ import { blockTarget, blockTitle, kindOf, remainOf, DONE_STATUS, OPEN_TYPES } fr
 import { paramValue } from "./logic";
 import { HEATER_OWNER, GAS_STATE, RUN_RESULT, stateLabel, type Bundle, type RunBlock, type RunRow, type StateData } from "./types";
 import { reasonText } from "./logView";
-import { byWord } from "@/lib/ops2/chk/plain";
+import { personWord } from "@/lib/ops2/chk/plain";
 import { MODE_NAME, fieldName, stepName } from "@/lib/ops2/chk/terms";
 
 // 지난 공정이 남긴 출력(state.left 키) → 이름은 묶음 스냅샷 필드에서(terms.fieldName — 옛 묶음이면 용어표 이름)
@@ -26,7 +26,7 @@ const LEFT_COLUMN: Record<string, string> = {
 };
 const LEFT_NAME: Record<string, string> = { heater: "히터", mfc_valve: "MFC 밸브" };
 const STOPPING_LABEL: Record<string, string> = {
-  stop: "STOP 정지 순서", row_end: "행 끝 정지", end_stop: "정상 끝 정지", all_stop: "ALL STOP", abort: "이상 중단 정지",
+  stop: "STOP 정지 순서", row_end: "행 끝 정지", end_stop: "공정 끝", all_stop: "ALL STOP", abort: "이상 중단 정지",
 };
 
 function leftText(bundle: Bundle | null, left: Record<string, unknown>): string {
@@ -207,7 +207,7 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
           {st?.paused && (
             <Issue level="warn">
               <b>일시정지 {fmtClock(paused?.pausedS ?? 0)}</b>{pauseMax > 0 ? ` / 한도 ${fmtClock(pauseMax)}` : " · 한도 없음"}
-              {paused?.by && ` · ${byWord(paused.by)}`}{pauseMax > 0 && " · 한도를 넘으면 정지 순서"}
+              {paused?.by && ` · ${personWord(paused.by, detail)}`}{pauseMax > 0 && " · 한도를 넘으면 정지 순서"}
             </Issue>
           )}
           {hr && (

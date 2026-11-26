@@ -82,7 +82,7 @@ export function blockRowLines(row: Row, rc: RowCheck | null): string[] {
   return [
     `블록 행 '${String(row.process_name || "") || "이름 없음"}' · 블록 ${n}개`,
     `쓰는 장비: ${usesText(rc?.uses ?? null)}`,
-    t ? `예상 시간: 대기·메인 합 ${fmtSec(t.sec)}${t.open ? ` + 끝을 모르는 대기 ${t.open}개(압력·파워·히터·조건)` : ""}` : "예상 시간: -",
+    t ? `예상 시간: 대기·증착 합 ${fmtSec(t.sec)}${t.open ? ` + 끝을 모르는 대기 ${t.open}개(압력·파워·히터·조건)` : ""}` : "예상 시간: -",
   ];
 }
 

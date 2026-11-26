@@ -13,7 +13,7 @@ import { fmtKst } from "@/lib/ops2/time";
 import { useChk2Mode } from "./mode";
 import { logLine, runTitle, blockName } from "./text";
 import { chkLines } from "./logView";
-import { byWord, isCode } from "@/lib/ops2/chk/plain";
+import { byWord, isCode, personWord } from "@/lib/ops2/chk/plain";
 import { reasonTip } from "@/lib/ops2/chk/terms";
 import { CMD_STATUS, RUN_RESULT, commandLabel, reasonLabel, type Bundle, type CmdRow, type RunRow } from "./types";
 import type { FeedItem } from "./useChk2";
@@ -54,15 +54,16 @@ export function EventFeed({ bundle, feed, fill = false, plain = false, commands 
       ) : (
         <div ref={box}
           onScroll={() => { const el = box.current; if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 24; }}
-          className={`${fill ? "h-[calc(100vh-260px)] min-h-[320px]" : "h-64"} space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 [overflow-anchor:none]`}>
+          className={`@container/log ${fill ? "h-[calc(100vh-260px)] min-h-[320px]" : "h-64"} space-y-1 overflow-y-auto rounded-lg bg-[#F5F6F8] p-2 [overflow-anchor:none]`}>
+          {/* W-21 — 목록 폭 560px 미만이면 한 줄을 두 줄로(시각·출처·이름 / 내용) — 내용 칸이 몇 글자 폭으로 눌리지 않게 */}
           {shown.map((r) => (
-            <p key={r.e.id} className={`flex gap-2 ${FS.small} leading-snug`} title={r.desc}>
+            <p key={r.e.id} className={`flex flex-wrap gap-x-2 @min-[560px]/log:flex-nowrap ${FS.small} leading-snug`} title={r.desc}>
               <span className="shrink-0 font-mono tabular-nums text-[#8A929D]">{fmtKst(r.e.ts)}</span>
-              {(r.source || plain) && <span className="w-24 shrink-0 truncate text-[#5B6470]">{r.source ?? ""}</span>}
+              {(r.source || plain) && <span className="shrink-0 text-[#5B6470] @min-[560px]/log:w-24 @min-[560px]/log:truncate">{r.source ?? ""}</span>}
               <span className={`flex shrink-0 items-center gap-1 font-semibold ${LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.level === "warn" ? <AlertTriangle size={11} /> : r.level === "error" || r.level === "critical" ? <AlertOctagon size={11} /> : null}{r.kind}
               </span>
-              <span className={`min-w-0 ${r.level === "info" ? "text-[#1B1F24]" : LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
+              <span className={`min-w-0 basis-full @min-[560px]/log:basis-auto ${r.level === "info" ? "text-[#1B1F24]" : LEVEL_TONE[r.level] ?? LEVEL_TONE.info}`}>
                 {r.text}
                 {detail && <span className="ml-1.5 font-mono text-[11px] text-[#8A929D]">{plain ? r.raw : r.code ?? r.raw}</span>}
               </span>
@@ -119,7 +120,7 @@ export function CommandLog({ bundle, commands, plain = false }: {
   bundle: Bundle | null; commands: CmdRow[];
   plain?: boolean;          // W-16 챔버K — 코드·영문(ON/OFF·local) 없이. 기본은 지금 동작
 }) {
-  const { detail } = useChk2Mode();
+  const { detail, chkWords } = useChk2Mode();
   return (
     <Card title="조작 기록">
       {!commands.length ? (
@@ -132,9 +133,9 @@ export function CommandLog({ bundle, commands, plain = false }: {
                 <span className="shrink-0 font-mono text-[#8A929D]">{fmtKst(c.requestedAt)}</span>
                 <span className="font-medium text-[#1B1F24]">{plain && isCode(c.label ?? commandLabel(bundle, c.kind)) ? "명령" : c.label ?? commandLabel(bundle, c.kind)}</span>
                 {(plain ? argPlain(bundle, c.kind, c.args) : argText(c.args)) && <span className="font-bold text-[#1B1F24]">{plain ? argPlain(bundle, c.kind, c.args) : argText(c.args)}</span>}
-                <span className="text-[#5B6470]">{plain ? byWord(c.requestedBy) : c.requestedBy}</span>
+                <span className="text-[#5B6470]">{plain ? (chkWords ? personWord(c.requestedBy) : byWord(c.requestedBy)) : c.requestedBy}</span>
                 {detail && <span className="text-[#8A929D]">{c.origin === "web" ? (c.sentVia ? `${c.sentVia} × ${c.sendCount}` : "") : c.origin}</span>}
-                {!detail && c.origin !== "web" && !(plain && byWord(c.requestedBy) === "노트북") && <span className="text-[#8A929D]">노트북</span>}
+                {!detail && c.origin !== "web" && !(plain && ["노트북", "LOCAL"].includes(chkWords ? personWord(c.requestedBy) : byWord(c.requestedBy))) && <span className="text-[#8A929D]">{chkWords ? "LOCAL" : "노트북"}</span>}
                 <CmdStatusTag status={c.status} className="ml-auto shrink-0" />
               </p>
               {c.reasonCode && (
@@ -163,7 +164,7 @@ export function RunList({ bundle, runs, plain = false, idInDetail = false }: {
   plain?: boolean;          // W-16 챔버K — 시작한 사람 local → 노트북, 이름 없는 사유 코드는 숨김(상세에서만). 기본은 지금 동작
   idInDetail?: boolean;     // W-19 CH1&2 — 이름 칸 마우스 설명의 run id 를 상세 보기에서만(기본은 지금 동작 — 챔버K 그대로)
 }) {
-  const { detail } = useChk2Mode();
+  const { detail, chkWords } = useChk2Mode();
   return (
     <Card title={plain ? "공정 이력" : "런 이력"}>
       {!runs.length ? (
@@ -184,7 +185,7 @@ export function RunList({ bundle, runs, plain = false, idInDetail = false }: {
                 <td className="py-2 pr-3 whitespace-nowrap tabular-nums">{fmtKst(r.startedAt)}</td>
                 <td className="py-2 pr-3">
                   <span className="block max-w-[260px] truncate" title={idInDetail && !detail ? undefined : `${r.name ?? ""} · ${r.runId}`}>{runTitle(r)}</span>
-                  {r.startedBy && <span className={`${FS.small} text-[#5B6470]`}>{plain ? byWord(r.startedBy) : r.startedBy}</span>}
+                  {r.startedBy && <span className={`${FS.small} text-[#5B6470]`}>{plain ? (chkWords ? personWord(r.startedBy) : byWord(r.startedBy)) : r.startedBy}</span>}
                   {detail && <span className={`block font-mono ${FS.small} text-[#8A929D]`}>{r.name} · {r.runId}</span>}
                 </td>
                 <td className="py-2 pr-3">

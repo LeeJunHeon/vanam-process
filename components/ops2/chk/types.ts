@@ -84,6 +84,10 @@ export type Bundle = {
   adjust?: { command?: string; items?: AdjustItemDef[]; settleParam?: string };
   // 묶음 18(5-20 ③) — 수동 조작(블록을 하나씩 실행하는 공정). 없으면(옛 묶음) 수동 조작 탭을 숨긴다
   manual?: { commands?: string[]; blockTypes?: string[]; waitState?: string; label?: string; desc?: string };
+  // 묶음 23(W-22) — 컨트롤러 값 바꾸기 범위. 없으면(옛 묶음) 컨트롤러 값 구역을 그리지 않는다
+  devParams?: { read?: string; write?: string;
+                writeItems?: { item: string; label: string; nos: number[]; unit: string; min: number | null; max: number | null; int: boolean }[];
+                spTypes?: Record<string, string>; autoModes?: Record<string, string>; limitLabels?: Record<string, string> };
 };
 
 export type Link = { q?: string | null; age?: number | null };
@@ -145,6 +149,35 @@ export type StateData = {
   stopping?: string | null;
   uplink?: { enabled?: boolean; connected?: boolean; lastOkAt?: string | null; lastError?: string | null;
              queued?: number; spoolBytes?: number; dropped?: number } | null;   // 장비가 본 웹 연결
+  devParams?: DevParams | null;                  // 묶음 23(W-22) — 컨트롤러 값. 묶음 22 장비는 없음
+  targets?: MountedTargets | null;               // 묶음 23 — 재고관리 장착 타겟(읽기 없으면 null)
+  recipeCopy?: { syncedAt?: string | null; count?: number; error?: string | null } | null;   // 묶음 23 — 웹 레시피 사본
+};
+
+/** 장착 타겟 하나(재고관리 chamber-slots) */
+export type MountedTarget = { name: string; unitId?: string | null; barcode?: string | null; material?: string | null;
+  purity?: string | null; loadedAt?: string | null; location?: string | null; text: string };
+export type MountedTargets = { g1?: MountedTarget | null; g2?: MountedTarget | null; readAt?: string | null; error?: string | null;
+  host?: string | null };
+
+/** 컨트롤러 값(묶음 23, state.devParams) */
+export type DevParamsSp = { no: number; pct: number | null; mtorr: number | null; type: number | null; typeText: string | null;
+  leadS: number | null; gainPct: number | null };
+export type DevParamsMfcValues = {
+  sp: DevParamsSp[]; autoMode: number | null; autoModeText: string | null; valveType: number | null; direction: number | null;
+  rangeCode: number | null; rangeText: string | null; unitCode: number | null; unitText: string | null; fsTorr: number | null;
+  limits: { no: number; label: string; pct: number | null }[]; flowFs: (number | null)[]; flowUnits: (string | null)[];
+  status: string | null; version: string | null; raw?: Record<string, string | null>; by?: string | null; why?: string | null;
+  missing?: string[];
+};
+export type DevParamsWrite = { item: string; no: number | null; label: string; target: number; old: number | null; new: number | null;
+  ok: boolean; reason: string | null; by: string | null; at: string; cmd?: string; readback?: string | null };
+export type DevParams = {
+  mfc?: { state?: string; progress?: { done: number; total: number } | null; writing?: boolean; readAt?: string | null;
+          values?: DevParamsMfcValues | null; write?: DevParamsWrite | null } | null;
+  ig?: { readAt?: string | null; autoFilamentState?: number | null; spProtectOff?: boolean | null; autoFilament?: boolean | null;
+         autoFilamentSpTorr?: number | null; ionSp1Torr?: number | null; ionSp2Torr?: number | null; gasFactor?: number | null;
+         sensitivity?: number | null; gaugeASpTorr?: number | null; gaugeBSpTorr?: number | null; raw?: Record<string, string> } | null;
 };
 
 export type EventData = {

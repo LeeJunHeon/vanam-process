@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { ops2Db } from "@/lib/ops2/db";
+import { notifyRecipes } from "@/lib/ops2/hub";
+import { baseEquipment } from "@/lib/ops2/perm";
+import { isCh12 } from "@/lib/ops2/ch12/ids";
 import { checkSummary, forbidden, fullItem, isUniqueViolation, listItem, readRecipeBody, recipeContext } from "@/lib/ops2/recipes";
 import type { Prisma } from "@/app/generated/prisma/client";
 
@@ -48,6 +51,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
         bundleVersion: ctx.bundleVersion, createdBy: ctx.who, createdAt: now, updatedBy: ctx.who, updatedAt: now,
       },
     });
+    if (!isCh12(equipment)) notifyRecipes(ctx.base, baseEquipment);   // 챔버K 장비가 웹 레시피 사본을 새로 받게(W-22 F)
     return NextResponse.json({ recipe: fullItem(r, ctx.env), check: checkSummary(kind, r.rows, r.gas, ctx.env) }, { status: 201 });
   } catch (e) {
     if (isUniqueViolation(e)) return NextResponse.json({ error: "name_taken", detail: "같은 이름의 레시피가 있음" }, { status: 409 });

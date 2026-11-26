@@ -4,7 +4,7 @@
 // 기간 15분·1시간 = stream state 를 브라우저에 쌓은 것(useChk2 trend — 화면을 연 뒤부터), 공정 전체 = 그 run 의 1분 요약(평균).
 // 글자는 그래프 안에 두지 않는다(Chk2SummaryChart 규칙): 마지막 값은 오른쪽 띠에 지시선으로, 눈금은 왼쪽·아래 띠, 범례는 위 띠.
 // 한 그래프 = 단위 하나(두 축 그래프는 쓰지 않는다). 색은 정해진 순서(값과 그 목표는 같은 색 — 목표는 점선).
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FS, FSPX, Card, Empty, Tabs } from "./kit";
 import type { TrendPt } from "./useChk2";
 import type { SummaryRow } from "./Chk2SummaryChart";
@@ -107,11 +107,28 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend =
   const step = niceStep(hi, 4);
   hi = Math.ceil(hi / step) * step;
   const pw = Math.max(40, width - LEFT - RIGHT), ph = H - TOP - BOTTOM;
+  // 범례 자리(W-21) — fitLegend 이면 그림 폭을 넘는 범례는 다음 줄로(위 띠를 줄 수만큼 늘림, 글이 오른쪽 지금 값 띠·그림과 겹치지 않게)
+  const legendPos: { x: number; row: number }[] = [];
+  {
+    let lx = 0, row = 0;
+    lines.forEach((l, k) => {
+      // 글 폭 어림 — fitLegend(챔버K)는 넉넉히(12px 글: 한글 12·그 밖 7.4), 기본은 지금 값(CH1&2 위치 그대로)
+      const w = 18 + [...l.label].reduce((n, c) => n + (c.charCodeAt(0) > 0x2000 ? (fitLegend ? 12 : 10) : (fitLegend ? 7.4 : 6)), 0);
+      if (k === 0) lx = legendX;
+      if (fitLegend && lx + w > width - 4 && lx > LEFT) { row += 1; lx = LEFT; }
+      legendPos.push({ x: lx, row });
+      lx += w + 10;
+    });
+  }
+  const extra = fitLegend ? Math.max(0, ...legendPos.map((p) => p.row)) * 16 : 0;
+  const top = TOP + extra;
   const x = (t: number) => LEFT + ((t - t0) / Math.max(1, t1 - t0)) * pw;
-  const y = (v: number) => TOP + ph - (Math.max(0, v) / hi) * ph;
+  const y = (v: number) => top + ph - (Math.max(0, v) / hi) * ph;
   const yTicks: number[] = [];
   for (let v = 0; v <= hi + step / 2; v += step) yTicks.push(v);
-  const tStep = TIME_STEPS.find((s) => (t1 - t0) / s <= 6) ?? TIME_STEPS[TIME_STEPS.length - 1];
+  // 시간 눈금 수 — edgeTicks(챔버K)는 그림 폭에 맞춰(글 하나 약 60px, 좁은 화면에서 시간 글자끼리 겹치지 않게), 기본은 6개까지
+  const maxTicks = edgeTicks ? Math.max(2, Math.min(6, Math.floor(pw / 60))) : 6;
+  const tStep = TIME_STEPS.find((s) => (t1 - t0) / s <= maxTicks) ?? TIME_STEPS[TIME_STEPS.length - 1];
   const xTicks: number[] = [];
   for (let t = Math.ceil(t0 / tStep) * tStep; t <= t1; t += tStep) xTicks.push(t);
   // 선 — 빈 값·90 s 넘는 틈에서 끊는다. 목표(점선)는 계단
@@ -127,7 +144,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend =
   };
   const lastPts = lines.map((l) => [...l.pts].reverse().find((p) => p.v !== null && p.t >= t0 && p.t <= t1) ?? null);
   const lay = layoutTrendLabels(lastPts.map((p, k) => (p ? { y: y(p.v as number), text: fmt(p.v as number), group: lines[k].color, dashed: !!lines[k].dashed } : null)),
-    TOP + 2, TOP + ph, H);
+    top + 2, top + ph, H + extra);
   const labOf = new Map<number, TrendLabel>();
   for (const l of lay.labels) for (const m of l.members) labOf.set(m, l);
   const near = (l: Line, t: number) => {
@@ -144,31 +161,27 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend =
         setHover(px < LEFT || px > LEFT + pw ? null : t0 + ((px - LEFT) / pw) * (t1 - t0));
       }}>
       <text ref={titleRef} x={LEFT} y={12} fontSize={FSPX.body} fontWeight={700} fill="#1B1F24">{title}<tspan fontWeight={400} fill="#5B6470"> ({unit})</tspan></text>
-      {lines.reduce<{ x: number; el: ReactElement[] }>((acc, l) => {
-        const w = 18 + [...l.label].reduce((n, c) => n + (c.charCodeAt(0) > 0x2000 ? 10 : 6), 0);
-        acc.el.push(
-          <g key={l.key} transform={`translate(${acc.x},4)`}>
-            <line x1={0} x2={12} y1={5} y2={5} stroke={l.color} strokeWidth={2} strokeDasharray={l.dashed ? "3 2" : undefined} />
-            <text x={16} y={9} fontSize={FSPX.small} fill="#5B6470">{l.label}</text>
-          </g>);
-        acc.x += w + 10;
-        return acc;
-      }, { x: legendX, el: [] }).el}
+      {lines.map((l, k) => (
+        <g key={l.key} transform={`translate(${legendPos[k].x},${4 + legendPos[k].row * 16})`}>
+          <line x1={0} x2={12} y1={5} y2={5} stroke={l.color} strokeWidth={2} strokeDasharray={l.dashed ? "3 2" : undefined} />
+          <text x={16} y={9} fontSize={FSPX.small} fill="#5B6470">{l.label}</text>
+        </g>
+      ))}
       {yTicks.map((v) => (
         <g key={v}>
           <line x1={LEFT} x2={LEFT + pw} y1={y(v)} y2={y(v)} stroke="#E3E6EA" />
           <text x={LEFT - 6} y={y(v) + 3.5} fontSize={FSPX.small} fill="#5B6470" textAnchor="end">{fmt(v)}</text>
         </g>
       ))}
-      <line x1={LEFT} x2={LEFT + pw} y1={TOP + ph} y2={TOP + ph} stroke="#C9CED6" />
+      <line x1={LEFT} x2={LEFT + pw} y1={top + ph} y2={top + ph} stroke="#C9CED6" />
       {xTicks.map((t) => {
         // 시간 글자 반 폭(“17:35” — 12px 숫자 5자 ≈ 30px)보다 끝에 가까우면 안쪽으로 정렬(edgeTicks 일 때만)
         const half = 17, xt = x(t);
         const anchor = !edgeTicks ? "middle" : xt - half < LEFT ? "start" : xt + half > LEFT + pw ? "end" : "middle";
         return (
           <g key={t}>
-            <line x1={xt} x2={xt} y1={TOP + ph} y2={TOP + ph + 4} stroke="#C9CED6" />
-            <text x={edgeTicks && anchor === "start" ? Math.max(xt, LEFT) : xt} y={TOP + ph + 15} fontSize={FSPX.small} fill="#5B6470" textAnchor={anchor}>{hm(t)}</text>
+            <line x1={xt} x2={xt} y1={top + ph} y2={top + ph + 4} stroke="#C9CED6" />
+            <text x={edgeTicks && anchor === "start" ? Math.max(xt, LEFT) : xt} y={top + ph + 15} fontSize={FSPX.small} fill="#5B6470" textAnchor={anchor}>{hm(t)}</text>
           </g>
         );
       })}
@@ -194,11 +207,11 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend =
       })}
       {hover !== null && (
         <g>
-          <line x1={x(hover)} x2={x(hover)} y1={TOP} y2={TOP + ph} stroke="#5B6470" strokeDasharray="2 2" />
+          <line x1={x(hover)} x2={x(hover)} y1={top} y2={top + ph} stroke="#5B6470" strokeDasharray="2 2" />
           <title>{`${hm(hover)} — ${lines.map((l) => `${l.label} ${near(l, hover) ?? "—"}`).join(" · ")}`}</title>
         </g>
       )}
-      <rect x={LEFT} y={TOP} width={pw} height={ph} fill="transparent" />
+      <rect x={LEFT} y={top} width={pw} height={ph} fill="transparent" />
     </svg>
   );
 }

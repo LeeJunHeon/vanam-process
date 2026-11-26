@@ -20,12 +20,15 @@ import { argRange, capRange, checkInput, rangeText, type Range } from "./logic";
 import { enumLabel, fieldText } from "./text";
 import { GAS_STATE, HEATER_OWNER, fmtValue, type BlockDef, type Bundle, type FieldDef, type StateData } from "./types";
 import { useChk2Mode } from "./mode";
+import type { DevKey } from "./Chk2SettingsDrawer";
 import { kindOf } from "./runview";
 import type { LockFn } from "./Chk2Status";
+import { rfChip, rfState } from "@/lib/ops2/chk/rf";
 
 type Snap = Record<string, unknown> | undefined;
 type Ctx = { bundle: Bundle | null; st: StateData | null; snap: Snap; lock: LockFn; onAsk: (a: Ask) => void;
-  onManual?: () => void; onConfig?: () => void };          // 탭 이동(W-20) — 없으면 그 버튼을 그리지 않는다
+  onManual?: () => void; onConfig?: () => void;           // 탭 이동(W-20) — 없으면 그 버튼을 그리지 않는다
+  onSettings?: (dev: DevKey) => void };                    // W-21 머리 [⚙ 설정] → 장비 설정 서랍(없으면 그리지 않음)
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 /** 블록 정의 찾기 */
@@ -34,9 +37,12 @@ const fieldOf = (d: BlockDef | undefined, name: string) => d?.fields.find((f) =>
 
 /** 박스 틀(W-20) — 머리(제목 + 칩) → 모델명 → 큰 값 또는 요약 한 줄 → 라벨-값 줄 → 상태 목록 → 안내 → 맨 아래 버튼 줄.
  *  박스는 격자 줄 높이를 채우고 버튼 줄은 맨 아래(위에 구분선). 꺼진 장비는 칩 '사용하지 않음' · 큰 값 자리 빈 값 · 안내 한 줄 · [설정 열기] */
-export function DevCard({ title, sub, chip, big, summary, children, states, actions, actionsEnd, note, off, onConfig }: {
+export function DevCard({ title, sub, chip, big, summary, children, states, actions, actionsEnd, note, off, onConfig, onSettings, offNote, footNote }: {
   title: ReactNode; sub?: ReactNode; chip?: ReactNode; big?: ReactNode; summary?: ReactNode; children?: ReactNode; states?: ReactNode;
   actions?: ReactNode; actionsEnd?: ReactNode; note?: ReactNode; off?: boolean; onConfig?: () => void;
+  footNote?: ReactNode;             // W-21 챔버K 수동 조작 — 버튼 줄 아래 한 줄(잠긴 이유). 기본: 없음
+  offNote?: string;                 // W-21 챔버K 수동 조작 — 꺼진 장비 안내 글(기본: 지금 글)
+  onSettings?: () => void;          // W-21 챔버K — 머리 오른쪽 [⚙ 설정](장비 설정 서랍). 기본: 없음(CH1&2 그대로)
 }) {
   const left = off ? (onConfig ? <Btn onClick={onConfig}><Settings size={14} /> 설정 열기</Btn> : null) : actions;
   const right = off ? null : actionsEnd;
@@ -44,12 +50,18 @@ export function DevCard({ title, sub, chip, big, summary, children, states, acti
     <Card className="flex flex-col !p-4">
       <div className="flex items-start justify-between gap-2">
         <h3 className={`min-w-0 truncate font-bold text-[#1B1F24] ${FS.card}`}>{title}</h3>
-        <span className="flex shrink-0 flex-wrap justify-end gap-1">{off ? <Chip>사용하지 않음</Chip> : chip}</span>
+        <span className="flex shrink-0 flex-wrap items-center justify-end gap-1">{off ? <Chip>사용하지 않음</Chip> : chip}
+          {onSettings && (
+            <button type="button" onClick={onSettings} title="장비 설정 보기" aria-label={`${typeof title === "string" ? title : "장비"} 설정 보기`}
+              className={`inline-flex h-8 items-center gap-1 rounded-[8px] px-1.5 ${FS.small} font-semibold text-[#1D4ED8] hover:bg-[#EEF4FF]`}>
+              <Settings size={13} /> 설정
+            </button>
+          )}</span>
       </div>
       {sub && <p className={`truncate text-[#5B6470] ${FS.small}`}>{sub}</p>}
       {big && <div className="mt-2">{big}</div>}
       {summary && !off && <p className={`mt-2 truncate text-[#1B1F24] ${FS.body}`}>{summary}</p>}
-      {off ? <p className={`mt-2 leading-snug text-[#5B6470] ${FS.small}`}>장비 설정에서 사용하도록 바꾸면 값이 표시됩니다.</p> : <>
+      {off ? <p className={`mt-2 leading-snug text-[#5B6470] ${FS.small}`}>{offNote ?? "장비 설정에서 사용하도록 바꾸면 값이 표시됩니다."}</p> : <>
         {children && <div className="mt-2 min-w-0">{children}</div>}
         {states && <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1">{states}</div>}
         {note && <div className={`mt-2 space-y-1 leading-snug text-[#5B6470] ${FS.small}`}>{note}</div>}
@@ -58,8 +70,9 @@ export function DevCard({ title, sub, chip, big, summary, children, states, acti
         <div className="mt-auto pt-3">
           <div className="flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-3">
             {left}
-            {right && <span className="ml-auto flex flex-wrap justify-end gap-2">{right}</span>}
+            {right && <span className="ml-auto flex flex-wrap items-center justify-end gap-2">{right}</span>}
           </div>
+          {footNote && !off && <div className="mt-1.5">{footNote}</div>}
         </div>
       )}
     </Card>
@@ -122,13 +135,13 @@ function DetailRows({ d, snap, bundle, shown, hide }: {
 const WebOnly = ({ what }: { what: string }) => <p className={`${FS.small} text-[#5B6470]`}>{what}은 웹에서만</p>;
 
 // ───────────── 진공 ─────────────
-export function VacuumCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => void }) {
+export function VacuumCard({ bundle, snap, st, onHmi, onSettings }: Ctx & { onHmi: () => void }) {
   const d = blockOf(bundle, "plc");
   const { detail } = useChk2Mode();
   const pumps = ["rotary", "turbo"].filter((k) => snap?.[`plc.${k}`] === true).map((k) => fieldName(bundle, `plc.${k}`));
   const unknown = snap?.["plc.rotary"] === undefined;
   return (
-    <DevCard title={CARD.vacuum} sub={blockSub(bundle, "plc", detail)} chip={<QBadge link={st?.links?.plc} />}
+    <DevCard title={CARD.vacuum} sub={blockSub(bundle, "plc", detail)} chip={<QBadge link={st?.links?.plc} />} onSettings={onSettings && (() => onSettings("vacuum"))}
       summary={unknown ? "—" : pumps.length ? `${pumps.join("·")} 운전` : "펌프 정지"}
       states={<>
         {["rotary", "turbo", "mv", "fv", "rv", "vent"].map((n) => {
@@ -148,7 +161,7 @@ export function VacuumCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => voi
 const VALVE_WHY: Record<string, string> = { alternate: "2초마다 번갈아 읽음", yielded: "명령 처리로 건너뜀", no_reply: "응답 없음" };
 const VALVE_STALE = "명령 처리로 건너뜀";
 const ALT_NOTE = "2초마다 번갈아 읽음";
-export function GasCard({ bundle, snap, st, onManual, onConfig }: Ctx) {
+export function GasCard({ bundle, snap, st, onManual, onConfig, onSettings }: Ctx) {
   const { detail } = useChk2Mode();
   const d = blockOf(bundle, "mfc");
   const off = st?.links?.mfc?.q === "off";
@@ -156,6 +169,7 @@ export function GasCard({ bundle, snap, st, onManual, onConfig }: Ctx) {
   const spSelF = fieldOf(d, "sp_sel_mtorr");      // 사용 중 설정점 — 1~5 는 "SP5" 처럼
   return (
     <DevCard title={CARD.gas} sub={blockSub(bundle, "mfc", detail)} chip={<QBadge link={st?.links?.mfc} />} off={off} onConfig={onConfig}
+      onSettings={onSettings && (() => onSettings("gas"))}
       big={<Big f={fieldOf(d, "pressure_mtorr")} snap={snap} bundle={bundle} off={off} />} actions={<ManualBtn onManual={onManual} />}>
       <PairRow k="Ar 현재 / 목표" a={snap?.["mfc.ar_sccm"]} b={snap?.["mfc.ar_set"]} unit="sccm" off={off} />
       <PairRow k="O₂ 현재 / 목표" a={snap?.["mfc.o2_sccm"]} b={snap?.["mfc.o2_set"]} unit="sccm" off={off} />
@@ -267,7 +281,7 @@ function HeaterSvModal({ bundle, snap, onClose, onAsk }: { bundle: Bundle | null
   );
 }
 
-export function HeaterCard({ bundle, snap, st, lock, onAsk, onConfig }: Ctx) {
+export function HeaterCard({ bundle, snap, st, lock, onAsk, onConfig, onSettings }: Ctx) {
   const m = useChk2Mode();
   const [modal, setModal] = useState<"on" | "sv" | null>(null);
   const d = blockOf(bundle, "heater");
@@ -308,6 +322,7 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk, onConfig }: Ctx) {
   return (
     <>
       <DevCard title={d?.label ?? CARD.heater} sub={blockSub(bundle, "heater", m.detail)} off={off} onConfig={onConfig}
+        onSettings={onSettings && (() => onSettings("heater"))}
         chip={<>{issues.length ? <Chip tone="alarm">이상</Chip> : <Chip tone={run ? "dark" : "neutral"}>{run ? "운전" : "정지"}</Chip>}
           {st?.links?.heater?.q && st.links.heater.q !== "ok" && <QBadge link={st.links.heater} />}</>}
         big={
@@ -332,7 +347,7 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk, onConfig }: Ctx) {
           {full && <Btn lock={lock("HEATER_SV")} onClick={() => setModal("sv")}>목표 바꾸기…</Btn>}
           {full && <Btn lock={lock("HEATER_OFF")} onClick={() => onAsk({ kind: "HEATER_OFF", label: "히터 끄기" })}>끄기</Btn>}
           {fault && full && (
-            <Btn kind="danger" lock={lock("HEATER_RESET")}
+            <Btn lock={lock("HEATER_RESET")}
               onClick={() => onAsk({ kind: "HEATER_RESET", label: "히터 이상 리셋", detail: "원인을 먼저 확인하세요", danger: true })}>이상 리셋</Btn>
           )}
           {gas && gas !== "IDLE" && !m.webOnly("HEATER_GAS_RELEASE") && (
@@ -395,7 +410,7 @@ export function HeaterCard({ bundle, snap, st, lock, onAsk, onConfig }: Ctx) {
 }
 
 // ───────────── Ion Gauge ─────────────
-export function IgCard({ bundle, snap, st, lock, onAsk, onConfig }: Ctx) {
+export function IgCard({ bundle, snap, st, lock, onAsk, onConfig, onSettings }: Ctx) {
   const m = useChk2Mode();
   const d = blockOf(bundle, "ig");
   const off = st?.links?.ig?.q === "off";
@@ -404,7 +419,7 @@ export function IgCard({ bundle, snap, st, lock, onAsk, onConfig }: Ctx) {
   const busy = pk === "active" || pk === "stopping";       // 공정 중에는 공정이 Filament 를 다룬다(장비도 받지 않음)
   return (
     <DevCard title={d?.label && !/이온 게이지/.test(d.label) ? d.label : CARD.ig} sub={blockSub(bundle, "ig", m.detail)} chip={<QBadge link={st?.links?.ig} />} off={off}
-      onConfig={onConfig} big={<Big f={fieldOf(d, "ion_torr")} snap={snap} bundle={bundle} off={off} label="압력" />}
+      onConfig={onConfig} onSettings={onSettings && (() => onSettings("ig"))} big={<Big f={fieldOf(d, "ion_torr")} snap={snap} bundle={bundle} off={off} label="압력" />}
       note={m.webOnly("IG_FILAMENT") ? <WebOnly what="Filament 조작" /> : undefined}
       actions={m.webOnly("IG_FILAMENT") ? null : (
         <Btn lock={off ? "장비 설정에서 꺼져 있습니다." : busy ? "공정 중에는 조작할 수 없습니다." : lock("IG_FILAMENT")}
@@ -426,20 +441,33 @@ export function IgCard({ bundle, snap, st, lock, onAsk, onConfig }: Ctx) {
 }
 
 // ───────────── 파워(DC Power · RF Power · RF Pulse) ─────────────
-export function PowerCard({ name, bundle, snap, st, onManual, onConfig }: Ctx & { name: "dc" | "rf" | "rfp" }) {
+export function PowerCard({ name, bundle, snap, st, onManual, onConfig, onSettings }: Ctx & { name: "dc" | "rf" | "rfp" }) {
   const { detail } = useChk2Mode();
   const d = blockOf(bundle, name);
   const off = st?.links?.[name]?.q === "off";
   const bigName = name === "dc" ? "p" : "fwd_w";
   const rows = name === "dc" ? ["v", "i", "set_w"] : name === "rf" ? ["ref_w", "set_w"] : ["ref_w", "set_w", "freq_hz", "duty_pct"];
-  // RF 출력 켜짐은 묶음 19 의 rf.out_on(D40 > 0 또는 순방향 ≥ 5 W — 장비 5-21 ②), 옛 묶음은 칩 없이 지금처럼
-  const bools = name === "dc" ? ["out"] : name === "rfp" ? ["out_on", "itl_open"] : fieldOf(d, "out_on") ? ["out_on"] : [];
+  // RF 출력 칩 — 묶음 23 은 명령 출력(rf.cmd_on)·명령 없는 출력(rf.uncommanded) 규칙(lib/ops2/chk/rf), 묶음 19~22 는 rf.out_on,
+  // 그 전 묶음은 칩 없이 지금처럼
+  const rfc = name === "rf" ? rfChip(snap) : null;
+  const bools = name === "dc" ? ["out"] : name === "rfp" ? ["out_on", "itl_open"]
+    : rfc ? ["cmd_on", "uncommanded", "out_on"] : fieldOf(d, "out_on") ? ["out_on"] : [];
+  const chip = rfc ? <Chip tone={rfc.tone === "warn" ? "warn" : rfc.tone}>{rfc.text}</Chip>
+    : bools[0] && <Chip tone={snap?.[`${name}.${bools[0]}`] === true ? "dark" : "neutral"}>{snap?.[`${name}.${bools[0]}`] === true ? "출력 켜짐" : "출력 꺼짐"}</Chip>;
+  const raw = name === "rf" && rfState(snap) === "off" ? [snap?.["rf.fwd_w_raw"], snap?.["rf.ref_w_raw"]] : null;
   return (
     <DevCard title={d?.label ?? name} sub={blockSub(bundle, name, detail)} off={off} onConfig={onConfig} actions={<ManualBtn onManual={onManual} />}
-      chip={<>{bools[0] && !off && <Chip tone={snap?.[`${name}.${bools[0]}`] === true ? "dark" : "neutral"}>{snap?.[`${name}.${bools[0]}`] === true ? "출력 켜짐" : "출력 꺼짐"}</Chip>}
-        <QBadge link={st?.links?.[name]} /></>}
+      onSettings={onSettings && (() => onSettings(name))}
+      chip={<>{!off && chip}<QBadge link={st?.links?.[name]} /></>}
+      note={name === "rf" && rfc?.tone === "warn" && !off
+        ? <Issue level="warn">RF 가 명령 없이 출력 중입니다. RF 전원 앞면(LOCAL)에서 켰는지 확인하세요.</Issue> : undefined}
       big={<Big f={fieldOf(d, bigName)} snap={snap} bundle={bundle} off={off} />}>
       {rows.map((n) => <Row key={n} f={fieldOf(d, n)} snap={snap} bundle={bundle} off={off} />)}
+      {detail && raw && !off && (
+        <p className={`${FS.small} text-[#5B6470]`} title="명령이 없어 화면에는 0 으로 보입니다. 기록에는 읽은 값이 남습니다.">
+          읽은 값 Forward {fmtValue(raw[0], ".1f") || "—"} W · Reflected {fmtValue(raw[1], ".1f") || "—"} W
+        </p>
+      )}
       {detail && name === "rfp" && !off && snap?.["rfp.read_plan"] === "alternate" && (
         <p className={`${FS.small} text-[#5B6470]`} title="읽기가 느려 Forward 와 상태를 2초마다 번갈아 읽습니다.">
           Forward·상태는 {ALT_NOTE}
@@ -457,14 +485,14 @@ export function PowerCard({ name, bundle, snap, st, onManual, onConfig }: Ctx & 
 }
 
 // ───────────── 셔터·인터락 ─────────────
-export function ShutterCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => void }) {
+export function ShutterCard({ bundle, snap, st, onHmi, onSettings }: Ctx & { onHmi: () => void }) {
   const { detail } = useChk2Mode();
   const d = blockOf(bundle, "plc");
   const lamps = ["air", "g1", "g2", "atm", "water"];
   const open = ["ms", "s1", "s2"].filter((k) => snap?.[`plc.${k}`] === true).map((k) => fieldName(bundle, `plc.${k}`));
   const unknown = snap?.["plc.ms"] === undefined;
   return (
-    <DevCard title={CARD.shutter} sub={blockSub(bundle, "plc", detail)} chip={<QBadge link={st?.links?.plc} />}
+    <DevCard title={CARD.shutter} sub={blockSub(bundle, "plc", detail)} chip={<QBadge link={st?.links?.plc} />} onSettings={onSettings && (() => onSettings("shutter"))}
       summary={unknown ? "—" : open.length ? `${open.join("·")} 열림` : "셔터 모두 닫힘"}
       note={snap?.["plc.ion_ot"] === true ? <Issue level="warn">{fieldName(bundle, "plc.ion_ot")}</Issue> : undefined}
       actions={<Btn onClick={onHmi}><Workflow size={14} /> HMI 열기</Btn>}>
@@ -482,7 +510,32 @@ export function ShutterCard({ bundle, snap, st, onHmi }: Ctx & { onHmi: () => vo
           ))}
         </div>
       </div>
+      <MountedRows st={st} />
     </DevCard>
+  );
+}
+
+/** 장착 타겟(W-22 — 재고관리 chamber-slots, state.targets). 읽기가 없으면(묶음 22·주소 없음·sim) 그리지 않는다 */
+export function MountedRows({ st, compact }: { st?: StateData | null; compact?: boolean }) {
+  const t = st?.targets;
+  if (!t) return null;
+  const at = t.readAt ? new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour12: false, hour: "2-digit", minute: "2-digit" }).format(new Date(t.readAt)) : null;
+  const title = [t.readAt ? `${at} 재고관리에서 읽음` : "아직 읽기 전", t.error ? `마지막 읽기 실패: ${t.error}` : ""].filter(Boolean).join(" · ");
+  return (
+    <div className={compact ? "" : "mt-2 border-t border-[#EEF0F3] pt-2"} title={title}>
+      {(["g1", "g2"] as const).map((g) => {
+        const m = t[g];
+        return (
+          <KV key={g} k={`${g === "g1" ? "Gun1" : "Gun2"} 장착 타겟`}>
+            <span className={`min-w-0 truncate ${FS.body} ${m ? "font-semibold text-[#1B1F24]" : "text-[#5B6470]"}`}
+              title={m ? [m.text, m.barcode && `바코드 ${m.barcode}`, m.purity && `순도 ${m.purity}`].filter(Boolean).join(" · ") : undefined}>
+              {m ? m.text : t.readAt ? "없음" : "—"}
+            </span>
+          </KV>
+        );
+      })}
+      {t.error && !t.readAt && <p className={`${FS.small} text-[#5B6470]`}>재고관리에서 장착 타겟을 읽지 못했습니다.</p>}
+    </div>
   );
 }
 

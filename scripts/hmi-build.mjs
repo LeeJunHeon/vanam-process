@@ -18,7 +18,7 @@ import tailwind from "@tailwindcss/postcss";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const TARGETS = {
-  chk: { entry: "hmi/main.tsx", css: "index.css", out: "dist-hmi", title: "챔버K v2 — 노트북 화면",
+  chk: { entry: "hmi/main.tsx", css: "index.css", out: "dist-hmi", title: "CHK Sputter — 노트북 화면",
          what: "챔버K v2 노트북 로컬 화면(vanam-process hmi/ — W-7)" },
   ch12: { entry: "hmi/ch12.tsx", css: "ch12.css", out: "dist-hmi/ch12", title: "챔버12(CH1&2) v2 — 노트북 화면",
           what: "챔버12(CH1&2) v2 노트북 로컬 화면(vanam-process hmi/ch12.tsx — 8단계)" },

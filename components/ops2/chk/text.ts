@@ -2,7 +2,7 @@
 // 묶음에 이름이 없으면(v10 이하 옛 장비) 지금처럼 코드·이름 그대로. 원시 코드·키는 '상세'에서만(부르는 쪽이 detail 로).
 import type { BlockDef as BDef, BParamDef } from "@/lib/ops2/chk/blocks";
 import type { ColDef } from "@/lib/ops2/chk/recipe";
-import { byWord, genericEventName, isCode, stripCodes } from "@/lib/ops2/chk/plain";
+import { genericEventName, isCode, personWord, srcWord, stripCodes } from "@/lib/ops2/chk/plain";
 import { SOURCE_NAME as TERM_SOURCE, stepName, toTerms } from "@/lib/ops2/chk/terms";
 import { CMD_STATUS, RUN_RESULT, commandLabel, fmtValue, reasonLabel, stateLabel, type Bundle, type FieldDef } from "./types";
 
@@ -147,7 +147,7 @@ export function adjustLine(b: Bundle | null, d: Obj): string {
  *  o.plain(W-16 — 챔버K 화면만 켠다, 기본은 지금 동작): 글에 대문자 코드·영문 local 이 나오지 않게 — 이름이 없는 사건은 장비 이름으로 된
  *  일반 이름("웹 연결 기록"), 요청자 local 은 "노트북", 명령 결과는 "수동 조작(가스 도입) 받음" 처럼(o.blockType — 수동 조작의 블록 종류).
  *  코드는 raw·code 에만(상세 보기 끝에 작게) */
-export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; blockType?: string | null }): LogLine {
+export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; blockType?: string | null; target?: string | null }): LogLine {
   const line = logLine0(b, e);
   if (!o?.plain) return line;
   // 평소 보기 한 줄(W-17·W-18) = 출처(source) | 이름(kind) | 내용(text) — 빈 칸 없이, 같은 말 두 번 없이.
@@ -165,7 +165,7 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
   if (e.type === "run_start") {
     const manual = d.manual === true;
     const title = runTitle({ name: s(d.name) || null, recipeName: s(d.recipeName) || null }) || "공정";
-    const who = byWord(d.by);
+    const who = personWord(d.by);
     return { ...line, source: manual ? "수동 조작" : "공정",
              text: [manual && /^수동 조작/.test(title) ? "" : title, who].filter(Boolean).join(" · ") };
   }
@@ -185,8 +185,10 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     const bt = o.blockType ? stepName(b, { type: o.blockType }) : "";
     const why = d.reasonCode ? rl(s(d.reasonCode)) : "";
     const src = s(d.source);
-    return { ...line, source: src === "local" || src === "hmi" ? "노트북" : src === "web" ? "웹" : "장비",
-             text: `${what}${bt && !isCode(bt) ? ` · ${bt}` : ""} ${CMD_STATUS[s(d.status)] ?? "결과"}${why ? ` · ${why}` : ""}`,
+    // PLC 버튼은 대상까지(W-21 — "PLC 버튼 Gun2 셔터 닫기 받음", 대상은 웹 조작 기록에서 찾은 것)
+    const tg = d.kind === "PLC_BUTTON" && o.target ? ` ${o.target}` : "";
+    return { ...line, source: srcWord(src) || "장비",
+             text: `${what}${tg}${bt && !isCode(bt) ? ` · ${bt}` : ""} ${CMD_STATUS[s(d.status)] ?? "결과"}${why ? ` · ${why}` : ""}`,
              code: `${s(d.kind)}${d.reasonCode ? ` ${s(d.reasonCode)}` : ""}`, desc: rh(d.reasonCode) ?? line.desc };
   }
   if (e.type === "config_ack") {
@@ -208,14 +210,16 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
   // 안전 규칙으로 멈춤(W-19) — 이름은 멈춘 것: 장비 문장이 '수동 조작 중단' 이면 그 말, 아니면 '공정 중단'(내용 = 사유 이름)
   if (source === "safety" && kind === "abort") name = /수동 조작 중단/.test(msg) ? "수동 조작 중단" : "공정 중단";
   const who = (x: Obj) => {
-    const src = x.source === "local" || x.source === "hmi" ? "노트북" : x.source === "web" ? "웹" : s(x.source);
-    const by = byWord(x.by);
+    const src = srcWord(x.source);
+    const by = personWord(x.by);
     return [src, by && by !== src ? by : ""].filter(Boolean).join(" · ");
   };
   const RES: Record<string, string> = { ok: "정상", done: "정상", aborted: "중단", error: "오류", failed: "실패", skipped: "건너뜀" };
   let text = "", fromMessage = false;
   const steps = [...msg.matchAll(/(\d+):([a-z_]+)/g)].map((m) => m[2]);
-  if (source === "uplink") {
+  if (source === "safety" && kind === "bench_skip") {
+    text = "읽기 전용이라 보내지 않음";                    // 장비 문장 "bench — 보내지 않음(읽기 전용)" 은 상세 보기에서만(W-21)
+  } else if (source === "uplink") {
     text = "";                                         // 주소·오류 이름이 든 장비 문장은 상세 보기에서만
   } else if (source === "safety" && kind === "seq_done" && steps.length) {
     // 상태별로 센다(W-19) — 실패(error)가 하나라도 있으면 '실패 N' 이 늘 보인다

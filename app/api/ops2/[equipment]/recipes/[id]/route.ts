@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ops2Db } from "@/lib/ops2/db";
+import { notifyRecipes } from "@/lib/ops2/hub";
+import { baseEquipment } from "@/lib/ops2/perm";
+import { isCh12 } from "@/lib/ops2/ch12/ids";
 import { checkSummary, forbidden, fullItem, isUniqueViolation, readRecipeBody, recipeContext } from "@/lib/ops2/recipes";
 import { Prisma } from "@/app/generated/prisma/client";
 
@@ -43,6 +46,7 @@ export async function PUT(req: NextRequest, { params }: P) {
         bundleVersion: ctx.bundleVersion, updatedBy: ctx.who, updatedAt: new Date(),
       },
     });
+    if (!isCh12(equipment)) notifyRecipes(ctx.base, baseEquipment);   // 챔버K 장비가 웹 레시피 사본을 새로 받게(W-22 F)
     return NextResponse.json({ recipe: fullItem(r, ctx.env), check: checkSummary(r.kind, r.rows, r.gas, ctx.env) });
   } catch (e) {
     if (isUniqueViolation(e)) return NextResponse.json({ error: "name_taken", detail: "같은 이름의 레시피가 있음" }, { status: 409 });
@@ -62,5 +66,6 @@ export async function DELETE(_req: NextRequest, { params }: P) {
   if (!ctx.canEdit) return forbidden();
   const n = await ops2Db.ops2Recipe.deleteMany({ where: { id, baseEquipment: ctx.base } });
   if (!n.count) return notFound();
+  if (!isCh12(equipment)) notifyRecipes(ctx.base, baseEquipment);     // 챔버K 장비 사본에서도 빠지게(W-22 F)
   return NextResponse.json({ ok: true });
 }

@@ -8,6 +8,7 @@
 // 웹 검사는 장비와 같은 계산(lib/ops2/chk/recipe.ts·blocks.ts — 골든으로 확인), 마지막 판단은 장비. 묶음 version 이 검사 기준과 다르면 안내만.
 // 저장은 오류가 있어도 된다(지금 규칙 — 서버 검사 결과를 알림에), 적재·한 행 바로 시작·히터 레시피 실행은 오류가 없어야.
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from "react";
+import { targetMismatch } from "./Chk2LocalNext";
 import { BookOpen, FilePlus2, Flame, MoreVertical, Pencil, Save, Upload } from "lucide-react";
 import { createPortal } from "react-dom";
 import {
@@ -181,16 +182,19 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
 
   // ── 장비 조작 ──
   const loaded = st?.recipe ?? null;
-  const askLoadFull = (f: { name: string; rows: Row[] }) => {
+  const askLoadFull = (f: { name: string; rows: Row[]; id?: string; updatedAt?: string }) => {
     const chk = env ? checkProcessRecipe(f.rows, env) : null;
     if (chk?.errors) return notify({ tone: "bad", title: `레시피 '${f.name}'을 적재할 수 없음`, text: `검사 오류 ${chk.errors}개를 고친 뒤 적재하세요` });
-    onAsk({ kind: "RECIPE_LOAD", label: "공정 레시피 적재", detail: `'${f.name}'`, args: { name: f.name, rows: f.rows },
-            lines: processLines(f.name, f.rows, chk), note: "장비에 행 목록을 올립니다(검사 뒤 적재). 시작은 운전 탭 '적재 시작'." });
+    // id·updatedAt — 공정 기록에 웹 레시피·웹 수정 시각(W-22, 옛 장비는 모르는 인자라 무시)
+    onAsk({ kind: "RECIPE_LOAD", label: "공정 레시피 적재", detail: `'${f.name}'`,
+            args: { name: f.name, rows: f.rows, ...(f.id ? { id: f.id, updatedAt: f.updatedAt } : {}) },
+            lines: [...processLines(f.name, f.rows, chk), ...targetMismatch(f.rows as Record<string, unknown>[], st)],
+            note: "장비에 행 목록을 올립니다(검사 뒤 적재). 시작은 운전 탭 '적재 시작'." });
   };
   const listLoad = async (item: RecipeItem) => {
     const r = await recipes.get(item.id);
     if (!r.ok) return notify({ tone: "bad", title: `레시피 '${item.name}'을 읽을 수 없었음`, text: RECIPE_ERROR[r.error] ?? r.error });
-    askLoadFull({ name: r.data.recipe.name, rows: r.data.recipe.rows as Row[] });
+    askLoadFull({ name: r.data.recipe.name, rows: r.data.recipe.rows as Row[], id: r.data.recipe.id, updatedAt: r.data.recipe.updatedAt });
   };
   const savedWhy = !draft ? null : !draft.id ? "저장한 뒤" : dirty ? "저장한 뒤(저장 안 한 변경이 있음)" : null;
   const loadWhy = !draft || draft.kind !== "process" ? null : !env ? "장비 정보를 기다리는 중" : savedWhy
@@ -287,7 +291,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
             {why && <span className={`${FS.small} text-[#5B6470]`}>{why}</span>}
             {draft.kind === "process"
               ? <Btn kind="primary" lock={loadWhy} onClick={() => { setReveal(true); askLoadFull({ name: draft.name, rows: draft.rows.map((r) => r.data) }); }}><Upload size={14} /> 적재</Btn>
-              : <Btn kind="dangerSolid" lock={runWhy} onClick={() => { setReveal(true); askHeaterRun(); }}><Flame size={14} /> 히터 레시피 실행</Btn>}
+              : <Btn kind="primary" lock={runWhy} onClick={() => { setReveal(true); askHeaterRun(); }}><Flame size={14} /> 히터 레시피 실행</Btn>}
           </div>
           {errCount > 0 && <Issue level="warn">오류를 고쳐야 적재·실행할 수 있습니다(저장은 됩니다). &apos;오류 {errCount}&apos;를 누르면 첫 오류로 갑니다.</Issue>}
           {reveal && pCheck && pCheck.listErrors.length > 0 && <Issue level="alarm">{pCheck.listErrors.join(" · ")}</Issue>}
