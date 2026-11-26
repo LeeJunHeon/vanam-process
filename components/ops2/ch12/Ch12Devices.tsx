@@ -268,11 +268,39 @@ export function GasBox12({ ctx, ch }: { ctx: BoxCtx; ch: Ch }) {
 export const IgBox12 = ({ ctx, ch }: { ctx: BoxCtx; ch: Ch }) =>
   <BlockBox ctx={ctx} name={`${ch}.ig`} strip={placeName(ctx.bundle, ch)} big="pressure_torr" />;
 
+/** RF 표시(W-21·22 B — 장비 묶음 17 <블록>.cmd_on·uncommanded): 둘 다 false 면 'off'(평소 보기는 Forward·Reflected 0 W · 꺼짐 —
+ *  꺼진 RF 의 A/D 잡음을 보이지 않음), uncommanded 면 'uncmd'(주의 칩 + 읽은 값), 그 밖(켜짐·옛 묶음에 필드 없음·모름)은 'raw'(읽은 값).
+ *  상세 보기·기록·추세·안전 판정은 늘 읽은 값 그대로 */
+export function rfView(snap: Snap, block: string): "off" | "uncmd" | "raw" {
+  const on = snap?.[`${block}.cmd_on`], un = snap?.[`${block}.uncommanded`];
+  if (un === true) return "uncmd";
+  return on === false && un === false ? "off" : "raw";
+}
+/** 평소 보기에서 RF 가 'off' 면 Forward·Reflected 를 0 으로 바꾼 상태(그림만 — 원본 st 는 그대로) */
+export function rfShownState(st: Ch12State | null, block: string, detail: boolean): Ch12State | null {
+  const snap = st?.snapshot;
+  if (detail || !st || !snap || rfView(snap, block) !== "off") return st;
+  return { ...st, snapshot: { ...snap, [`${block}.fwd_w`]: 0, [`${block}.ref_w`]: 0 } };
+}
+/** 명령 없는 RF 출력 주의 칩 */
+export const RfUncmdChip = ({ snap, block }: { snap: Snap; block: string }) =>
+  rfView(snap, block) === "uncmd" ? <Chip tone="warn" title="프로그램이 켜지 않았는데 RF 출력이 나옵니다. 전원 장치 앞면을 확인하세요.">명령 없는 출력</Chip> : null;
+
+/** RF Power(CH2 연속) 박스 — 머리 칩은 명령 출력(cmd_on, 옛 묶음은 동작 중), 꺼짐이면 0 W, 명령 없는 출력이면 주의 칩 + 읽은 값 */
+function RfBox12({ ctx, ch, strip }: { ctx: BoxCtx; ch: Ch; strip: string }) {
+  const { detail } = useChk2Mode();
+  const block = `${ch}.rf`;
+  const snap = ctx.st?.snapshot;
+  const hasCmd = blockOf(ctx.bundle, block)?.fields.some((f) => f.name === "cmd_on") ?? false;
+  return <BlockBox ctx={{ ...ctx, st: rfShownState(ctx.st, block, detail) }} name={block} strip={strip} big="fwd_w"
+    chipOn={hasCmd ? "cmd_on" : "running"} hide={["cmd_on", "uncommanded"]} chip={<RfUncmdChip snap={snap} block={block} />} />;
+}
+
 /** 파워 — DC Power(CH2, 두 채널) · RF Power(CH2) · DC Pulse · RF Pulse. 머리 칩 = 출력 켜짐/꺼짐, 큰 값 = 출력 파워 */
 export function PowerBox12({ ctx, ch, kind }: { ctx: BoxCtx; ch: Ch; kind: "dc" | "rf" | "dcpulse" | "rfpulse" }) {
   const strip = placeName(ctx.bundle, ch);
   if (kind === "dc") return <BlockBox ctx={ctx} name={`${ch}.dc`} strip={strip} big="dc1_p" chipOn="dc1_running" />;
-  if (kind === "rf") return <BlockBox ctx={ctx} name={`${ch}.rf`} strip={strip} big="fwd_w" chipOn="running" />;
+  if (kind === "rf") return <RfBox12 ctx={ctx} ch={ch} strip={strip} />;
   if (kind === "dcpulse") return <BlockBox ctx={ctx} name={`${ch}.dcpulse`} strip={strip} big="p_w" chipOn="out_on" />;
   return <BlockBox ctx={ctx} name={`${ch}.rfpulse`} strip={strip} big="fwd_w" chipOn="out_on" />;
 }
