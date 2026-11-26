@@ -5,6 +5,7 @@
 //   (JSX 글, 따옴표·백틱 글 — 주석·import·className 같은 속성 값은 뺌)과
 //   골든 묶음(lib/ops2/chk/golden/bundle*.json 이 있으면 그 화면 이름·설명).
 // 값이 없을 때 쓰는 '—' 한 글자(빈 값 표시)는 문장이 아니라서 본다 — 한글과 같이 쓴 줄표만 걸린다.
+// W-23: 설정 설명(묶음 params desc — 장비와 같은 패턴)·표시 장비 ID 'CHK2' 노출도 본다(아래).
 // 예외(EXCEPT): CH1&2 가 같은 글을 쓰는 공유 파일의 글, v1 대조 시험·골든이 v1 과 같기를 요구하는 글. 하나라도 걸리면 exit 1.
 import { readdirSync, readFileSync, existsSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -161,9 +162,82 @@ if (existsSync(gdir)) {
   }
 }
 
+// W-23 D: 설정 설명(장비 묶음 params[].desc) — 장비 시험 test_web_labels.desc_problems 와 같은 패턴.
+//   설명은 운전자·관리자가 읽는 말 1~2문장(…합니다/…입니다). 설정 키·v1·작업 번호·파일 이름·장비 명령 글자·금지 문구·옛 말이 없다.
+//   골든 web_feed_cases.json 의 묶음(장비 make_web_feed_golden 이 설정 이름·설명을 넣는다)에서 읽는다.
+const DESC_BAD = [
+  ["설정 키", /\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b/],
+  ["v1·v2", /(?<![A-Za-z])[vV][12](?![0-9A-Za-z])/],
+  ["작업·결정 번호", /(?<![\d.])\d{1,2}-\d{1,2}(?![\d])|W-\d+|[①-⑳]|20\d\d-\d\d-\d\d/],
+  ["파일 이름", /\w+\.(py|json|cmd|txt)\b/],
+  ["장비 명령 글자", /(?<![A-Za-z0-9])(R\d{1,3}|MEAS:\w+\??|OUTP\??|FACT:[\w-]+\??|VOLT:\w+\??|CURR:\w+\??|SYST:\w+\??|\*IDN\?|\*RST|APPLy|[QSDLMXVPWZ]\d{1,3}|D0\d{4}|M0\d{4}|X\d\d|S\d\d[A-Z]?)(?![A-Za-z0-9])/],
+  ["금지 문구", /—|안 ?(함|씀|됨)(?![가-힣])|못 ?함(?![가-힣])|미룸|(?<![가-힣])(켬|끔)(?![가-힣])/],
+  ["옛 말", new RegExp(["인터록", "이온 게이지", "필라멘트", "디개스", "방출", "냉각수", "도어", "차단 ?밸브", "메인 밸브", "순방향", "반사", "설정점",
+    "램프", "블록", "스텝", "사건", "로컬", "시퀀스", "벤트", "로터리", "터보 펌프", "가스 도입", "정상 끝 정지", "셔터 딜레이"].join("|"))],
+];
+function descProblems(t) {
+  const out = DESC_BAD.filter(([, re]) => re.test(t)).map(([n]) => n);
+  const sents = t.trim().split(/(?<=\.)\s+/).filter(Boolean);
+  if (!sents.length || sents.some((x) => !/니다(\([^()]*\))?\.$/.test(x))) out.push("문장 끝(…합니다/…입니다)");
+  if (sents.length > 2) out.push("2문장 넘음");
+  return out;
+}
+// 검사 자체가 패턴을 잡는다(빈 검사가 늘 통과하지 않게)
+for (const t of ["유량 안정화 시간입니다(FLOW_STABILIZE_SEC).", "v1 과 같습니다.", "5-19 ③ 결정입니다.", "R5 로 읽습니다.", "켬 상태입니다.",
+  "인터록을 겁니다.", "정지한다.", "하나입니다. 둘입니다. 셋입니다.", "S32 규칙입니다."]) {
+  if (!descProblems(t).length) { console.log(`설정 설명 검사가 '${t}' 를 못 잡음`); process.exit(1); }
+}
+let descCount = 0;
+const feed = join(root, "lib/ops2/chk/golden/web_feed_cases.json");
+if (existsSync(feed)) {
+  for (const p of JSON.parse(readFileSync(feed, "utf8")).bundle?.params ?? []) {
+    descCount++;
+    const pr = descProblems(p.desc ?? "");
+    if (pr.length) hits.push(`golden/web_feed_cases.json params.${p.key}  [설정 설명 ${pr.join(", ")}] ${String(p.desc).slice(0, 140)}`);
+  }
+}
+
+// W-23 E1: 표시 장비 ID — 화면 글에 'CHK2' 가 나오지 않는다(lib/ops2/display.ts showEquipment 가 CHK2 → CHK 로 만든다).
+//   장비 ID 그 자체(따옴표 안이 'CHK2'·'CHK2-SIM' 뿐인 글 — 비교·저장 키)는 화면 글이 아니라서 보지 않는다. 상세 보기 글은 CHK2_EXCEPT 에.
+const CHK2_FILES = [...["components/ops2/chk", "lib/ops2/chk"].flatMap((dir) => [...files(join(root, dir))]),
+  join(root, "lib/ops2/chatText.ts"), join(root, "lib/ops2/chat.ts"), join(root, "components/OpsDashboardPage.tsx")];
+const CHK2_EXCEPT = [
+  ["components/ops2/chk/Chk2Config.tsx", "CHK2·CHK2-SIM"],    // 챔버12 화면(ck 꺼짐)의 기본 글 그대로(공유 파일 — 옵션으로만 바꿈)
+];
+let chk2Seen = 0;
+for (const f of CHK2_FILES) {
+  const rel = relative(root, f);
+  const src = readFileSync(f, "utf8");
+  const sf = ts.createSourceFile(f, src, ts.ScriptTarget.Latest, true, f.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  const look = (n, t) => {
+    if (!/CHK2/.test(t)) return;
+    chk2Seen++;
+    if (/^\s*CHK2(-SIM)?\s*$/.test(t)) return;                     // ID 그 자체(비교·저장 키)
+    if (CHK2_EXCEPT.some(([ff, part]) => ff === rel && t.includes(part))) return;
+    hits.push(`${rel}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}  [표시 장비 ID CHK2] ${t.replace(/\s+/g, " ").trim().slice(0, 140)}`);
+  };
+  const visit = (n) => {
+    if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) return;
+    if (ts.isJsxText(n)) look(n, n.getText(sf));
+    else if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) look(n, n.text);
+    else if (ts.isTemplateExpression(n)) look(n, [n.head.text, ...n.templateSpans.map((x) => `X${x.literal.text}`)].join(""));
+    ts.forEachChild(n, visit);
+  };
+  visit(sf);
+}
+// 골든 평소 보기 줄(장비가 내는 글)에도 CHK2 가 없다 — 장비 ID 는 따로 오는 값이라 글에 섞이지 않는다
+if (existsSync(feed)) {
+  const walk = (o, path) => {
+    if (typeof o === "string") { if (/(label|desc|help|text|title|detail|msg|message)$/i.test(path) && /CHK2/.test(o) && HANGUL.test(o)) hits.push(`golden/web_feed_cases.json ${path}  [표시 장비 ID CHK2] ${o.slice(0, 140)}`); }
+    else if (Array.isArray(o)) o.forEach((v, i) => walk(v, `${path}[${i}]`));
+    else if (o && typeof o === "object") for (const [k, v] of Object.entries(o)) walk(v, `${path}.${k}`);
+  };
+  walk(JSON.parse(readFileSync(feed, "utf8")).bundle ?? {}, "bundle");
+}
+
 if (hits.length) {
   console.log(`문구 규칙에 걸린 글 ${hits.length}개`);
   for (const h of hits) console.log(`  ${h}`);
   process.exit(1);
 }
-console.log("챔버K·챔버12 화면 문구 검사 통과 — 0건");
+console.log(`챔버K·챔버12 화면 문구 검사 통과 — 0건(설정 설명 ${descCount}개, CHK2 글 ${chk2Seen}곳 확인)`);

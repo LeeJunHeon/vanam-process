@@ -57,6 +57,18 @@ export function chkLines(bundle: Bundle | null, feed: FeedItem[], commands?: Cmd
   });
 }
 
+/** 알림 줄(W-23 C, 사용자 결정 2026-11-26) — 주의가 필요한 것만: 경고·오류 수준 사건, 거부·실패한 명령(설정 결과 포함),
+ *  정상이 아니게 끝난 공정. 단계 시작·끝·상태 바뀜·받은 명령 같은 평범한 줄은 넣지 않는다(기록 탭). 24시간이 지난 줄은 빼고 최근 keep 줄,
+ *  최신이 위. 활성 알람은 부르는 쪽이 state.alarms 로 따로 보인다. */
+export const ALERT_KEEP = 20;
+export const ALERT_MAX_AGE_MS = 24 * 3600_000;
+export function alertLines(bundle: Bundle | null, feed: FeedItem[], nowMs: number, keep = ALERT_KEEP) {
+  return chkLines(bundle, feed)
+    .filter((r) => (r.level === "warn" || r.level === "error" || r.level === "critical")
+      && !(nowMs - Date.parse(r.e.ts) > ALERT_MAX_AGE_MS))
+    .slice(-keep).reverse();
+}
+
 /** 사유 이름 — 묶음에 이름이 없으면(코드 그대로면) fallback(기본 빈 글). 코드는 상세 보기에서만 */
 export function reasonText(bundle: Bundle | null, code: string | null | undefined, fallback = ""): string {
   if (!code) return "";

@@ -8,6 +8,7 @@
 // W-10: 원래 순서(run_start 블록 — 판 1)와 실제 실행된 순서(run_end summary.executed — 건너뜀·멈춘 시간·판)를 나란히,
 //   판 목록(시작 + 순서 고침 사건 — 누가·언제·무엇을).
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { showEquipment } from "@/lib/ops2/display";
 import { AlertTriangle, ArrowLeft, CheckSquare, ChevronDown, ChevronRight, History, Info, RefreshCw, Square } from "lucide-react";
 import { useChk2Mode } from "./mode";
 import { colLabel, logLine, runTitle } from "./text";
@@ -361,7 +362,7 @@ export default memo(function Chk2History({ equipment, bundle, refreshKey }: { eq
                 <option value="running">진행 중</option>
               </select>
             </label>
-            <span className="text-[#5B6470]">장비 {equipment}</span>
+            <span className="text-[#5B6470]">장비 {showEquipment(equipment)}</span>
             <button onClick={() => void fetchPage(null)} className="ml-auto flex items-center gap-1 rounded-lg px-2 py-1 hover:bg-[#F5F6F8]">
               <RefreshCw size={12} /> 다시 읽기
             </button>

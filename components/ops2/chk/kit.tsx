@@ -9,7 +9,7 @@
 // 도움말(W-14): 조각들은 지금처럼 title(·data-tip)을 달고, 화면 하나에 TipLayer 를 두면 마우스를 올리거나 키보드로 고를 때
 //   같은 모양의 도움말 상자로 보인다(대상을 가리지 않게 아래·위, 긴 글은 줄바꿈). 브라우저 기본 title 말풍선은 그동안 숨긴다.
 // 이 파일만 토큰을 안다 — CHK v2 화면 전체가 같은 조각을 쓴다(전역 CSS 는 건드리지 않는다).
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import {
   AlertOctagon, AlertTriangle, CheckCircle2, Clock, HelpCircle, Info, Lock, MinusCircle, PlayCircle, X, type LucideIcon,
 } from "lucide-react";
@@ -201,10 +201,13 @@ export function InfoBand({ children, icon }: { children: ReactNode; icon?: React
 
 /** 이상 한 줄(주의·알람) — 아이콘 + 글자 */
 export function Issue({ level, children }: { level: "warn" | "alarm"; children: ReactNode }) {
+  const { lineIcons } = useChk2Mode();          // W-23 챔버K — 아이콘을 첫 글자 줄 가운데에(줄 높이 상자). CH1&2 는 지금처럼
+  const icon = level === "alarm" ? <AlertOctagon size={14} className={lineIcons ? "shrink-0" : "mt-px shrink-0"} />
+    : <AlertTriangle size={14} className={lineIcons ? "shrink-0" : "mt-px shrink-0"} />;
   return (
     <p className={`flex items-start gap-1.5 rounded-[10px] px-3 py-2 ${FS.body} ${
       level === "alarm" ? "bg-[#FEE4E2] text-[#B42318]" : "bg-[#FFFAEB] text-[#B54708]"}`}>
-      {level === "alarm" ? <AlertOctagon size={14} className="mt-px shrink-0" /> : <AlertTriangle size={14} className="mt-px shrink-0" />}
+      {lineIcons ? <span className="flex shrink-0 items-center" style={{ height: "1lh" }}>{icon}</span> : icon}
       <span className="min-w-0">{children}</span>
     </p>
   );
@@ -459,9 +462,45 @@ export function Notices({ list, onClose }: { list: Notice[]; onClose: (id: strin
  *  보이는 동안은 요소의 title 을 data-tip 으로 옮겨 브라우저 기본 말풍선이 겹치지 않게 하고, 떠나면 되돌린다(서버 HTML·검사는 그대로).
  *  잠긴(disabled) 버튼은 마우스 사건이 오지 않는 브라우저가 있어, 마우스 위치로 가장 안쪽 요소를 찾아 쓴다. */
 export function TipLayer() {
-  const [tip, setTip] = useState<{ text: string; left: number; top: number; above: boolean } | null>(null);
+  // W-23 A: 같은 대상 위에 0.5 s 머문 뒤에 보인다(키보드 focus 는 바로), 벗어나면 바로 숨김, 스크롤 때는 숨기지 않고 자리만 다시(깜박임 없음).
+  // 자리: 올린 대상을 가리지 않는다 — 설정 서랍 안의 줄은 서랍 왼쪽 바깥(어두운 영역)에 줄 높이에 맞춰, 그 밖은 포인터 가로 위치에 맞춰
+  // 대상 위쪽에(실제 높이를 재서 — 위가 모자라면 옆, 옆도 모자라면 아래). 목록의 바로 아래 줄 이름을 덮지 않게 위쪽이 먼저.
+  // 자리는 그린 뒤 크기를 재서 정한다(useLayoutEffect — 칠하기 전이라 깜박이지 않음). 부르는 쪽이 body 포털(Float)로 그린다.
+  const [tip, setTip] = useState<{ text: string; r: [number, number, number, number]; px: number; drawerLeft: number | null } | null>(null);
+  const box = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || !tip) return;
+    const [l, t, rr, b] = tip.r;
+    const vw = window.innerWidth, vh = window.innerHeight, M = 8, G = 6;
+    const put = (left: number, top: number) => {
+      el.style.left = `${Math.round(left)}px`; el.style.top = `${Math.round(top)}px`; el.style.visibility = "visible";
+    };
+    el.style.maxWidth = "340px";
+    let w = el.offsetWidth, h = el.offsetHeight;
+    const vClamp = (y: number) => Math.max(M, Math.min(y, vh - h - M));
+    if (tip.drawerLeft !== null) {                              // 서랍 왼쪽 바깥 — 줄 높이에 맞춰(창 안으로)
+      el.style.maxWidth = `${Math.min(340, tip.drawerLeft - 2 * M)}px`;
+      w = el.offsetWidth; h = el.offsetHeight;
+      return put(tip.drawerLeft - M - w, vClamp(t));
+    }
+    const hClamp = (x: number) => Math.max(M, Math.min(x, vw - w - M));
+    if (t - G - h >= M) return put(hClamp(tip.px - 12), t - G - h);   // 위
+    const right = vw - rr - G - M, left = l - G - M;            // 옆(대상과 같은 높이 — 아래 줄을 덮지 않게)
+    const side = Math.max(right, left);
+    if (side >= 160) {
+      el.style.maxWidth = `${Math.min(340, side)}px`;
+      w = el.offsetWidth; h = el.offsetHeight;
+      return put(right >= left ? rr + G : l - G - w, vClamp(t));
+    }
+    put(hClamp(tip.px - 12), Math.min(b + G, vh - h - M));        // 아래(위·옆 모두 모자랄 때만)
+  }, [tip]);
   useEffect(() => {
     let cur: HTMLElement | null = null;
+    let shown = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let px = 0;
+    const DELAY_MS = 500;
     const restore = () => {
       if (cur && cur.dataset.tipFromTitle === "1") {
         cur.setAttribute("title", cur.dataset.tip ?? "");
@@ -474,47 +513,66 @@ export function TipLayer() {
       if (!x || x.tagName === "svg" || x.closest("svg title")) return null;
       return x;
     };
-    const show = (el: HTMLElement | null) => {
+    const textOf = (el: HTMLElement) => (el.dataset.tip ?? el.getAttribute("title") ?? "").trim();
+    const place = (el: HTMLElement) => {
+      const text = textOf(el);
+      if (!text) { shown = false; setTip(null); return; }
+      const r = el.getBoundingClientRect();
+      if (r.bottom < 0 || r.top > window.innerHeight) { shown = false; setTip(null); return; }
+      const drawer = el.closest("[data-tip-side='left']") as HTMLElement | null;
+      const d = drawer?.getBoundingClientRect();
+      shown = true;
+      setTip({ text, r: [r.left, r.top, r.right, r.bottom], px, drawerLeft: d && d.left >= 220 ? d.left : null });
+    };
+    const arm = (el: HTMLElement | null, now: boolean) => {
       if (el === cur) return;
+      if (timer) { clearTimeout(timer); timer = null; }
       restore();
       cur = el;
-      if (!el) { setTip(null); return; }
-      if (el.hasAttribute("title")) {
+      shown = false;
+      setTip(null);
+      if (!el) return;
+      if (el.hasAttribute("title")) {                           // 브라우저 기본 도움말이 같이 뜨지 않게
         el.dataset.tip = el.getAttribute("title") ?? "";
         el.dataset.tipFromTitle = "1";
         el.removeAttribute("title");
       }
-      const text = (el.dataset.tip ?? "").trim();
-      if (!text) { setTip(null); return; }
-      const r = el.getBoundingClientRect();
-      const vw = window.innerWidth, vh = window.innerHeight;
-      const above = r.bottom + 90 > vh && r.top > 90;
-      setTip({ text, left: Math.max(8, Math.min(r.left, vw - 348)), top: above ? r.top - 6 : r.bottom + 6, above });
+      if (!textOf(el)) return;
+      if (now) place(el);
+      else timer = setTimeout(() => { timer = null; if (cur === el) place(el); }, DELAY_MS);
     };
     const over = (e: MouseEvent) => {
       const el = document.elementFromPoint(e.clientX, e.clientY);
-      show(find(el ?? (e.target as Element)));
+      const t = find(el ?? (e.target as Element));
+      if (t !== cur) px = e.clientX;
+      arm(t, false);
     };
-    const focus = (e: FocusEvent) => show(find(e.target as Element));
-    const hide = () => show(null);
+    const focus = (e: FocusEvent) => {
+      const t = find(e.target as Element);
+      if (t) px = t.getBoundingClientRect().left + 12;
+      arm(t, true);
+    };
+    const hide = () => arm(null, false);
+    const scroll = () => { if (cur && shown) place(cur); };
     document.addEventListener("mousemove", over, { passive: true });
     document.addEventListener("focusin", focus);
     document.addEventListener("focusout", hide);
-    window.addEventListener("scroll", hide, true);
+    window.addEventListener("scroll", scroll, true);
     window.addEventListener("blur", hide);
     return () => {
+      if (timer) clearTimeout(timer);
       restore();
       document.removeEventListener("mousemove", over);
       document.removeEventListener("focusin", focus);
       document.removeEventListener("focusout", hide);
-      window.removeEventListener("scroll", hide, true);
+      window.removeEventListener("scroll", scroll, true);
       window.removeEventListener("blur", hide);
     };
   }, []);
   if (!tip) return null;
   return (
-    <div role="tooltip" style={{ left: tip.left, top: tip.top, transform: tip.above ? "translateY(-100%)" : undefined }}
-      className={`pointer-events-none fixed z-[90] max-w-[340px] whitespace-pre-line break-words rounded-[8px] bg-[#1B1F24] px-2.5 py-1.5
+    <div role="tooltip" ref={box} style={{ left: 0, top: 0, visibility: "hidden" }}
+      className={`pointer-events-none fixed z-[90] w-max max-w-[340px] whitespace-pre-line break-words rounded-[8px] bg-[#1B1F24] px-2.5 py-1.5
         leading-[18px] text-white shadow-lg ${FS.small}`}>
       {tip.text}
     </div>

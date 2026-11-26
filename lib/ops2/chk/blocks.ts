@@ -545,10 +545,12 @@ function expandBlock(ctx: Ctx, b: CleanBlock, no: string): void {
 }
 
 // ───────────── 화면용 ─────────────
-/** 알 수 있는 시간(대기·메인·정리 DELAY 합, s)과 끝을 모르는 대기 수(압력·파워·히터·베이스·조건) */
+/** 알 수 있는 시간(대기·메인·정리 DELAY 합, s)과 끝을 모르는 대기 수(압력·파워·히터·베이스·조건).
+ *  영점(W-23 H1)은 조건이 맞을 때까지 기다리므로(장비 '영점 대기 한도'까지) 블록마다 끝을 모르는 대기 하나로 센다. */
 export function expectedTime(exp: ExpBlock[]): { sec: number; open: number } {
   let sec = 0, open = 0;
   for (const b of exp) {
+    if (b.steps.some((s) => Array.isArray(s.params) && (s.params[0] === "MFC_ZEROING" || s.params[0] === "PS_ZEROING"))) open += 1;
     for (const s of b.steps) {
       if (s.action === "DELAY") sec += s.sec ?? 0;
       else if (["POWER_WAIT", "HEATER_WAIT", "IG_BASE_WAIT", "COND_WAIT"].includes(s.action)

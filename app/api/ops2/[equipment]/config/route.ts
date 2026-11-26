@@ -50,13 +50,14 @@ const VERSION_SEL = {
 
 // GET /api/ops2/[equipment]/config?limit=50 — 설정 보기(장비 담당자·관리자). 장비 버전·지금 값·대기 중·버전 목록(값 없이).
 // 지금 값 = 장비 configVersion 의 웹 행(그보다 큰 resync 행이 있으면 그 값 — base). 없으면 null(화면이 묶음 current 로 + 안내).
+// drift(W-23 F) = 기준 행이 묶음과 어긋남(프로그램 판 바뀜) — 그동안 지금 값 null(묶음 값)·화면 띠.
 // 대기 중 = 지금보다 새 웹 버전 중 ack 가 없거나 pending_idle·pending_restart 인 것(resync 는 장비에 안 가므로 빼고), state.configPending.
 // 덮어쓰기 = hello overriddenKeys + 그 키의 실행 값(묶음 current — ingest 가 lastHello._overriddenCurrent 로 이어 둔 것).
 export async function GET(req: NextRequest, { params }: { params: Promise<{ equipment: string }> }) {
   const { equipment } = await params;
   const ctx = await ctxOf(equipment);
   if (!ctx.ok) return ctx.response;
-  const cur = await currentConfig(equipment);
+  const cur = await currentConfig(equipment, ctx.bundle);
   const [list, st] = await Promise.all([
     ops2Db.ops2ConfigVersion.findMany({
       where: { equipment }, orderBy: { version: "desc" }, take: limitOf(req.nextUrl.searchParams.get("limit"), 50, 500),
@@ -78,6 +79,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ equi
     deviceVersion: cur.version, current: cur.values, base: cur.base,
     overridden: Object.fromEntries(helloKeys.map((k) => [k, k in ovCur ? ovCur[k] : null])),
     resyncPending: !!pendingResync(equipment),
+    drift: cur.drift,                                                 // W-23 F — 프로그램 판이 바뀌어 기준이 어긋남(지금 값은 묶음 값)
     currentRow: cur.row ? { version: cur.row.version, kind: cur.row.kind, ackStatus: cur.row.ackStatus,
                             overriddenKeys: cur.row.overriddenKeys, pendingKeys: cur.row.pendingKeys } : null,
     statePending: isObj(st?.data) ? st.data.configPending ?? null : null,
@@ -123,7 +125,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
   const now = new Date();
   const device = ctx.device;
   if (!isOnline(device, now)) return bad("device_offline", "장비 연결 끊김", 409);
-  const cur = await currentConfig(equipment);
+  const cur = await currentConfig(equipment, ctx.bundle);
   const cmdId = randomUUID().replace(/-/g, "");
   const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) || null : null;
   let version: number | null = null;
@@ -155,6 +157,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ equ
     if (body.baseVersion !== cur.version) {
       return bad("base_changed", `장비 설정 버전이 바뀜(편집 기준 ${String(body.baseVersion)} → 지금 ${String(cur.version)}) — 다시 읽고 다시`, 409);
     }
+    if (cur.drift) return bad("base_drift", "프로그램이 새 판으로 바뀌어 설정 기준이 맞지 않습니다 — 노트북 프로그램 설정을 다시 받은 뒤 다시", 409);
     if (!cur.values) return bad("no_current", `장비 버전 ${String(cur.version)} 의 웹 행이 없어 전체 값을 만들 수 없음 — 되돌리기나 장비 확인 먼저`, 409);
     if (!isObj(body.changes) || !Object.keys(body.changes).length) return bad("no_changes", "바뀐 키가 없음");
     const defs = new Map((Array.isArray(ctx.bundle.params) ? ctx.bundle.params : [])

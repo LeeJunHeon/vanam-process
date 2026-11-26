@@ -14,6 +14,7 @@
 // - 챔버12(CH12·CH12-SIM)는 ingest 가 lib/ops2/ch12/chat.ts(enqueueChatCh12 — v1 챔버12 카드)로 넣는다. 보내기·다시 보내기·
 //   장비 연결 끊김은 여기 그대로(채널 plc·monitor·client·oes 가 더해짐 — 자기 주소만, 공정용으로 넘어가지 않음).
 import { ops2Db } from "@/lib/ops2/db";
+import { showEquipment } from "@/lib/ops2/display";
 import { deviceBundle } from "@/lib/ops2/browser";
 import { fmtKst } from "@/lib/ops2/time";
 import { alertText, isAlertEvent } from "@/lib/ops2/chatText";
@@ -178,7 +179,7 @@ async function labelsOf(webSchemaHash: string | null, equipment: string): Promis
       const ek = Array.isArray(b?.eventKinds) ? (b.eventKinds as { source?: string; kind?: string; label?: string }[]) : [];
       return ek.find((x) => x.source === c.source && x.kind === c.kind)?.label ?? genericEventName(str(c.source), code);
     },
-    base: equipment.endsWith("-SIM") ? equipment.slice(0, -4) : equipment,
+    base: showEquipment(equipment.endsWith("-SIM") ? equipment.slice(0, -4) : equipment),   // 표시 이름(W-23 E1 — CHK2 → CHK)
   };
 }
 
@@ -220,7 +221,7 @@ export async function enqueueChat(equipment: string, envs: Env[], now: Date): Pr
       const params = isObj(d.params) ? d.params : {};
       const blocks = Array.isArray(d.blocks) ? (d.blocks as Blk[]) : [];
       const fields: [string, string][] = [
-        ["Chamber", L.base], ["장비", `${equipment}${dev.label ? ` (${dev.label})` : ""}`],
+        ["Chamber", L.base], ["장비", `${showEquipment(equipment)}${dev.label ? ` (${dev.label})` : ""}`],
         ["공정 이름", name(r)], ["레시피", str(d.recipeName) ?? "—"],
         ["시작 시각", kstOf(r?.startedAt ?? e.ts)], ["시작한 사람", byWord(d.by) || "—"],
         ...startFields(params, blocks),
@@ -319,7 +320,7 @@ async function watchDevices(now: Date): Promise<void> {
   for (const d of devs) {
     const seen = d.lastSeenAt!;
     const quiet = now.getTime() - seen.getTime();
-    const base = d.equipment.endsWith("-SIM") ? d.equipment.slice(0, -4) : d.equipment;
+    const base = showEquipment(d.equipment.endsWith("-SIM") ? d.equipment.slice(0, -4) : d.equipment);   // 표시 이름(W-23 E1)
     const mode = sendsChat(d.equipment, d.runMode);
     const skipOf = () => (!mode ? `보내지 않음(모드 ${d.runMode ?? "?"})` : !webhookOf(d.equipment, "alert") ? "주소 없음" : null);
     if (quiet > lim) {
