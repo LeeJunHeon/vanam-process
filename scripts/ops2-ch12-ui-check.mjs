@@ -356,6 +356,29 @@ const chamberProps = (ch) => ({
         { web: titlesOf(web), loc: titlesOf(loc), grid, llOk, pcOk });
 }
 {
+  // W-21·22 B — RF 꺼짐 표시: cmd_on·uncommanded 둘 다 false 면 평소 보기 Forward·Reflected 0 W·'출력 꺼짐'(상세 보기는 읽은 값),
+  //   uncommanded 면 주의 칩 '명령 없는 출력' + 읽은 값, 옛 묶음(필드 없음)은 읽은 값 그대로. CH2 RF·Plasma Cleaning RF
+  const with_ = (o) => { const x = JSON.parse(JSON.stringify(st)); Object.assign(x.snapshot, o); return x; };
+  const off = with_({ "ch2.rf.cmd_on": false, "ch2.rf.uncommanded": false, "ch2.rf.fwd_w": 0.6, "ch2.rf.ref_w": 0.4, "ch2.rf.running": false,
+    "pc.rf.cmd_on": false, "pc.rf.uncommanded": false, "pc.rf.fwd_w": 0.7, "pc.rf.ref_w": 0.3 });
+  const unc = with_({ "ch2.rf.cmd_on": false, "ch2.rf.uncommanded": true, "ch2.rf.fwd_w": 30.2, "ch2.rf.ref_w": 1.1,
+    "pc.rf.cmd_on": false, "pc.rf.uncommanded": true, "pc.rf.fwd_w": 44.2, "pc.rf.ref_w": 0.0 });
+  const rfBox = (stx, detail) => textOf(render(U.PowerBox12, { ctx: { bundle, st: stx, lock: noLock, onAsk: noop }, ch: "ch2", kind: "rf" }, { detail }));
+  const pcBox = (stx) => textOf(render(U.PcPanel, { bundle, st: stx, lock: noLock, onAsk: noop, recipes: [], getRecipe: async () => null }));
+  const oldB = JSON.parse(JSON.stringify(bundle));
+  for (const bl of oldB.snapshot.blocks) bl.fields = bl.fields.filter((f) => f.name !== "cmd_on" && f.name !== "uncommanded");
+  const oldSt = JSON.parse(JSON.stringify(off));
+  for (const k of Object.keys(oldSt.snapshot)) if (/\.rf\.(cmd_on|uncommanded)$/.test(k)) delete oldSt.snapshot[k];
+  const oldT = textOf(render(U.PowerBox12, { ctx: { bundle: oldB, st: oldSt, lock: noLock, onAsk: noop }, ch: "ch2", kind: "rf" }));
+  const a = rfBox(off, false), d = rfBox(off, true), u = rfBox(unc, false), p0 = pcBox(off), pu = pcBox(unc);
+  const has = !!bundle.snapshot.blocks.find((b) => b.name === "ch2.rf")?.fields.some((f) => f.name === "cmd_on");
+  check("ui:rf-off-display — RF 꺼짐(cmd_on·uncommanded 둘 다 false)이면 평소 보기 Forward·Reflected 0.0 W·출력 꺼짐, 상세는 읽은 값, 명령 없는 출력은 주의 칩 + 읽은 값, 옛 묶음은 읽은 값",
+        has && a.includes("0.0 W") && !a.includes("0.6") && !a.includes("0.4") && a.includes("출력 꺼짐") && !a.includes("명령 없는 출력")
+        && d.includes("0.6") && u.includes("명령 없는 출력") && u.includes("30.2") && p0.includes("0.0 W") && !p0.includes("0.7")
+        && pu.includes("명령 없는 출력") && pu.includes("44.2") && oldT.includes("0.6"),
+        { has, a: a.slice(0, 160), u: u.slice(0, 120), old: oldT.slice(0, 120) });
+}
+{
   const html = render(U.PresputterPanel, { bundle, st, lock: noLock, onAsk: noop });
   const t = textOf(html), b = buttons(html);
   check("ui:presputter — 프리스퍼터 예약·예약 취소 칸(시각 HH:MM 고르기), 장비가 매일 예약을 잡음·형식 오류는 TIME_FORMAT 거부",
