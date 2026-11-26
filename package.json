@@ -13,6 +13,7 @@
     "ops2:chk-wording": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-chk-wording.mjs",
     "ops2:chk-feed": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-chk-feed.mjs",
     "ops2:chk-config": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-chk-config.mjs",
+    "ops2:chk-devices": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/ops2-chk-devices.mjs",
     "hmi:build": "node scripts/hmi-build.mjs",
     "hmi:copy": "node scripts/hmi-copy.mjs",
     "postinstall": "prisma generate"

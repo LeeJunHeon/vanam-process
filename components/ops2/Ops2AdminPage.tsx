@@ -4,7 +4,7 @@
 // 장비 목록(연결된 실행·마지막 연락·시계 차·중복 연결 거절 …)과 고른 장비의 최근 기록, 연결 비우기(다른 실행이 넘겨받게).
 // W-9: 말만 정리(진단 화면이라 구조는 그대로) — 최근 사건은 장비 화면 로그와 같은 규칙(묶음 이름, components/ops2/chk/text).
 // 장비(기준 ID)별 담당자 추가·삭제, 장비별 명령 SSE 연결, 명령 목록(보낸 길·횟수·결과까지 시간·결과 모름).
-// 명령 버튼은 두지 않는다(W-3). 토큰 교체는 W-3 에서 이 화면에 더한다.
+// 명령 버튼은 두지 않는다(W-3). 토큰 교체는 W-3 에서 이 화면에 더한다. W-24: 장비별 '사용' 켜기·끄기(확인창·사건 한 줄).
 // 구글챗 알림(W-6): 고른 장비의 주소 있음/없음(주소 자체는 안 보임)·보내는 모드·최근 outbox 20·실패 다시 보내기.
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, Cpu, MessageSquare, RefreshCw, RotateCcw, Unlock, UserPlus, X } from "lucide-react";
@@ -91,6 +91,8 @@ export default function Ops2AdminPage() {
   }, [sel]);
   const [now, setNow] = useState(0);
   const [confirm, setConfirm] = useState<string | null>(null);
+  // 장비 '사용' 켜기·끄기(W-24 A) — 확인창(연결 중인 장비를 끌 때는 경고)
+  const [toggle, setToggle] = useState<{ equipment: string; name: string; enabled: boolean; online: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -171,6 +173,24 @@ export default function Ops2AdminPage() {
     }
   };
 
+  const setEnabled = async (equipment: string, enabled: boolean) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/ops2/admin/devices/${encodeURIComponent(equipment)}/enabled`, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled }),
+      });
+      const j = await res.json().catch(() => ({}));
+      setMsg(res.ok ? `${equipment} 사용을 ${enabled ? "켰습니다" : "껐습니다"}.` : j?.error ?? "실패했습니다.");
+    } catch {
+      setMsg("실패했습니다.");
+    } finally {
+      setBusy(false);
+      setToggle(null);
+      load();
+    }
+  };
+
   const retryChat = async (equipment: string, id: number) => {
     setBusy(true);
     setMsg(null);
@@ -209,7 +229,7 @@ export default function Ops2AdminPage() {
           <table className="w-full whitespace-nowrap text-left text-xs">
             <thead className="text-[11px] text-gray-400">
               <tr>
-                <th className="py-1 pr-3">장비</th><th className="pr-3">모드</th><th className="pr-3">버전</th>
+                <th className="py-1 pr-3">장비</th><th className="pr-3">사용</th><th className="pr-3">모드</th><th className="pr-3">버전</th>
                 <th className="pr-3">연결된 실행</th><th className="pr-3">마지막 연락</th><th className="pr-3">시계 차</th>
                 <th className="pr-3">쓰기</th><th className="pr-3">설정(장비/웹)</th><th className="pr-3">장비 정의</th>
                 <th className="pr-3">중복 연결 거절</th><th className="pr-3">명령 통로</th><th>토큰</th>
@@ -230,6 +250,18 @@ export default function Ops2AdminPage() {
                       <span className="font-semibold">{d.label ?? d.equipment}</span>
                       <span className="ml-1 text-gray-400">{d.equipment}</span>
                       {!d.enabled && <span className="ml-1 text-rose-500">(꺼짐)</span>}
+                    </td>
+                    <td className="pr-3">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setToggle({ equipment: d.equipment, name: d.label ?? d.equipment, enabled: !d.enabled, online: online || d.sse.length > 0 }); }}
+                        disabled={busy}
+                        aria-label={`${d.equipment} 사용 ${d.enabled ? "끄기" : "켜기"}`}
+                        className={`rounded-lg border px-2 py-0.5 text-[11px] font-semibold disabled:opacity-40 ${d.enabled
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                          : "border-gray-200 bg-white text-gray-500 hover:bg-gray-50"}`}
+                      >
+                        {d.enabled ? "사용 중" : "꺼짐"}
+                      </button>
                     </td>
                     <td className="pr-3">
                       {d.runMode === "sim"
@@ -480,6 +512,39 @@ export default function Ops2AdminPage() {
             </div>
           </div>
         </>
+      )}
+
+      {toggle && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm rounded-2xl bg-white p-4">
+            <p className="text-sm font-bold text-gray-900">장비 사용 {toggle.enabled ? "켜기" : "끄기"}</p>
+            <p className="mt-2 text-sm text-gray-700">
+              <b>{toggle.name}</b> <span className="text-gray-400">{toggle.equipment}</span>{" "}
+              {toggle.enabled
+                ? "의 사용을 켭니다. 장비 화면·운전 대시보드 목록에 다시 나오고, 장비가 보내는 기록을 다시 받습니다."
+                : "의 사용을 끕니다. 장비 화면·운전 대시보드 목록에서 빠지고, 장비가 보내는 기록·상태를 받지 않습니다. 지난 기록과 설정은 지우지 않으며 다시 켜면 그대로 보입니다."}
+            </p>
+            {!toggle.enabled && toggle.online && (
+              <p className="mt-2 flex items-start gap-1.5 rounded-xl bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                지금 연결 중인 장비입니다. 끄면 웹에서 상태를 볼 수 없고 웹 명령(정지 포함)도 보낼 수 없습니다. 장비 프로그램은 계속 돌아갑니다.
+              </p>
+            )}
+            <p className="mt-3 text-[11px] text-gray-400">바꾼 사람과 시각이 장비 기록에 남습니다.</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={() => setToggle(null)} className="rounded-xl px-3 py-1.5 text-xs font-semibold text-gray-500 hover:bg-gray-50">
+                취소
+              </button>
+              <button
+                onClick={() => setEnabled(toggle.equipment, toggle.enabled)}
+                disabled={busy}
+                className={`rounded-xl px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40 ${toggle.enabled ? "bg-gray-800" : "bg-rose-600"}`}
+              >
+                {toggle.enabled ? "사용 켜기" : "사용 끄기"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {confirm && (

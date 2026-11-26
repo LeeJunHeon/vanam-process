@@ -461,6 +461,25 @@ export function Notices({ list, onClose }: { list: Notice[]; onClose: (id: strin
  *  상자는 대상 아래(아래 자리가 모자라면 위)에 붙고 대상을 가리지 않는다. 긴 글은 줄바꿈(최대 너비 340px).
  *  보이는 동안은 요소의 title 을 data-tip 으로 옮겨 브라우저 기본 말풍선이 겹치지 않게 하고, 떠나면 되돌린다(서버 HTML·검사는 그대로).
  *  잠긴(disabled) 버튼은 마우스 사건이 오지 않는 브라우저가 있어, 마우스 위치로 가장 안쪽 요소를 찾아 쓴다. */
+/** 대상 아래 줄 글 조각 상자(글 노드 범위 — 대상 아래 48 px 안에서 시작, 도움말 상자 자신은 빼고). 스크롤 상자 밖으로 잘려
+ *  보이지 않는 글은 빼기(그 자리에서 실제로 보이는 요소가 그 글의 요소인지 — 도움말은 pointer-events 가 없어 걸리지 않음) */
+function lineBoxesBelow(bottom: number, self: HTMLElement): DOMRect[] {
+  const out: DOMRect[] = [];
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let n = walk.nextNode(); n; n = walk.nextNode()) {
+    const owner = n.parentElement;
+    if (!owner || !n.textContent?.trim() || self.contains(n)) continue;
+    const rg = document.createRange();
+    rg.selectNodeContents(n);
+    for (const r of rg.getClientRects()) {
+      if (r.width <= 0.5 || r.top < bottom - 1 || r.top > bottom + 48) continue;
+      const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+      if (hit && (hit === owner || owner.contains(hit) || hit.contains(owner))) out.push(r);
+    }
+  }
+  return out;
+}
+
 export function TipLayer() {
   // W-23 A: 같은 대상 위에 0.5 s 머문 뒤에 보인다(키보드 focus 는 바로), 벗어나면 바로 숨김, 스크롤 때는 숨기지 않고 자리만 다시(깜박임 없음).
   // 자리: 올린 대상을 가리지 않는다 — 설정 서랍 안의 줄은 서랍 왼쪽 바깥(어두운 영역)에 줄 높이에 맞춰, 그 밖은 포인터 가로 위치에 맞춰
@@ -486,14 +505,25 @@ export function TipLayer() {
     }
     const hClamp = (x: number) => Math.max(M, Math.min(x, vw - w - M));
     if (t - G - h >= M) return put(hClamp(tip.px - 12), t - G - h);   // 위
-    const right = vw - rr - G - M, left = l - G - M;            // 옆(대상과 같은 높이 — 아래 줄을 덮지 않게)
-    const side = Math.max(right, left);
-    if (side >= 160) {
-      el.style.maxWidth = `${Math.min(340, side)}px`;
+    // 위에 자리가 없을 때(화면 맨 위 머리 등, W-24 B3): 바로 아래 줄 글(대상 아래 48 px 안에서 시작하는 글 조각)을 덮지 않게
+    const below = lineBoxesBelow(b, el);
+    const hits = (x0: number, y0: number, x1: number, y1: number) =>
+      below.some((r) => Math.min(r.right, x1) - Math.max(r.left, x0) > 1 && Math.min(r.bottom, y1) - Math.max(r.top, y0) > 1);
+    const right = vw - rr - G - M, left = l - G - M;            // 옆(대상과 같은 높이에서 시작)
+    for (const [room, isRight] of [[right, true], [left, false]].sort((a, c) => Number(c[0]) - Number(a[0])) as [number, boolean][]) {
+      if (room < 160) continue;
+      el.style.maxWidth = `${Math.min(340, room)}px`;
       w = el.offsetWidth; h = el.offsetHeight;
-      return put(right >= left ? rr + G : l - G - w, vClamp(t));
+      const x = isRight ? rr + G : l - G - w, y = vClamp(t);
+      if (!hits(x, y, x + w, y + h)) return put(x, y);
     }
-    put(hClamp(tip.px - 12), Math.min(b + G, vh - h - M));        // 아래(위·옆 모두 모자랄 때만)
+    el.style.maxWidth = "340px";
+    w = el.offsetWidth; h = el.offsetHeight;
+    const x = Math.max(M, Math.min(tip.px - 12, vw - w - M));
+    // 아래 — 그 아래 줄 글과 겹치면 그 줄 밑으로
+    const under = below.filter((r) => Math.min(r.right, x + w) - Math.max(r.left, x) > 1);
+    const y = under.length ? Math.max(...under.map((r) => r.bottom)) + G : b + G;
+    put(x, Math.min(y, vh - h - M));
   }, [tip]);
   useEffect(() => {
     let cur: HTMLElement | null = null;

@@ -268,6 +268,11 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     text = cleanMessage(msg);
     fromMessage = !!text;
   }
+  // 장비 관리(v2)에서 장비 사용 켜기·끄기(W-24 A) — 누가
+  if (source === "web" && kind === "device_enabled") {
+    return { ...line, kind: cd.enabled === false ? "사용 끄기" : "사용 켜기", main: true, fromMessage: false, source: "장비 관리",
+             text: personWord(cd.by) || s(cd.by) };
+  }
   // 웹이 만든 설정 기준 행(W-23 F — 프로그램 판이 바뀌어 노트북 프로그램 설정으로 기준을 다시 만듦) — 평소 보기 한 줄
   if (source === "web" && kind === "config_base") {
     return { ...line, kind: "기준 자동 생성", main: true, fromMessage: false, source: "설정",
