@@ -16,7 +16,8 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@/app/generated/prisma/client";
 import { ops2Db } from "@/lib/ops2/db";
 import { closeOthers, eventEnvelope, publishBrowser, type WireEnvelope } from "@/lib/ops2/hub";
-import { clearResync, overriddenCurrent, pendingResync, storedValues } from "@/lib/ops2/config";
+import { clearResync, inFlightVersion, overriddenCurrent, pendingResync, storedValues } from "@/lib/ops2/config";
+import { AUTO_RESYNC_BY, AUTO_RESYNC_CODE, autoResyncAction, autoResyncNote, baseDrift } from "@/lib/ops2/configDrift";
 import { enqueueChat } from "@/lib/ops2/chat";
 import { enqueueChatCh12 } from "@/lib/ops2/ch12/chat";
 import { isCh12, isCh12Chamber } from "@/lib/ops2/ch12/ids";
@@ -193,6 +194,17 @@ function wireOf(e: Envelope): WireEnvelope {
 
 type Applied = { acked: string[]; wire: WireEnvelope[]; ok: Envelope[]; resynced: string[] };
 
+/** 장비 버전의 기준 행(그보다 큰 resync 행이 있으면 그것) — currentConfig 와 같은 규칙(트랜잭션 안) */
+async function baseRowOf(tx: Tx, equipment: string, cv: number | null) {
+  if (cv === null) return null;
+  const sel = { version: true, paramSchemaHash: true, paramValues: true } as const;
+  const [row, rs] = await Promise.all([
+    tx.ops2ConfigVersion.findUnique({ where: { equipment_version: { equipment, version: cv } }, select: sel }),
+    tx.ops2ConfigVersion.findFirst({ where: { equipment, kind: "resync", version: { gt: cv } }, orderBy: { version: "desc" }, select: sel }),
+  ]);
+  return rs ?? row;
+}
+
 /** 메시지 묶음 하나를 트랜잭션 하나로. 돌려주는 값 = acked·브라우저로 보낼 envelope(커밋되면 유효) */
 async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
   const { equipment, now } = ctx;
@@ -213,6 +225,7 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
   const acks = of("config_ack");
   const devicePatch: Prisma.Ops2DeviceUpdateInput = {};
   const resynced: string[] = [];
+  const extraWire: WireEnvelope[] = [];                 // 웹이 만든 사건(자동 기준 행 — W-23 F)
 
   // ── hello: 실행·장비 정보, 웹 묶음, 설정 첫 기준값(장비 저장 값 — 묶음 params[].stored)·resync ──
   // lastHello._overriddenCurrent = 덮어쓴 키의 실행 값(묶음 current — 묶음이 올 때만 알 수 있어 다음 hello 로 이어 간다)
@@ -277,6 +290,26 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
                     paramSchemaHash: str(webSchema.paramSchemaHash), createdBy: rs.by, createdAt: now,
                     note: `장비 저장 값으로 기준 다시 읽기(장비 v${cv ?? "?"})${rs.note ? ` — ${rs.note}` : ""}` },
           });
+        }
+        else if (!isCh12(equipment)) {
+          // W-23 F: 프로그램 판이 바뀌어 묶음이 기준 행과 어긋나면 그 stored 로 기준 행을 자동으로(적용·되돌리기 대기 중이면 화면 띠만)
+          const cv = int(d.configVersion);
+          const base = await baseRowOf(tx, equipment, cv);
+          const drift = baseDrift(base, webSchema);
+          if (drift && autoResyncAction(drift, await inFlightVersion(tx, equipment, cv, now)) === "create") {
+            const version = Math.max(top.version, cv ?? 0) + 1;
+            const note = autoResyncNote(drift, cv);
+            await tx.ops2ConfigVersion.create({
+              data: { equipment, version, kind: "resync", paramValues: json(storedValues(webSchema)),
+                      paramSchemaHash: str(webSchema.paramSchemaHash), createdBy: AUTO_RESYNC_BY, createdAt: now, note },
+            });
+            const ev = await tx.ops2Event.create({
+              data: { msgId: webId(), equipment, instance: h.instance, seq: 0, ts: now, receivedAt: now, level: "info",
+                      code: AUTO_RESYNC_CODE, message: note, source: "web", kind: "config_base",
+                      context: json({ data: { version, from: base?.version ?? null, deviceVersion: cv, schema: drift.schema, missing: drift.missing } }) },
+            });
+            extraWire.push(eventEnvelope(ev));
+          }
         }
         if (rs) resynced.push(equipment);
       } else {
@@ -536,7 +569,7 @@ async function applyBatch(tx: Tx, ctx: Ctx, raws: unknown[]): Promise<Applied> {
       ...ok.filter((e) => e.type !== "state" && e.type !== "hello").map((e) => e.id),
       ...bads.map((b) => b.ackId).filter((v): v is string => !!v),
     ],
-    wire: ok.map(wireOf),
+    wire: [...ok.map(wireOf), ...extraWire],
     ok, resynced,
   };
 }
@@ -611,7 +644,7 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
     const hold = schemaHold.get(hash);
     if (!hold || hold < ctx.now.getTime()) {
       const [ws, base, dev] = await Promise.all([
-        ops2Db.ops2WebSchema.findUnique({ where: { hash }, select: { hash: true } }),
+        ops2Db.ops2WebSchema.findUnique({ where: { hash }, select: { hash: true, paramSchemaHash: true } }),
         ops2Db.ops2ConfigVersion.findFirst({ where: { equipment: ctx.equipment }, select: { version: true } }),
         ops2Db.ops2Device.findUnique({ where: { equipment: ctx.equipment }, select: { lastHello: true } }),
       ]);
@@ -621,6 +654,15 @@ export async function processIngest(ctx: Ctx, all: unknown[]): Promise<IngestRes
       const ovKnown = isObj(lh._overriddenCurrent) ? lh._overriddenCurrent : {};
       const ovMissing = !("webSchema" in hello.data) && keys.some((k) => !(k in ovKnown));
       needWebSchema = !ws || !base || ovMissing;
+      // W-23 F(챔버K): 이 해시의 묶음은 있지만(다른 장비가 먼저 보냄) 이 장비 기준 행과 정의가 다르면 이 장비의 묶음을 한 번 받는다
+      //   (자동 기준 행은 이 장비 stored 로만 만든다). 묶음을 실은 hello·적용 대기 중이면 묻지 않는다(200 KB 반복 방지).
+      if (!needWebSchema && ws && !("webSchema" in hello.data) && !isCh12(ctx.equipment)) {
+        const cv = int(hello.data.configVersion);
+        const row = await ops2Db.$transaction((tx) => baseRowOf(tx, ctx.equipment, cv));
+        if (row?.paramSchemaHash && ws.paramSchemaHash && row.paramSchemaHash !== ws.paramSchemaHash) {
+          needWebSchema = (await ops2Db.$transaction((tx) => inFlightVersion(tx, ctx.equipment, cv, ctx.now))) === null;
+        }
+      }
     }
   }
   // resync 요청이 있으면 hello 가 없는 POST 에도(장비는 needWebSchema 면 묶음을 실은 hello 를 한 번 더 보낸다)

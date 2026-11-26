@@ -7,6 +7,7 @@
 // 히터 레시피·정지 순서·알람·지난 공정이 남긴 출력 줄. 오른쪽: 부저 정지·공정 STOP(빨간 테두리)·ALL STOP(빨간 채움).
 // StatusBar = 스크롤로 띠가 안 보일 때 위에 붙는 얇은 줄(같은 버튼·같은 동작). run id·원시 이름은 '상세'에서만.
 import type { ReactNode } from "react";
+import { showEquipment } from "@/lib/ops2/display";
 import { BellOff, Lock, OctagonX, PauseCircle, Square } from "lucide-react";
 import { FS, Btn, Chip, Issue, type Ask, type Tone } from "./kit";
 import { fmtKst } from "@/lib/ops2/time";
@@ -88,7 +89,13 @@ export function StatusBar({ bundle, st, connected, lock, onAsk }: {
   );
 }
 
-export type ConnInfo = { label: string; tone: Tone };
+export type ConnInfo = { label: ReactNode; tone: Tone };
+
+/** 연결 칩 글(W-23 B) — 숫자는 고정 폭(tabular-nums·2자리 폭)이라 매초 바뀌어도 옆 칩이 밀리지 않는다 */
+export function ConnLabel({ parts }: { parts: [string, number | null, string] }) {
+  const [a, n, b] = parts;
+  return <>{a}{n !== null && <span className="inline-block min-w-[2ch] text-right tabular-nums">{n}</span>}{b}</>;
+}
 
 export function StatusBand({ bundle, st, connected, conn, mode, equipment, label, lock, onAsk, lastRun, startedMs, elapsedS,
   blocks, nowMs, v1Row, extra }: {
@@ -132,9 +139,9 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
   return (
     <section className="min-w-0 rounded-[12px] border border-[#D9DDE3] bg-white p-4 sm:p-5">
       <div className={`flex flex-wrap items-center gap-2 ${FS.body}`}>
-        <b className={`${FS.card} text-[#1B1F24]`}>{label || equipment}</b>
-        {label && <span className={`font-mono ${FS.small} text-[#5B6470]`}>{equipment}</span>}
-        <Chip tone={conn.tone}>{conn.label}</Chip>
+        <b className={`${FS.card} text-[#1B1F24]`}>{label || showEquipment(equipment)}</b>
+        {label && <span className={`font-mono ${FS.small} text-[#5B6470]`}>{showEquipment(equipment)}</span>}
+        <Chip tone={conn.tone} className="tabular-nums">{conn.label}</Chip>
         {mode === "bench" && <Chip tone="dark" icon={<Lock size={11} />}>{MODE_NAME.bench}</Chip>}
         {mode === "sim" && <Chip tone="info">{MODE_NAME.sim}</Chip>}
         {mode === "run" && <Chip>{MODE_NAME.run}</Chip>}
@@ -162,7 +169,12 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
                 : stepName(bundle, { type: st.step.type, label: st.step.label })}</b>
               {target && <span className="text-[#5B6470]">{target}</span>}
               {progText && <span className="font-semibold tabular-nums text-[#133A7C]">{progText}</span>}
+              {/* 영점 대기(W-23 H1, 묶음 24 state.run.waitText — '영점 대기 n s') */}
+              {st.run?.waitText && <Chip tone="warn" className="tabular-nums">{st.run.waitText}</Chip>}
             </p>
+          )}
+          {active && st && manual && st.run?.waitText && (
+            <p className={`mt-1 ${FS.body}`}><Chip tone="warn" className="tabular-nums">{st.run.waitText}</Chip></p>
           )}
           {st && !active && lastRun && (
             <p className={`mt-1 ${FS.body} text-[#5B6470]`}>

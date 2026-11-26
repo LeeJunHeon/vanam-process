@@ -394,7 +394,7 @@ export default function Chk2Recipes({ bundle, st, recipes, lock, onAsk, notify, 
             </tbody>
           </table>
         </div>
-        {detail && <p className={`${FS.small} text-[#8A929D]`}>레시피는 CHK2·CHK2-SIM 이 같이 씁니다</p>}
+        {detail && <p className={`${FS.small} text-[#8A929D]`}>레시피는 CHK·CHK-SIM 이 같이 씁니다</p>}
       </div>
       {menu && (
         <Menu anchor={menu.el} onClose={() => setMenu(null)} items={[

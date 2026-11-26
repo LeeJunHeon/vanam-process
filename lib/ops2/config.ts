@@ -13,10 +13,14 @@
 // resync(관리자 "장비 저장 값으로 기준 다시 읽기"): 장비에 명령을 보내지 않는다. 다음 POST 응답 needWebSchema 로
 // 묶음을 다시 받아 그 stored 로 새 버전 행(kind resync, 장비 버전보다 큰 번호)을 만든다 — 다음 적용의 기준값이 된다
 // (장비가 그보다 새 버전을 쓰기 시작하면 다시 장비 버전 행이 기준).
+// W-23 F(챔버K): 프로그램 판이 바뀌어 묶음이 기준 행과 어긋나면(configDrift.ts) ingest 가 기준 행을 자동으로 만들고,
+// 그 전까지(적용·되돌리기 대기 중) '지금 값'은 묶음 값 — currentConfig(equipment, bundle) 가 values null·drift 를 준다.
 import type { Prisma } from "@/app/generated/prisma/client";
 import { ops2Db } from "@/lib/ops2/db";
 import { COMMAND_TTL_MS } from "@/lib/ops2/commands";
 import { isObj, type Obj } from "@/lib/ops2/configCheck";
+import { baseDrift, type Drift } from "@/lib/ops2/configDrift";
+import { isCh12 } from "@/lib/ops2/ch12/ids";
 
 export { CONFIG_REASON, checkParamValue, isObj, type Obj, type ParamDefLite } from "@/lib/ops2/configCheck";
 
@@ -33,15 +37,17 @@ export async function deviceConfigVersion(equipment: string): Promise<number | n
 
 /** "지금 값"(편집·적용의 기준) — 장비 버전보다 큰 resync 행이 있으면 그 값, 아니면 장비 버전의 웹 행 값.
  *  행이 없으면 values null(부르는 쪽이 묶음 current 로 + 안내). row = 장비 버전 행, base = 기준 행(버전·종류) */
-export async function currentConfig(equipment: string) {
+export async function currentConfig(equipment: string, bundle?: Obj | null) {
   const version = await deviceConfigVersion(equipment);
   const [row, resync] = version === null ? [null, null] : await Promise.all([
     ops2Db.ops2ConfigVersion.findUnique({ where: { equipment_version: { equipment, version } } }),
     ops2Db.ops2ConfigVersion.findFirst({ where: { equipment, kind: "resync", version: { gt: version } }, orderBy: { version: "desc" } }),
   ]);
   const baseRow = resync ?? row;
-  const values = baseRow && isObj(baseRow.paramValues) ? baseRow.paramValues : null;
-  return { version, values, row, base: baseRow ? { version: baseRow.version, kind: baseRow.kind } : null };
+  // 묶음과 어긋난 기준(W-23 F, 챔버K) — 어긋난 동안 지금 값은 묶음 값(values null → 부르는 쪽이 묶음 current)
+  const drift: Drift | null = bundle && !isCh12(equipment) ? baseDrift(baseRow, bundle) : null;
+  const values = !drift && baseRow && isObj(baseRow.paramValues) ? baseRow.paramValues : null;
+  return { version, values, row, drift, base: baseRow ? { version: baseRow.version, kind: baseRow.kind, createdBy: baseRow.createdBy } : null };
 }
 
 /** 묶음 params 의 웹 값(비밀값 제외) — stored(5-12), 없으면(묶음 10 이전) current */

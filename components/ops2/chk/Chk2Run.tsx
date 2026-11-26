@@ -29,7 +29,7 @@ import { rfState } from "@/lib/ops2/chk/rf";
 import { ExpandedView, fmtSec } from "./Chk2BlockEditor";
 import { argRange, paramValue } from "./logic";
 import { enumLabel, fieldText } from "./text";
-import { chkLines, reasonText } from "./logView";
+import { alertLines, reasonText } from "./logView";
 import { bandOf, kindOf, pressureTargetCol, scaleMax, usesNow } from "./runview";
 import { heaterLines, processLines, rowLine } from "./recipeText";
 import { useChk2Mode } from "./mode";
@@ -154,11 +154,12 @@ function DeviceStates({ bundle, snap }: { bundle: Bundle | null; snap: Snap }) {
 /** 알림 — 공정 중(기본): 높이는 내용만큼, 최근 20줄, 목록 최대 320px 안에서 스크롤.
  *  대기(idle, W-20): 최근 60줄. 영역 1360px 이상이면 오른쪽 띠 — 높이는 왼쪽 묶음을 따르고(페이지를 늘이지 않음) 목록이 남은 높이를 채워
  *  스크롤, 그보다 좁으면 맨 아래 한 줄 전체 · 목록 최대 240px */
-function Alerts({ bundle, st, feed, onLog, idle, bottom }: { bundle: Bundle | null; st: StateData | null; feed: FeedItem[]; onLog?: () => void; idle?: boolean;
-  bottom?: boolean }) {            // W-21 운전 탭 대기 — 알림은 늘 아래 한 줄(목록 최대 240px)
+function Alerts({ bundle, st, feed, onLog, idle, bottom, nowMs }: { bundle: Bundle | null; st: StateData | null; feed: FeedItem[]; onLog?: () => void; idle?: boolean;
+  bottom?: boolean; nowMs: number }) {            // W-21 운전 탭 대기 — 알림은 늘 아래 한 줄(목록 최대 240px)
   const alarms = st?.alarms ?? [];
-  const n = idle ? 60 : 20;
-  const lines = useMemo(() => chkLines(bundle, feed).filter((r) => r.main).slice(-n).reverse(), [bundle, feed, n]);   // 평소 보기 글(코드·local 없음)
+  // 알림은 주의가 필요한 것만(W-23 C — 경고·오류 사건, 거부·실패한 명령, 24시간 안, 최근 20줄). 평범한 줄은 기록 탭에서
+  const minute = Math.floor(nowMs / 60_000);                 // 24시간 판단은 분 단위로(매초 다시 만들지 않게)
+  const lines = useMemo(() => alertLines(bundle, feed, minute * 60_000), [bundle, feed, minute]);
   return (
     <Card title={<><BellRing size={15} /> 알림</>} right={onLog && <Btn size="sm" kind="ghost" onClick={onLog}>기록 전체 보기</Btn>}
       className={idle && !bottom ? "flex flex-col @min-[1360px]/run:absolute @min-[1360px]/run:inset-0" : ""}>
@@ -184,7 +185,7 @@ function Alerts({ bundle, st, feed, onLog, idle, bottom }: { bundle: Bundle | nu
             </li>
           ))}
         </ul>
-      ) : <Empty>최근 기록 없음</Empty>}
+      ) : !alarms.length ? <Empty>알림 없음</Empty> : null}
     </Card>
   );
 }
@@ -360,7 +361,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
             <DeviceGrid bundle={bundle} st={st} snap={snap} lock={lock} onAsk={onAsk} onHmi={onHmi} onManual={onManual} onConfig={onConfig} onSettings={onSettings} />
           </div>
           <div className="relative min-w-0">
-            <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} idle />
+            <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} nowMs={nowMs} idle />
           </div>
         </div>
       </div>
@@ -380,7 +381,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
         </div>
         <div className="grid min-w-0 items-start gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">
           <DeviceStates bundle={bundle} snap={snap} />
-          <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} />
+          <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} nowMs={nowMs} />
         </div>
       </div>
     );
@@ -394,7 +395,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
             <KV k="장비에 적재됨"><b className={`${FS.body}`}>{st?.recipe?.name || "없음"}</b></KV>
             <p className={`mt-2 ${FS.small} text-[#5B6470]`}>레시피 고르기·적재는 웹 화면에서 합니다</p>
           </Card>}
-      <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} idle bottom />
+      <Alerts bundle={bundle} st={st} feed={feed} onLog={onLog} nowMs={nowMs} idle bottom />
     </div>
   );
 }

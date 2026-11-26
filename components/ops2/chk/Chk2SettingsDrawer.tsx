@@ -77,7 +77,7 @@ export default function Chk2SettingsDrawer({ dev, bundle, onClose, editor, contr
   return (
     <div className="fixed inset-0 z-50">
       <div className="absolute inset-0 bg-[rgba(17,24,39,0.28)]" onClick={onClose} aria-hidden />
-      <aside ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${SPEC[dev].title} 설정`}
+      <aside ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={`${SPEC[dev].title} 설정`} data-tip-side="left"
         onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
         className="absolute inset-y-0 right-0 flex w-full max-w-full flex-col border-l border-[#D9DDE3] bg-white shadow-[-12px_0_32px_rgba(17,24,39,0.12)] outline-none sm:w-[680px]">
         <div className="flex flex-col gap-1 border-b border-[#E3E6EA] px-4 pb-3 pt-4 sm:px-6">

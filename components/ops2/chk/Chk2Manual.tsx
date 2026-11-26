@@ -161,20 +161,28 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
     <Btn kind={k} size={size} lock={lockOf(b)} onClick={() => ask(b, label, opts)}>{children}</Btn>
   );
 
-  // [유량 바꾸기](W-22) — 가스가 켜져 있을 때 Ar 유량만 바꾼다(공정 중 값 바꾸기 mfc.ar_flow — 수동 조작 중에만)
-  const arNew = parse(ar);
-  const flowWhy = !newDev ? "장비 프로그램을 최신으로 올리면 사용할 수 있습니다"
-    : !gasNowOn ? "가스가 꺼져 있어 [가스 켜기]로 켭니다"
-    : !man ? "수동 조작 중에만 바꿀 수 있습니다"
-    : st?.stopping ? "정지 순서 중"
-    : arNew === null || Number.isNaN(arNew) ? "Ar 유량(sccm)을 넣으세요" : lock("PROCESS_ADJUST");
-  const flowBtn = (
-    <Btn lock={flowWhy} onClick={() => onAsk({ kind: "PROCESS_ADJUST", label: "수동 조작 · Ar 유량 바꾸기", key: "PROCESS_ADJUST:mfc.ar_flow",
-      args: { device: "mfc", item: "ar_flow", value: arNew },
-      lines: [`Ar 유량을 ${arNew} sccm 으로 바꿉니다.`], note: "가스는 켜진 채 유량만 바꿉니다." })}>
-      유량 바꾸기
-    </Btn>
-  );
+  // [유량 바꾸기](W-22, W-23 G4 O₂ 도) — 가스가 켜져 있을 때 켜진 채널의 유량만 바꾼다(공정 중 값 바꾸기 mfc.ar_flow·o2_flow —
+  // 수동 조작 중에만). 채널 켜짐(mfc.ar_on·o2_on)을 모르는 옛 장비는 Ar 만(예전 그대로). 두 채널이 켜져 있으면 버튼 둘.
+  const chOn = (c: "ar" | "o2") => snap?.[`mfc.${c}_on`] === true || (c === "ar" && snap?.["mfc.ar_on"] === undefined);
+  const flowChs = (["ar", "o2"] as const).filter(chOn);
+  const flowBtn1 = (c: "ar" | "o2", label: string) => {
+    const name = c === "ar" ? "Ar" : "O₂";
+    const v = parse(c === "ar" ? ar : o2);
+    const why = !newDev ? "장비 프로그램을 최신으로 올리면 사용할 수 있습니다"
+      : !gasNowOn ? "가스가 꺼져 있어 [가스 켜기]로 켭니다"
+      : !man ? "수동 조작 중에만 바꿀 수 있습니다"
+      : st?.stopping ? "정지 순서 중"
+      : v === null || Number.isNaN(v) ? `${name} 유량(sccm)을 넣으세요` : lock("PROCESS_ADJUST");
+    return (
+      <Btn key={c} lock={why} onClick={() => onAsk({ kind: "PROCESS_ADJUST", label: `수동 조작 · ${name} 유량 바꾸기`, key: `PROCESS_ADJUST:mfc.${c}_flow`,
+        args: { device: "mfc", item: `${c}_flow`, value: v },
+        lines: [`${name} 유량을 ${v} sccm 으로 바꿉니다.`], note: "가스는 켜진 채 유량만 바꿉니다." })}>
+        {label}
+      </Btn>
+    );
+  };
+  const flowBtn = flowChs.length === 2 ? <>{flowBtn1("ar", "Ar 유량 바꾸기")}{flowBtn1("o2", "O₂ 유량 바꾸기")}</>
+    : flowBtn1(flowChs[0] ?? "ar", "유량 바꾸기");
   const gasOn: Block = { type: "gas_intro", params: { ar: parse(ar) !== null, ar_flow: parse(ar), o2: parse(o2) !== null, o2_flow: parse(o2), zero } };
   const gasOff: Block = { type: "gas_off", params: { ar: true, o2: true, close_valves: true } };
   const press: Block = { type: "pressure", params: { sp, value: spSet ? parse(spVal) : null, set: spSet, select: true, wait: spWait } };
@@ -354,7 +362,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
             <KV k="전압"><Val text={fmt(num(snap?.["dc.v"]))} unit="V" /></KV>
             <KV k="전류"><Val text={fmt(num(snap?.["dc.i"]), 3)} unit="A" /></KV>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Field label="목표" unit="W" value={dc} onChange={setDc} />
+              <Field label="새 목표" unit="W" value={dc} onChange={setDc} />
               {dcMax !== null && <span className={`${FS.small} text-[#5B6470]`}>운전 상한 {dcMax} W</span>}
             </div>
           </DevCard>
@@ -368,7 +376,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
             actionsEnd={btn(pOff({ rf: true }), "RF 끄기", <>끄기</>, "danger")}>
             <KV k="목표"><Val text={fmt(num(snap?.["rf.set_w"]))} unit="W" /></KV>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Field label="목표" unit="W" value={rf} onChange={setRf} />
+              <Field label="새 목표" unit="W" value={rf} onChange={setRf} />
               {rfMax !== null && <span className={`${FS.small} text-[#5B6470]`}>운전 상한 {rfMax} W</span>}
             </div>
           </DevCard>
@@ -380,7 +388,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
             actionsEnd={btn(pOff({ rfpulse: true }), "RF Pulse 끄기", <>끄기</>, "danger")}>
             <KV k={nm("rfp.ref_w")}><Val text={fmt(num(snap?.["rfp.ref_w"]), 0)} unit="W" /></KV>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <Field label="목표" unit="W" value={rfp} onChange={setRfp} />
+              <Field label="새 목표" unit="W" value={rfp} onChange={setRfp} />
               <Field label="주파수" unit="kHz" value={freq} onChange={setFreq} hint="비우면 장비에 있는 값을 그대로 씁니다." width="w-20" />
               <Field label="듀티" unit="%" value={duty} onChange={setDuty} hint="비우면 장비에 있는 값을 그대로 씁니다." width="w-16" />
             </div>

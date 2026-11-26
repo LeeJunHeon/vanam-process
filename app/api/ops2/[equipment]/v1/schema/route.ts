@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ equ
   const bundle = await deviceBundle(device.webSchemaHash);
   if (!bundle) return NextResponse.json({ error: "no_schema" }, { status: 409 });
 
-  const cur = await currentConfig(equipment);
+  const cur = await currentConfig(equipment, bundle);           // 기준이 묶음과 어긋나면(W-23 F) 묶음 current 그대로
   return NextResponse.json({
     ...overlayCurrent(bundle, cur.values),
     deviceConfigVersion: cur.version,

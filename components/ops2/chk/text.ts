@@ -268,6 +268,11 @@ export function logLine(b: Bundle | null, e: FeedLike, o?: { plain?: boolean; bl
     text = cleanMessage(msg);
     fromMessage = !!text;
   }
+  // 웹이 만든 설정 기준 행(W-23 F — 프로그램 판이 바뀌어 노트북 프로그램 설정으로 기준을 다시 만듦) — 평소 보기 한 줄
+  if (source === "web" && kind === "config_base") {
+    return { ...line, kind: "기준 자동 생성", main: true, fromMessage: false, source: "설정",
+             text: `프로그램 판이 바뀜${num(cd.version) !== null ? ` · 기준 v${num(cd.version)}` : ""}` };
+  }
   text = dedupe(name, text);
   // 내용이 빈 안전 '안내' 줄(프로그램을 닫을 때 S41 등)은 평소 보기에 내지 않는다(상세 보기에는 그대로)
   const hide = source === "safety" && level === "info" && !text;

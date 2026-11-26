@@ -13,12 +13,15 @@
 //   결과 기다리는 중 → 장비 끊김 → PLC 값 오래됨(PLC 버튼·히터 목표·켜기·끄기·리셋).
 // hello 를 받기 전에는 '장비 정보를 읽는 중…' 자리표시, v2 프로그램이 붙은 적 없는 장비는 연결 대기 카드(레시피·기록만).
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { AlertTriangle, Code2, Cloud, CloudOff, Laptop, Lock, LockOpen, LogIn, WifiOff } from "lucide-react";
+import { showEquipment } from "@/lib/ops2/display";
+import { Code2, Cloud, CloudOff, Laptop, Lock, LockOpen, LogIn, WifiOff } from "lucide-react";
 import Chk2Hmi from "./Chk2Hmi";
-import { StatusBand, StatusBar, type ConnInfo } from "./Chk2Status";
+import { ConnLabel, StatusBand, StatusBar, type ConnInfo } from "./Chk2Status";
+import { connOf, connParts } from "@/lib/ops2/chk/conn";
 import Chk2Run from "./Chk2Run";
 import Chk2SettingsDrawer, { type DevKey } from "./Chk2SettingsDrawer";
 import Chk2DevParams from "./Chk2DevParams";
+import { Float } from "./Float";
 import { CommandLog, EventFeed, RunList } from "./Chk2Logs";
 import Chk2Config from "./Chk2Config";
 import Chk2LocalConfig from "./Chk2LocalConfig";
@@ -26,6 +29,7 @@ import Chk2History from "./Chk2History";
 import Chk2Recipes from "./Chk2Recipes";
 import Chk2Manual from "./Chk2Manual";
 import { FS, Btn, Card, ConfirmDialog, InfoBand, Issue, Notices, SimpleConfirm, Tabs, TipLayer, type Ask, type Notice } from "./kit";
+import { AUTO_RESYNC_CODE } from "@/lib/ops2/configDrift";
 import { stepName } from "@/lib/ops2/chk/terms";
 import { STALE_SEC_DEFAULT, STOP_KINDS, paramValue, plcFresh } from "./logic";
 import { reasonLabel } from "./types";
@@ -42,6 +46,7 @@ const LOST_MS = 10_000;
 const SKEW_WARN_MS = 3_000;
 const PLC_PENDING_MS = 10_000;     // PLC 버튼 "전환 중" 최대
 const OK_NOTICE_MS = 6_000;
+const BASE_SEEN_KEY = "vanam-process:chk2-base-auto-seen";      // 설정 기준 자동 생성 안내를 닫은 사건 id(W-23 F)
 const PLC_KINDS = new Set(["PLC_BUTTON", "HEATER_SV", "HEATER_ON", "HEATER_OFF", "HEATER_RESET"]);   // PLC 값이 있어야 하는 명령
 
 const SEND_ERROR: Record<string, string> = {
@@ -106,7 +111,7 @@ export default function Chk2Page() {
             className={`h-10 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body} font-semibold text-[#1B1F24]`}>
             {devices.map((d) => (
               <option key={d.equipment} value={d.equipment}>
-                {d.equipment}{d.label ? ` · ${d.label}` : ""}{d.runMode ? ` (${d.runMode})` : ""}
+                {showEquipment(d.equipment)}{d.label ? ` · ${d.label}` : ""}{d.runMode ? ` (${d.runMode})` : ""}
               </option>
             ))}
           </select>
@@ -116,11 +121,11 @@ export default function Chk2Page() {
         <Card><p className={`${FS.body} text-[#5B6470]`}>등록된 v2 장비가 없습니다. 장비 관리(v2)에서 장비를 등록하세요.</p></Card>
       )}
       {picked && <Chk2Device key={picked} equipment={picked} dirtyRef={dirtyRef} />}
-      {switchTo && (
+      {switchTo && <Float>
         <SimpleConfirm title="저장하지 않음" ok="버리고 바꾸기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 장비를 바꿀까요?"
           onCancel={() => setSwitchTo(null)}
           onOk={() => { dirtyRef.current = false; setSwitchTo(null); pick(switchTo); }} />
-      )}
+      </Float>}
     </div>
   );
 }
@@ -250,6 +255,20 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       .map(([t, p]) => [t, p.want]),
   );
 
+  // 설정 기준 자동 생성(W-23 F — 프로그램 판이 바뀜) 화면 안내 한 번: 10분 안에 온 그 사건을 닫을 때까지(닫으면 이 브라우저에서 다시 안 보임)
+  const [baseSeen, setBaseSeen] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(BASE_SEEN_KEY) ?? "[]"); } catch { return []; }
+  });
+  const seenBase = (id: string) => {
+    const next = [...baseSeen, id].slice(-20);
+    setBaseSeen(next);
+    try { localStorage.setItem(BASE_SEEN_KEY, JSON.stringify(next)); } catch { /* 저장 못 해도 이번 화면에서는 닫힘 */ }
+  };
+  const baseEv = [...d.feed].reverse().find((x) => x.type === "event" && x.data.code === AUTO_RESYNC_CODE);
+  const baseNotice: Notice | null = baseEv && !baseSeen.includes(baseEv.id) && now - Date.parse(baseEv.ts) < 10 * 60_000
+    ? { id: baseEv.id, tone: "warn", at: Date.parse(baseEv.ts), title: "설정 기준을 다시 만들었습니다",
+        text: "프로그램이 새 판으로 바뀌어 노트북 프로그램 설정으로 다시 만들었습니다." }
+    : null;
   const notify = (n: Omit<Notice, "id" | "at">) =>
     setNotices((l) => [{ ...n, id: `${Date.now()}-${Math.random()}`, at: Date.now() }, ...l].slice(0, 4));
 
@@ -361,7 +380,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   // hello 를 받기 전 — 연결된 적 없는 장비도 전체 화면이 잠깐 보였다 바뀌지 않게 자리표시만(못 받으면 오류 안내)
   if (!d.hello) {
     return (
-      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail, chkWords: true, chkColors: true }}>
+      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail, chkWords: true, chkColors: true, lineIcons: true }}>
         {d.authLost ? <Issue level="alarm"><LogIn size={14} className="mr-1 inline" />로그인이 끊겼습니다. 새로고침하세요. 조작이 잠겼습니다.</Issue>
           : d.error ? <Issue level="alarm">{d.error}</Issue>
           : <section className={`animate-pulse rounded-[12px] border border-[#D9DDE3] bg-white p-6 text-center ${FS.body} text-[#5B6470]`}>장비 정보를 읽는 중…</section>}
@@ -371,10 +390,11 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
 
   const up = st?.uplink;
   const chipAge = local && !d.streamUp && age !== null ? Math.max(age, LOST_MS + 1) : age;   // 로컬은 stream 이 끊기면 바로 끊김
+  // 연결 칩(W-23 B) — 연결됨(초 없음)·늦음 N초·끊김 N초(60초 미만)·끊김 · 18:05부터(마지막으로 값을 받은 시각 — 매초 바뀌지 않음)
+  const cs = connOf(chipAge, now, LATE_MS, LOST_MS);
   const conn: ConnInfo = neverConnected ? { label: "연결 대기", tone: "neutral" }
-    : chipAge === null ? { label: "상태 없음", tone: "neutral" }
-    : chipAge <= LATE_MS ? { label: `연결됨 · ${ageSec ?? 0}초 전`, tone: "neutral" }
-    : chipAge <= LOST_MS ? { label: `늦음 ${ageSec}초`, tone: "warn" } : { label: `끊김 ${ageSec}초`, tone: "alarm" };
+    : { label: <ConnLabel parts={connParts(cs)} />, tone: cs.tone };
+  const lostCs = connOf(age, now, LATE_MS, LOST_MS);
   const runMode = d.hello.runMode;
   const modeChip = bench ? "bench" : runMode === "sim" ? "sim" : runMode ? "run" : null;
   const shownTabs = neverConnected ? tabs.filter((t) => t.key === "recipe" || t.key === "log")
@@ -396,7 +416,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   );
 
   return (
-    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail, chkWords: true, chkColors: true }}>
+    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail, chkWords: true, chkColors: true, lineIcons: true }}>
       {local && (
         <div className={`flex flex-wrap items-center gap-2 rounded-[12px] bg-[#3A424D] px-4 py-2 ${FS.body} text-white`}>
           <Laptop size={15} /> <b>노트북 화면</b>
@@ -464,11 +484,12 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {d.state && !connected && (!local || d.streamUp) && (
         <Issue level="alarm">
-          <AlertTriangle size={13} className="mr-1 inline" /><b>장비 끊김 {ageSec}초</b>. 표시는 마지막 값이며 조작이 잠겼습니다.
+          <b>장비 끊김{lostCs.since ? ` · ${lostCs.since}부터` : <> <span className="inline-block min-w-[2ch] text-right tabular-nums">{ageSec}</span>초</>}</b>. 표시는 마지막 값이며 조작이 잠겼습니다.
           {webOnline && perms?.canOperate && " 웹은 장비와 이어져 있어 정지 명령은 보낼 수 있습니다."}
         </Issue>
       )}
-      <Notices list={notices} onClose={(id) => setNotices((l) => l.filter((n) => n.id !== id))} />
+      <Float><Notices list={baseNotice ? [baseNotice, ...notices] : notices}
+        onClose={(id) => (id === baseNotice?.id ? seenBase(id) : setNotices((l) => l.filter((n) => n.id !== id)))} /></Float>
 
       <Tabs tabs={shownTabs} value={curTab} onChange={(t) => goTab(t)} right={detailBtn} wrap />
 
@@ -516,7 +537,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {curTab === "config" && local && <Chk2LocalConfig bundle={d.bundle} st={st} />}
 
-      {drawer && (
+      {drawer && <Float>{(
         <Chk2SettingsDrawer dev={drawer} bundle={d.bundle} st={st} onClose={() => setDrawer(null)}
           controller={st?.devParams && ["gas", "pressure", "ig"].includes(drawer) ? (
             <Chk2DevParams dev={drawer === "ig" ? "ig" : "mfc"} bundle={d.bundle} st={st}
@@ -529,14 +550,17 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
             <Chk2Config equipment={equipment} bundle={d.bundle} st={st} perms={perms ?? null} connected={connected}
               reloadSchema={d.loadSchema} notify={notify} startOpen onlyKeys={[key]} />
           ) : undefined} />
-      )}
-      {tabTo && (
-        <SimpleConfirm title="저장하지 않음" ok="버리고 나가기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 탭을 바꿀까요?"
-          onCancel={() => setTabTo(null)}
-          onOk={() => { dirtyRef.current = false; const t = tabTo; setTabTo(null); goTab(t, true); }} />
-      )}
-      <ConfirmDialog ask={ask} onOk={run} onCancel={cancel} />
-      <TipLayer />
+      )}</Float>}
+      {/* 떠 있는 상자는 body 포털(W-23 A — 페이지 묶음의 마지막 자식이 되어 여백 12 px 이 붙지 않게) */}
+      <Float>
+        {tabTo && (
+          <SimpleConfirm title="저장하지 않음" ok="버리고 나가기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 탭을 바꿀까요?"
+            onCancel={() => setTabTo(null)}
+            onOk={() => { dirtyRef.current = false; const t = tabTo; setTabTo(null); goTab(t, true); }} />
+        )}
+        <ConfirmDialog ask={ask} onOk={run} onCancel={cancel} />
+        <TipLayer />
+      </Float>
     </Chk2ModeContext.Provider>
   );
 }

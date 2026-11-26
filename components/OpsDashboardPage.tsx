@@ -10,8 +10,10 @@ import { Cpu, ExternalLink } from "lucide-react";
 import { FS, Btn, Card, Chip } from "@/components/ops2/chk/kit";
 import { useChk2 } from "@/components/ops2/chk/useChk2";
 import { rfState } from "@/lib/ops2/chk/rf";
+import { connOf, connParts } from "@/lib/ops2/chk/conn";
+import { ConnLabel } from "@/components/ops2/chk/Chk2Status";
 import { kindOf, pressureTargetCol } from "@/components/ops2/chk/runview";
-import { chkLines, reasonText } from "@/components/ops2/chk/logView";
+import { alertLines, reasonText } from "@/components/ops2/chk/logView";
 import { RUN_RESULT, type StateData } from "@/components/ops2/chk/types";
 import { runTitle } from "@/components/ops2/chk/text";
 import { MODE_NAME, fieldName, stepName } from "@/lib/ops2/chk/terms";
@@ -101,9 +103,13 @@ function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onN
   const pct = step && step.total ? Math.min(100, Math.max(0, ((step.no - 1) / step.total) * 100)) : 0;
   const pt = pressureTargetCol(snap, b);
   const tgt = (v: number | null) => (v !== null && v > 0 ? ` · 목표 ${fmtN(v)}` : "");
+  // 꺼져 있으면 목표 대신 '꺼짐'(W-23 G3 — 꺼진 채널의 남은 목표 값은 보이지 않는다). on 을 모르면(옛 묶음) 목표 그대로
+  const tgtIf = (on: unknown, v: number | null) => (on === false ? " · 꺼짐" : tgt(v));
+  const rfOn = snap?.["rf.cmd_on"] ?? snap?.["rf.out_on"];
   // 쓰는 파워 — 켜진 것(DC·RF·RF Pulse), 없으면 RF
-  const pw = snap?.["dc.out"] === true ? ["DC Power", "dc.p", "dc.set_w"] : snap?.["rfp.out_on"] === true ? ["RF Pulse", "rfp.fwd_w", "rfp.set_w"]
-    : ["RF Power", "rf.fwd_w", "rf.set_w"];
+  const pw = snap?.["dc.out"] === true ? ["DC Power", "dc.p", "dc.set_w", "dc.out"] : snap?.["rfp.out_on"] === true ? ["RF Pulse", "rfp.fwd_w", "rfp.set_w", "rfp.out_on"]
+    : ["RF Power", "rf.fwd_w", "rf.set_w", ""];
+  const pwOn = pw[3] ? snap?.[pw[3]] : rfOn;
   const openShut = ["ms", "s1", "s2"].filter((k) => snap?.[`plc.${k}`] === true).map((k) => fieldName(b, `plc.${k}`));
   const vacOk = snap?.["plc.mv"] === true && snap?.["plc.turbo"] === true;
   const itlOk = snap?.["plc.mv_interlock"] === true;
@@ -111,7 +117,7 @@ function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onN
   return (
     <Card className="flex flex-col gap-3" title={<>CHK Sputter</>}
       right={<span className="flex flex-wrap items-center justify-end gap-1.5">
-        <Chip tone={online ? "neutral" : "alarm"}>{online ? `연결됨 · ${Math.round((age ?? 0) / 1000)}초 전` : "끊김"}</Chip>
+        {(() => { const c = connOf(age, now); return <Chip tone={c.tone} className="tabular-nums"><ConnLabel parts={connParts(c)} /></Chip>; })()}
         {mode && MODE_NAME[mode] && <Chip>{MODE_NAME[mode]}</Chip>}
         {stateChip}
       </span>}>
@@ -133,8 +139,8 @@ function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onN
       ) : <p className={`${FS.body} text-[#5B6470]`}>{online ? "대기 중" : "장비 연결을 기다리는 중"}</p>}
       <div className="grid grid-cols-2 gap-2.5 @min-[640px]/dash:grid-cols-4">
         <Tile title={`챔버 압력${tgt(num(snap?.[pt]))}`} value={fmtN(num(snap?.["mfc.pressure_mtorr"]), 2)} unit="mTorr" />
-        <Tile title={`Ar 유량${tgt(num(snap?.["mfc.ar_set"]))}`} value={fmtN(num(snap?.["mfc.ar_sccm"]))} unit="sccm" />
-        <Tile title={`${pw[0]}${tgt(num(snap?.[pw[2]]))}`} value={fmtN(num(snap?.[pw[1]]))} unit="W" />
+        <Tile title={`Ar 유량${tgtIf(snap?.["mfc.ar_on"], num(snap?.["mfc.ar_set"]))}`} value={fmtN(num(snap?.["mfc.ar_sccm"]))} unit="sccm" />
+        <Tile title={`${pw[0]}${tgtIf(pwOn, num(snap?.[pw[2]]))}`} value={fmtN(num(snap?.[pw[1]]))} unit="W" />
         <Tile title={`히터 TC1${snap?.["heater.run"] === true ? tgt(num(snap?.["heater.sv"])) : ""}`} value={fmtN(num(snap?.["heater.pv"]))} unit="°C" />
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -158,9 +164,12 @@ function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onN
 function RecentCard({ d, onNavigate }: { d: ReturnType<typeof useChk2>; onNavigate?: (p: EquipPage) => void }) {
   const feed = useEvery(d.feed, REDRAW_MS);
   const st = useEvery(d.state, REDRAW_MS);
-  const lines = useMemo(() => chkLines(d.bundle, feed).filter((r) => r.main).slice(-40).reverse(), [d.bundle, feed]);
+  // 주의가 필요한 것만(W-23 C — 경고·오류 사건, 거부·실패한 명령, 24시간 안, 최근 20줄)
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(t); }, []);
+  const lines = useMemo(() => alertLines(d.bundle, feed, now), [d.bundle, feed, now]);
   const alarms = st?.data?.alarms ?? [];
-  const today = fmtKst(new Date().toISOString()).slice(0, 5);
+  const today = fmtKst(new Date(now).toISOString()).slice(0, 5);
   return (
     <Card className="flex flex-col @min-[1200px]/dash:absolute @min-[1200px]/dash:inset-0" title="최근 알림"
       right={<Btn size="sm" kind="ghost" onClick={() => onNavigate?.("equipChk2")}>전체 보기</Btn>}>
@@ -185,7 +194,7 @@ function RecentCard({ d, onNavigate }: { d: ReturnType<typeof useChk2>; onNaviga
             );
           })}
         </ul>
-      ) : <p className={`${FS.body} text-[#5B6470]`}>최근 기록 없음</p>}
+      ) : <p className={`${FS.body} text-[#5B6470]`}>알림 없음</p>}
     </Card>
   );
 }

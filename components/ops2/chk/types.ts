@@ -116,6 +116,7 @@ export type RunState = {
   blocks?: RunBlock[]; delay?: { sec?: number; remainS?: number | null };
   editBase?: { revision: number; blocks: unknown[] };   // 묶음 14 — 순서 고치기 기준(장비가 실행하는 정리 목록), 판이 바뀔 때·10 초마다만
   manual?: ManualState;                          // 묶음 18 — 수동 조작 중일 때만
+  waitText?: string | null;                      // 묶음 24(W-23 H1) — 단계 안의 기다림 이름(영점 대기 n s)
 };
 /** state.run.manual(묶음 18) — 수동 조작 중. outputs = 지금 켜져 있는 출력, executed = 실행한 블록(run_end summary.executed 와 같은 모양) */
 export type ManualState = {

@@ -2,7 +2,7 @@
 
 // 챔버K 장비 설정 보기 — '컨트롤러 값' 구역(W-22, 묶음 23 state.devParams · 시안 '장비 설정 보기').
 // MFC(GPC3000): SP1~5 표(설정값·Gain·P.Lead·종류) + 그 밖의 값 목록, 읽은 시각 + [다시 읽기](DEVICE_PARAMS_READ — 질의만).
-//   바꿀 수 있는 칸(설정값·Gain·P.Lead·자동 제어 방식·공정 한계)은 [수정] → 범위 검사(묶음 devParams.writeItems) → 확인창
+//   바꿀 수 있는 칸(설정값·Gain·P.Lead·공정 한계, 자동 제어 방식은 Self-Tuning → PID 로만 — W-23 H5)은 [수정] → 범위 검사(묶음 devParams.writeItems) → 확인창
 //   ("압력 제어 동작이 바로 바뀝니다") → DEVICE_PARAM_WRITE. 결과는 장비가 되읽어 비교한 값(state.devParams.mfc.write)으로 보인다.
 //   바꾸기는 관리자만(웹 perms — 장비 명령 role admin), 대기·적재 중에만(장비가 거부 이유를 낸다). 노트북 화면은 보기만.
 // Ion Gauge(934): E 응답의 자동 필라멘트·셋포인트·가스 계수·감도(읽기만).
@@ -10,6 +10,8 @@
 import { useState } from "react";
 import { PencilLine, RefreshCw } from "lucide-react";
 import { FS, Btn, Chip, type Ask } from "./kit";
+import { useChk2Mode } from "./mode";
+import { DIRECTION, VALVE_TYPE, statusText, versionText } from "@/lib/ops2/chk/devWords";
 import type { Bundle, DevParams, DevParamsMfcValues, StateData } from "./types";
 
 type WriteItem = { item: string; label: string; nos: number[]; unit: string; min: number | null; max: number | null; int: boolean };
@@ -41,6 +43,7 @@ export default function Chk2DevParams({ dev, bundle, st, canWrite, writeLock, re
 }) {
   const dp: DevParams | null | undefined = st?.devParams;
   const [edit, setEdit] = useState<Edit | null>(null);
+  const { detail } = useChk2Mode();
   if (dev === "ig") return <IgValues dp={dp} />;
   const m = dp?.mfc;
   const v: DevParamsMfcValues | null | undefined = m?.values;
@@ -134,15 +137,8 @@ export default function Chk2DevParams({ dev, bundle, st, canWrite, writeLock, re
                 <p className={`flex flex-wrap items-center gap-2 ${FS.body}`}><b>{edit.label} 바꾸기</b>
                   <span className={`${FS.small} text-[#5B6470]`}>지금 {edit.now === null ? "모름" : edit.item === "auto" ? AUTO[String(edit.now)] ?? edit.now : edit.now}</span></p>
                 <div className="flex flex-wrap items-center gap-2">
-                  {edit.item === "auto" ? (
-                    <select aria-label={edit.label} value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })}
-                      className={`h-9 rounded-[8px] border border-[#D9DDE3] bg-white px-2 ${FS.body}`}>
-                      <option value="">고르세요</option><option value="0">Self-Tuning</option><option value="1">PID</option>
-                    </select>
-                  ) : (
-                    <input aria-label={edit.label} value={edit.text} inputMode="decimal" onChange={(e) => setEdit({ ...edit, text: e.target.value })}
-                      className={`h-9 w-28 rounded-[8px] border border-[#D9DDE3] bg-white px-2 text-right tabular-nums ${FS.body}`} />
-                  )}
+                  <input aria-label={edit.label} value={edit.text} inputMode="decimal" onChange={(e) => setEdit({ ...edit, text: e.target.value })}
+                    className={`h-9 w-28 rounded-[8px] border border-[#D9DDE3] bg-white px-2 text-right tabular-nums ${FS.body}`} />
                   {s?.unit && <span className={`${FS.small} text-[#5B6470]`}>{s.unit}</span>}
                   <span className={`${FS.small} ${c.err && edit.text ? "text-[#B42318]" : "text-[#5B6470]"}`}>
                     {c.err && edit.text ? c.err : `범위 ${s?.min ?? "-"} ~ ${hi ?? "-"}${s?.unit ? ` ${s.unit}` : ""}`}
@@ -157,11 +153,15 @@ export default function Chk2DevParams({ dev, bundle, st, canWrite, writeLock, re
             );
           })()}
           <ul className={FS.body}>
-            <Line k="자동 압력 제어 방식" v={v.autoModeText ?? "—"} edit={canWrite ? () => open("auto", null, v.autoMode) : undefined} lock={wl} />
-            <Line k="밸브 종류" v={v.valveType === null ? "—" : `J${v.valveType}`} />
-            <Line k="제어 방향" v={v.direction === null ? "—" : `N${v.direction}`} />
+            {/* 자동 제어 방식(W-23 H5): 원격으로는 Self-Tuning → PID 로만 바꾼다. PID 면 바꾸는 버튼 없이 안내만. */}
+            <Line k="자동 압력 제어 방식" v={v.autoModeText ?? "—"}
+              sub={v.autoMode === 1 ? "Self-Tuning 은 장비 앞면에서 바꿉니다" : undefined}
+              edits={canWrite && v.autoMode === 0 ? [["PID 로 바꾸기", () => send({ item: "auto", no: null, label: labelOf("auto", null), now: 0, text: "1" })]] : undefined}
+              lock={wl} />
+            <Line k="밸브 종류" v={v.valveType === null ? "—" : VALVE_TYPE[v.valveType] ?? `${v.valveType}`} sub={detail && v.valveType !== null ? `J${v.valveType}` : undefined} />
+            <Line k="제어 방향" v={v.direction === null ? "—" : DIRECTION[v.direction] ?? `${v.direction}`} sub={detail && v.direction !== null ? `N${v.direction}` : undefined} />
             <Line k="압력 센서 범위" v={v.fsTorr !== null ? `${v.fsTorr} Torr` : "—"}
-              sub={v.rangeCode !== null ? `범위 코드 ${v.rangeCode}${v.unitText ? ` · 단위 ${v.unitText}` : ""}` : undefined} />
+              sub={detail && v.rangeCode !== null ? `범위 코드 ${v.rangeCode}${v.unitText ? ` · 단위 ${v.unitText}` : ""}` : undefined} />
             {[1, 3].map((a) => {
               const lo = v.limits.find((x) => x.no === a), hi = v.limits.find((x) => x.no === a + 1);
               return (
@@ -171,8 +171,8 @@ export default function Chk2DevParams({ dev, bundle, st, canWrite, writeLock, re
               );
             })}
             <Line k="Ar · O₂ 채널 풀스케일" v={`${v.flowFs.map((x) => (x === null ? "—" : String(x))).join(" / ")} ${v.flowUnits[0] ?? ""}`.trim()} />
-            <Line k="제어 상태" v={v.status ?? "—"} sub="R37 MXYZ(X 1 = Remote)" />
-            <Line k="소프트웨어 버전" v={v.version ?? "—"} />
+            <Line k="제어 상태" v={statusText(v.status) ?? v.status ?? "—"} sub={detail && v.status ? `R37 ${v.status}` : undefined} />
+            <Line k="소프트웨어 버전" v={versionText(v.version) ?? v.version ?? "—"} sub={detail && v.version ? `R38 ${v.version}` : undefined} />
           </ul>
           {v.missing && v.missing.length > 0 && <p className={`${FS.small} text-[#5B6470]`}>읽지 못한 값: {v.missing.join(", ")}</p>}
         </>

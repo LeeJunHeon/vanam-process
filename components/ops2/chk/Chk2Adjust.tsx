@@ -166,8 +166,12 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk, plain = 
     }
     return null;
   };
+  // 챔버K(W-23 G4): 유량은 켜진 채널만 바꾼다 — 꺼진 채널(mfc.ar_on·o2_on false)의 Ar·O₂ 유량은 안 쓰는 항목으로(보내기 잠금)
+  const snap = st.snapshot;
+  const chOff = (it: AdjustItemDef) => plain && it.device === "mfc"
+    && ((it.item === "ar_flow" && snap?.["mfc.ar_on"] === false) || (it.item === "o2_flow" && snap?.["mfc.o2_on"] === false));
   // 장비 지금 값이 없으면(옛 장비) 모두 쓰는 쪽으로
-  const using = items.filter((it) => { const a = of(it); return !a || a.scope === "live" || a.scope === "future"; });
+  const using = items.filter((it) => { if (chOff(it)) return false; const a = of(it); return !a || a.scope === "live" || a.scope === "future"; });
   const unused = items.filter((it) => !using.includes(it));
 
   const head = ["항목", "쓰는 곳", "지금 값", "새 값"];
@@ -183,7 +187,7 @@ export default function Chk2Adjust({ bundle, st, skewMs, canKey, onAsk, plain = 
               const a = of(it);
               return (
                 <Row key={it.key} it={it} bundle={bundle} a={a} skewMs={skewMs} plain={plain} last={plain && feed ? lastOf(it) : null}
-                  canSend={canKey("PROCESS_ADJUST", key)}
+                  canSend={canKey("PROCESS_ADJUST", key) && !chOff(it)}
                   onSend={(v, now) => onAsk({
                     kind: "PROCESS_ADJUST", key, label: `공정 중 수정 · ${nameOf(it, plain)}`,
                     detail: typeof v === "boolean" ? "" : `${fmt(now)} → ${fmt(v)} ${it.param.unit ?? ""}`,

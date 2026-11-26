@@ -18,15 +18,21 @@
 // 이력: 버전 목록 → 하나(changes·ack) → 두 버전 비교.
 // W-10a: 배지·오류·주의는 아이콘 + 글자(kit Tag·ErrText·Issue) — 색만으로 뜻을 전하지 않는다. 바꾼 줄은 '바꿈' 배지, 고른 버전은 표시.
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { showEquipment } from "@/lib/ops2/display";
+
 import {
   AlertOctagon, ChevronRight, DownloadCloud, Eraser, GitCompare, HardDrive, History, Info, PencilLine, RotateCcw, Save, Settings2,
   Shield, ShieldAlert, ShieldCheck,
 } from "lucide-react";
 import { CONFIG_REASON, checkParamValue, numChoices } from "@/lib/ops2/configCheck";
 import { fmtKst } from "@/lib/ops2/time";
-import { FS, Card, ErrText, Issue, SimpleConfirm, Tag, type Notice } from "./kit";
+import { FS, Btn, Card, ErrText, Issue, SimpleConfirm, Tag, type Notice } from "./kit";
+import { DRIFT_TEXT } from "@/lib/ops2/configDrift";
 import { reasonLabel, type Bundle, type ParamDef, type Perms, type StateData } from "./types";
 import { useChk2Mode } from "./mode";
+
+/** 설정 화면 이름(W-23 — 키 이름 대신) */
+const paramLabelOf = (b: Bundle | null, k: string) => b?.params?.find((p) => p.key === k)?.label ?? k;
 
 const SAFETY_TEXT: Record<string, string> = { H: "높음", M: "중간", L: "낮음" };
 const TYPE_TEXT: Record<string, string> = { float: "숫자", int: "정수", str: "글", bool: "켜짐·꺼짐", enum: "선택" };
@@ -41,6 +47,7 @@ type Overview = {
   base: { version: number; kind: string } | null;            // 지금 값의 행(장비 버전 행 또는 그보다 큰 resync 행)
   overridden: Record<string, unknown>;                        // hello overriddenKeys → 실행 값(모르면 null)
   resyncPending: boolean;
+  drift?: { schema: boolean; missing: string[] } | null;      // W-23 F — 프로그램 판이 바뀌어 기준이 묶음과 어긋남(옛 웹 서버는 없음)
   currentRow: { version: number; kind: string; ackStatus: string | null; overriddenKeys: unknown; pendingKeys: unknown } | null;
   statePending: { idle?: Record<string, unknown>; restart?: Record<string, unknown> } | null;
   pending: { version: number; ackStatus: string | null; values: Record<string, unknown> }[];
@@ -157,7 +164,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
   onlyKeys?: string[];            // W-21 챔버K 장비 설정 서랍 — 이 키만 편집 표에 보인다(적용·검사·확인창·기록은 그대로). 기본: 모든 키
   valueText?: (key: string, v: unknown) => string | null;   // W-19 CH1&2 — 지금 값·기본값 칸의 보이는 글(null 이면 원래 표시, 기본: 없음 — 챔버K 그대로)
 }) {
-  const { detail } = useChk2Mode();
+  const { detail, chkWords: ck } = useChk2Mode();        // ck = 챔버K 문구(W-23 E2) — 챔버12 는 예전 글 그대로
   const [open, setOpen] = useState(startOpen);
   const [tab, setTab] = useState<"edit" | "history">("edit");
   const [ov, setOv] = useState<Overview | null>(null);
@@ -279,7 +286,8 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
       return;
     }
     if (body.action === "resync") {
-      notify(b.ack ? { tone: "ok", title: `설정 기준 v${b.ack.version}: 장비 저장 값으로 다시 읽음`, text: "다음 적용은 이 값 위에 만듭니다(장비에는 보내지 않음)" }
+      notify(b.ack ? (ck ? { tone: "ok", title: `설정 기준 v${b.ack.version}: 노트북 프로그램 설정을 다시 받음`, text: "다음 적용은 이 값 위에 만듭니다. 장비와는 통신하지 않았습니다." }
+        : { tone: "ok", title: `설정 기준 v${b.ack.version}: 장비 저장 값으로 다시 읽음`, text: "다음 적용은 이 값 위에 만듭니다(장비에는 보내지 않음)" })
         : { tone: "warn", title: "설정 기준 다시 읽기: 장비 정의를 기다리는 중", text: "장비가 다음에 연락하면 만들어집니다(1분 안)" });
       await load();
       return;
@@ -323,7 +331,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
       {!open ? (
         <p className={`${FS.small} text-[#5B6470]`}>장비 설정 버전 v{st?.configVersion ?? "-"}
           {st?.configPending && ` · 대기 중 ${Object.keys(st.configPending.idle ?? {}).length + Object.keys(st.configPending.restart ?? {}).length}개 키`}
-          {" "}· 장비별 버전(CHK2·CHK2-SIM 따로) · 적용·되돌리기는 관리자</p>
+          {" "}· 장비별 버전({ck ? "CHK·CHK-SIM" : "CHK2·CHK2-SIM"} 따로) · 적용·되돌리기는 관리자</p>
       ) : err ? <p className={`${FS.body}`}><ErrText>{err}</ErrText></p> : !ov ? <p className={`${FS.body} text-[#5B6470]`}>읽는 중…</p> : (
         <div className="space-y-2">
           {plainHead && (
@@ -335,7 +343,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
             <span>장비 버전 <b className="text-[#1B1F24]">v{ov.deviceVersion ?? "-"}</b>{detail && ov.currentRow && ` (${ov.currentRow.kind})`}</span>
             {ov.base && ov.base.version !== ov.deviceVersion && (
               <Tag kind="info" title="장비에 보내지 않은 기준이며 다음 적용이 이 값 위에 만들어진다">
-                기준 v{ov.base.version}(장비 저장 값{detail ? ` · ${ov.base.kind}` : ""})
+                기준 v{ov.base.version}({ck ? "노트북 프로그램 설정" : "장비 저장 값"}{detail ? ` · ${ov.base.kind}` : ""})
               </Tag>
             )}
             <span>웹 최대 v{ov.webMaxVersion ?? "-"}</span>
@@ -345,7 +353,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
             )}
             {!ov.canApply && <Tag kind="lock">보기만 가능(적용은 관리자)</Tag>}
             {Object.keys(ov.overridden ?? {}).length > 0 && (
-              <Tag kind="info" title={Object.keys(ov.overridden).join(", ")}>
+              <Tag kind="info" title={ck ? Object.keys(ov.overridden).map((k) => paramLabelOf(bundle, k)).join(", ") : Object.keys(ov.overridden).join(", ")}>
                 노트북 설정 파일이 정한 값 {Object.keys(ov.overridden).length}개
                 {detail && <span className="ml-1 font-mono font-normal">{Object.keys(ov.overridden).join(", ")}</span>}
               </Tag>
@@ -353,9 +361,11 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
             <span className="ml-auto flex gap-1.5">
               {ov.canApply && (
                 <button disabled={!connected || busy || ov.resyncPending} onClick={() => setAsk("resync")}
-                  title="장비에 명령을 보내지 않고, 장비에 저장된 값으로 다음 적용의 기준을 다시 만든다"
+                  title={ck ? "PLC·MFC 등 장비와는 통신하지 않고, 노트북 프로그램이 갖고 있는 설정 값으로 다음 적용의 기준을 다시 만듭니다."
+                    : "장비에 명령을 보내지 않고, 장비에 저장된 값으로 다음 적용의 기준을 다시 만든다"}
                   className={`flex items-center gap-1 rounded-[10px] border border-[#D9DDE3] px-2.5 py-1 ${FS.body} font-semibold text-[#1B1F24] hover:bg-[#F5F6F8] disabled:opacity-40`}>
-                  <DownloadCloud size={13} /> {ov.resyncPending ? "기준 다시 읽는 중…" : "장비 저장 값으로 기준 다시 읽기"}
+                  <DownloadCloud size={13} /> {ck ? (ov.resyncPending ? "다시 받는 중…" : "노트북 프로그램 설정 다시 받기")
+                    : (ov.resyncPending ? "기준 다시 읽는 중…" : "장비 저장 값으로 기준 다시 읽기")}
                 </button>
               )}
               {ov.canRollback && (
@@ -366,7 +376,20 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
               )}
             </span>
           </div>
-          {!ov.current && (
+          {ov.drift ? (
+            // 프로그램 판이 바뀌어 기준이 어긋남(W-23 F, 챔버K) — 적용·되돌리기가 답을 기다리는 동안은 자동으로 만들지 않아 여기서 다시 받는다
+            <Issue level="warn">
+              <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span>{DRIFT_TEXT}. 지금 값은 노트북 프로그램이 보낸 값입니다.</span>
+                {ov.canApply && (
+                  <Btn size="sm" lock={!connected ? "장비 연결이 끊겼습니다" : busy || ov.resyncPending ? "다시 받는 중" : null} onClick={() => setAsk("resync")}>
+                    <DownloadCloud size={13} /> 노트북 프로그램 설정 다시 받기
+                  </Btn>
+                )}
+                {detail && <span className="font-mono text-[12px]">{ov.drift.schema ? "paramSchemaHash 다름" : ""}{ov.drift.missing.length ? ` 없는 키 ${ov.drift.missing.join(", ")}` : ""}</span>}
+              </span>
+            </Issue>
+          ) : !ov.current && (
             <Issue level="warn">
               장비 버전 v{ov.deviceVersion ?? "-"} 의 값이 웹에 없습니다(노트북에서 생긴 버전 등) — 장비가 지금 쓰는 값을 보여 줍니다. 적용하려면 먼저 되돌리기나 장비 확인.
             </Issue>
@@ -387,7 +410,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="키·라벨 찾기" className="w-40 rounded-md border border-[#D9DDE3] px-1.5 py-0.5" />
                 </>)}
                 <label className="flex items-center gap-1"><input type="checkbox" checked={onlyChanged} onChange={(e) => setOnlyChanged(e.target.checked)} /> 바꾼 것만({changed.length})</label>
-                {busyNow && <Tag kind="warn">공정·히터 운전 중이라 등급 높음 값은 장비가 거부하고, 멈춰 있을 때 적용하는 값은 끝난 뒤 적용</Tag>}
+                {busyNow && <Tag kind="warn" className={ck ? "!whitespace-normal" : ""}>공정·히터 운전 중이라 등급 높음 값은 장비가 거부하고, 멈춰 있을 때 적용하는 값은 끝난 뒤 적용</Tag>}
                 <span className="ml-auto flex items-center gap-1.5">
                   {changed.length > 0 && <button onClick={() => setEdits({})} className="px-1 text-[#5B6470] underline">되돌림</button>}
                   {ov.canApply && (
@@ -562,7 +585,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
       {ask === "apply" && ov && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 p-4">
           <div className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-[12px] bg-white p-4">
-            <p className={`${FS.card} font-bold text-[#1B1F24]`}>설정 적용 확인 — 장비 {equipment}</p>
+            <p className={`${FS.card} font-bold text-[#1B1F24]`}>설정 적용 확인 — 장비 {showEquipment(equipment)}</p>
             <p className={`mt-1 ${FS.body} text-[#5B6470]`}>지금 v{ov.deviceVersion} → 새 버전 v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1} · 바뀐 키 {changed.length}개(비밀값은 보내지 않음)</p>
             <table className={`mt-2 w-full ${FS.small}`}>
               <thead><tr className="text-left text-[#5B6470]"><th className="pr-2 font-medium">키</th><th className="pr-2 font-medium">전 → 새</th><th className="font-medium">등급·적용</th></tr></thead>
@@ -596,12 +619,17 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
       )}
       {ask === "rollback" && ov && (
         <SimpleConfirm title="설정 되돌리기" ok="되돌리기" danger
-          text={<>장비 {equipment} 의 설정을 장비에 저장된 <b>직전 버전</b> 값으로 되돌립니다. 새 버전 번호
+          text={<>장비 {showEquipment(equipment)} 의 설정을 장비에 저장된 <b>직전 버전</b> 값으로 되돌립니다. 새 버전 번호
             v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1} 로 기록됩니다. 공정 중이면 등급 높음 값의 변경은 장비가 거부합니다.</>}
           onCancel={() => setAsk(null)} onOk={() => { setAsk(null); void post({ action: "rollback" }); }} />
       )}
       {ask === "resync" && ov && (
-        <SimpleConfirm title="장비 저장 값으로 기준 다시 읽기" ok="다시 읽기"
+        ck ? <SimpleConfirm title="노트북 프로그램 설정 다시 받기" ok="다시 받기"
+          text={<>장비 노트북의 프로그램이 갖고 있는 설정 값을 다시 받아 웹의 기준(v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1})을
+            새로 만듭니다. PLC·MFC 등 장비와는 통신하지 않습니다. 다음 적용은 이 값 위에 만들어집니다.
+            {detail && <span className={`block font-mono ${FS.small} text-[#5B6470]`}>{showEquipment(equipment)} · 묶음 params[].stored(노트북 설정 파일이 정한 값 제외) · kind resync</span>}</>}
+          onCancel={() => setAsk(null)} onOk={() => { setAsk(null); void post({ action: "resync" }); }} />
+        : <SimpleConfirm title="장비 저장 값으로 기준 다시 읽기" ok="다시 읽기"
           text={<>장비 {equipment} 에 저장된 설정 값(노트북 설정 파일이 정한 값은 빼고)을 다시 받아 새 버전
             v{Math.max(ov.webMaxVersion ?? 0, ov.deviceVersion ?? 0) + 1}을 만듭니다. <b>장비에는 아무 명령도 보내지 않습니다.</b>{" "}
             다음 적용은 이 값 위에 만들어집니다.{detail && <span className={`block font-mono ${FS.small} text-[#5B6470]`}>묶음 params[].stored · kind resync</span>}</>}
