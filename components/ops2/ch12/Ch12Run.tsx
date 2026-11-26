@@ -332,7 +332,7 @@ export function ChamberRun(p: ChamberProps) {
                 {typeof step.elapsedS === "number" && <span className="text-[#5B6470]"> · 단계 경과 {clockOrDash(step.elapsedS)}</span>}
               </p>
             )}
-            {/* 지금 동작(W-19 ④) — 장비 묶음 16 의 화면 이름(stepLabel — 'MV 열기'·'RF Pulse 켜기 120 W'). v1 스텝 문구(엔진 text)는 상세 보기에서만 */}
+            {/* 지금 동작(W-19 ④) — 장비 묶음 16 의 화면 이름(stepLabel — 'Main 가스 열기'·'RF Pulse 켜기 120 W'). v1 스텝 문구(엔진 text)는 상세 보기에서만 */}
             {running && stepLabel && (
               <p className={`truncate ${FS.body} text-[#1B1F24]`} title={fieldTipOf(bundle, `${ch}.proc.step_label`, detail)} data-step-label={ch}>
                 <span className="text-[#5B6470]">{fieldName(bundle, `${ch}.proc.step_label`, label)}</span> <b>{stepLabel}</b>

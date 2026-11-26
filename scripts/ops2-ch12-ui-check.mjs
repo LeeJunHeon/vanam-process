@@ -834,8 +834,10 @@ const chamberProps = (ch) => ({
   };
   const r12 = scan(U.TM.toTerms12, U.TM.TERM_RULES12, true);
   // 챔버12 규칙은 낱말 단위로만 맞아야 한다 — 앞에 한글이 붙거나 조사 아닌 한글이 뒤따르는 글('이벤트'·'게이트웨이'·'벤트밸브')
-  const probe = ["이벤트", "게이트웨이", "벤트밸브", "로드락스", "벤트를", "게이트가", "로드락에서는", "4핀 올림", "클램프"].map((t) => [t, U.TM.toTerms12(t)]);
-  const probeOk = probe.map(([t, r]) => `${t}→${r}`).join() === "이벤트→이벤트,게이트웨이→게이트웨이,벤트밸브→벤트밸브,로드락스→로드락스,벤트를→Vent를,게이트가→Gate가,로드락에서는→Loadlock에서는,4핀 올림→4Pin 올림,클램프→클램프";
+  // W-21·22 E — v1 '메인 밸브'(가스 Main 밸브 MAIN_n_GAS_SW)는 'Main 가스'로(챔버K 규칙의 'MV' 로 바꾸지 않음), 진공 MV 이름은 그대로
+  const probe = ["이벤트", "게이트웨이", "벤트밸브", "로드락스", "벤트를", "게이트가", "로드락에서는", "4핀 올림", "클램프", "메인 밸브 열기",
+    "[긴급] 메인 밸브 즉시 닫기", "CH1 MV"].map((t) => [t, U.TM.toTerms12(t)]);
+  const probeOk = probe.map(([t, r]) => `${t}→${r}`).join() === "이벤트→이벤트,게이트웨이→게이트웨이,벤트밸브→벤트밸브,로드락스→로드락스,벤트를→Vent를,게이트가→Gate가,로드락에서는→Loadlock에서는,4핀 올림→4Pin 올림,클램프→클램프,메인 밸브 열기→Main 가스 열기,[긴급] 메인 밸브 즉시 닫기→[긴급] Main 가스 즉시 닫기,CH1 MV→CH1 MV";
   check(`ui:terms-words — 낱말 바꾸기 toTerms12(글 ${texts.size}개 = 묶음 ${nBundle} + 기록 ${texts.size - nBundle}): (a) 한글+영문 붙음 0 · (b) 같은 낱말 잇달아 0 · ` +
         "(c) 한글이 줄어든 곳은 규칙 목록 바꾸기뿐 · 낱말 속 바꿈 없음(이벤트·게이트웨이 그대로, 벤트를·게이트가 는 바뀜)",
         texts.size > 1500 && r12.a.length === 0 && r12.b.length === 0 && r12.c.length === 0 && probeOk,
