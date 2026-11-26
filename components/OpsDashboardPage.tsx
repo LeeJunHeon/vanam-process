@@ -17,6 +17,7 @@ import { alertLines, reasonText } from "@/components/ops2/chk/logView";
 import { RUN_RESULT, type StateData } from "@/components/ops2/chk/types";
 import { runTitle } from "@/components/ops2/chk/text";
 import { MODE_NAME, fieldName, stepName } from "@/lib/ops2/chk/terms";
+import { CHK_BASE_ID, isChkEquipment } from "@/lib/ops2/display";
 import { fmtKst } from "@/lib/ops2/time";
 
 type EquipState = "가동" | "대기" | "경고" | "오류" | "미연결";
@@ -42,14 +43,14 @@ const fmtN = (v: number | null, d = 1) => (v === null ? "—" : String(Number(v.
 const hm = (ms: number) => new Intl.DateTimeFormat("ko-KR", { timeZone: "Asia/Seoul", hour12: false, hour: "2-digit", minute: "2-digit" }).format(new Date(ms));
 const dur = (s: number) => (s >= 3600 ? `${Math.floor(s / 3600)}시간 ${Math.floor((s % 3600) / 60)}분` : s >= 60 ? `${Math.floor(s / 60)}분 ${Math.round(s % 60)}초` : `${Math.round(s)}초`);
 
-/** CHK Sputter 장비 ID — 켜진 장비 중 CHK 로 시작하는 첫 장비(CH1&2 제외) */
+/** CHK Sputter 장비 ID — 켜진 챔버K 장비 중 CHK2, 없으면 첫 챔버K 장비(CHK2-SIM — 챔버12 제외, W-24 A 와 같은 규칙) */
 function useChkId(): string | null {
   const [id, setId] = useState<string | null>(null);
   useEffect(() => {
     let off = false;
     void fetch("/api/ops2/devices", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
       const ds = (j?.devices ?? []) as { equipment: string }[];
-      const pick = ds.find((d) => d.equipment === "CHK2") ?? ds.find((d) => /^CHK/i.test(d.equipment));
+      const pick = ds.find((d) => d.equipment === CHK_BASE_ID) ?? ds.find((d) => isChkEquipment(d.equipment));
       if (!off) setId(pick?.equipment ?? "");
     }).catch(() => { if (!off) setId(""); });
     return () => { off = true; };

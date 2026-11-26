@@ -17,12 +17,13 @@ export function sinceText(lastMs: number, nowMs: number): string {
   return KST(lastMs, dayKey(lastMs) !== dayKey(nowMs));
 }
 
-/** ageMs = 마지막 값 뒤 지난 시간(장비 시계 차를 고친 값), nowMs = 화면 시계 */
-export function connOf(ageMs: number | null, nowMs: number, lateMs = 3_000, lostMs = 10_000): Conn {
+/** ageMs = 마지막 값 뒤 지난 시간(장비 시계 차를 고친 값), nowMs = 화면 시계.
+ *  lostNow(W-24 B1) = 시간과 상관없이 끊김(노트북 화면은 프로그램과의 stream 이 끊기면 바로) — 초는 실제로 지난 시간 */
+export function connOf(ageMs: number | null, nowMs: number, lateMs = 3_000, lostMs = 10_000, lostNow = false): Conn {
   if (ageMs === null) return { kind: "none", sec: null, since: null, tone: "neutral" };
   const sec = Math.max(0, Math.round(ageMs / 1000));
-  if (ageMs <= lateMs) return { kind: "ok", sec, since: null, tone: "neutral" };
-  if (ageMs <= lostMs) return { kind: "late", sec, since: null, tone: "warn" };
+  if (!lostNow && ageMs <= lateMs) return { kind: "ok", sec, since: null, tone: "neutral" };
+  if (!lostNow && ageMs <= lostMs) return { kind: "late", sec, since: null, tone: "warn" };
   return { kind: "lost", sec, since: sec >= 60 ? sinceText(nowMs - ageMs, nowMs) : null, tone: "alarm" };
 }
 

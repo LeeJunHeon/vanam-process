@@ -13,7 +13,7 @@
 //   결과 기다리는 중 → 장비 끊김 → PLC 값 오래됨(PLC 버튼·히터 목표·켜기·끄기·리셋).
 // hello 를 받기 전에는 '장비 정보를 읽는 중…' 자리표시, v2 프로그램이 붙은 적 없는 장비는 연결 대기 카드(레시피·기록만).
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
-import { showEquipment } from "@/lib/ops2/display";
+import { chkDeviceChoice, showEquipment } from "@/lib/ops2/display";
 import { Code2, Cloud, CloudOff, Laptop, Lock, LockOpen, LogIn, WifiOff } from "lucide-react";
 import Chk2Hmi from "./Chk2Hmi";
 import { ConnLabel, StatusBand, StatusBar, type ConnInfo } from "./Chk2Status";
@@ -87,12 +87,13 @@ export default function Chk2Page() {
   useEffect(() => {
     void (async () => {
       const r = await fetch("/api/ops2/devices", { cache: "no-store" }).catch(() => null);
-      const list: Device[] = r?.ok ? (await r.json()).devices ?? [] : [];
-      setDevices(list);
+      const all: Device[] = r?.ok ? (await r.json()).devices ?? [] : [];
       let saved: string | null = null;
       try { saved = window.localStorage.getItem(STORE_KEY); } catch { /* 저장소 없음 */ }
-      const has = (e: string | null) => !!e && list.some((d) => d.equipment === e);
-      setPicked(has(saved) ? saved : has("CHK2") ? "CHK2" : list[0]?.equipment ?? null);
+      // 챔버K 장비만(W-24 A — CHK2·CHK2-SIM). 저장된 선택이 챔버K 장비가 아니면(챔버12·꺼진 장비) CHK2 로
+      const c = chkDeviceChoice(all, saved);
+      setDevices(c.list);
+      setPicked(c.picked);
     })();
   }, []);
 
@@ -106,7 +107,7 @@ export default function Chk2Page() {
     <div className="min-h-full space-y-3 bg-[#EEF0F3] p-3 text-[#1B1F24] sm:p-5">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className={`${FS.title} font-bold text-[#1B1F24]`}>CHK Sputter</h2>
-        {devices && devices.length > 0 && (
+        {devices && devices.length > 1 && (                    // 고를 장비가 하나면 고르기 상자를 그리지 않는다(W-24 A)
           <select value={picked ?? ""} onChange={(e) => pick(e.target.value)} aria-label="장비 고르기"
             className={`h-10 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body} font-semibold text-[#1B1F24]`}>
             {devices.map((d) => (
@@ -118,7 +119,7 @@ export default function Chk2Page() {
         )}
       </div>
       {devices && !devices.length && (
-        <Card><p className={`${FS.body} text-[#5B6470]`}>등록된 v2 장비가 없습니다. 장비 관리(v2)에서 장비를 등록하세요.</p></Card>
+        <Card><p className={`${FS.body} text-[#5B6470]`}>사용 중인 챔버K 장비가 없습니다. 장비 관리(v2)에서 장비를 등록하거나 사용을 켜세요.</p></Card>
       )}
       {picked && <Chk2Device key={picked} equipment={picked} dirtyRef={dirtyRef} />}
       {switchTo && <Float>
@@ -389,9 +390,9 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   }
 
   const up = st?.uplink;
-  const chipAge = local && !d.streamUp && age !== null ? Math.max(age, LOST_MS + 1) : age;   // 로컬은 stream 이 끊기면 바로 끊김
-  // 연결 칩(W-23 B) — 연결됨(초 없음)·늦음 N초·끊김 N초(60초 미만)·끊김 · 18:05부터(마지막으로 값을 받은 시각 — 매초 바뀌지 않음)
-  const cs = connOf(chipAge, now, LATE_MS, LOST_MS);
+  // 연결 칩(W-23 B) — 연결됨(초 없음)·늦음 N초·끊김 N초(60초 미만)·끊김 · 18:05부터(마지막으로 값을 받은 시각 — 매초 바뀌지 않음).
+  // 노트북 화면은 프로그램 stream 이 끊기면 바로 끊김 — 초는 실제로 지난 시간(W-24 B1, 예전에는 처음 10초 동안 '끊김 10초'로 멈춰 보임)
+  const cs = connOf(age, now, LATE_MS, LOST_MS, local && !d.streamUp);
   const conn: ConnInfo = neverConnected ? { label: "연결 대기", tone: "neutral" }
     : { label: <ConnLabel parts={connParts(cs)} />, tone: cs.tone };
   const lostCs = connOf(age, now, LATE_MS, LOST_MS);
@@ -477,7 +478,8 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
         <Issue level="alarm"><b>노트북 프로그램 연결 끊김</b>. 다시 붙는 중이라 조작이 잠겼습니다. 표시는 마지막 값입니다.</Issue>
       )}
       {d.authLost && <Issue level="alarm">로그인이 끊겼습니다. 새로고침하세요. 조작이 잠겼습니다.</Issue>}
-      {d.error && <Issue level="alarm">{d.error}</Issue>}
+      {/* 노트북 화면이 프로그램과 끊겼을 때는 위 띠 한 줄만(W-24 B2 — hello 를 못 읽은 '닿지 않습니다' 는 같은 일이라 겹쳐 내지 않는다) */}
+      {d.error && !(local && !d.streamUp && d.streamEver) && <Issue level="alarm">{d.error}</Issue>}
       {web && !web.hasSchema && !neverConnected && <Issue level="warn">장비 정보를 받는 중입니다. 장비가 연결되면 받아 옵니다.</Issue>}
       {perms && !perms.canOperate && !local && !neverConnected && (
         <InfoBand>조회만 가능합니다. 장비 담당자·관리자만 조작할 수 있습니다.</InfoBand>
