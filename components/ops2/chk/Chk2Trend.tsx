@@ -87,8 +87,9 @@ const fmt = (v: number) => String(Number(v.toPrecision(4)));
 const titleWidthGuess = (t: string, fs: number) => [...t].reduce((n, c) => n + (c.charCodeAt(0) > 0x2000 ? fs : fs * 0.62), 0);
 const LEGEND_GAP = 12;          // 제목 끝과 범례 사이(W-19)
 
-function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend = false, edgeTicks = false }: {
+function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend = false, edgeTicks = false, blind = false }: {
   title: string; unit: string; lines: Line[]; t0: number; t1: number; width: number; hover: number | null; setHover: (t: number | null) => void;
+  blind?: boolean;              // W-26 챔버K — 장비가 끊기면 오른쪽 띠의 마지막 값 글을 "—"(선·지시선·자리는 그대로). 기본은 그대로
   fitLegend?: boolean;          // W-19 챔버K — 범례를 제목 끝 뒤로(긴 제목과 겹치지 않게). 기본은 LEFT + 110 고정 그대로
   edgeTicks?: boolean;          // W-19 챔버K — 양 끝에 가까운 시간 글자는 안쪽 정렬(세로축 글자·마지막 값 띠와 겹치지 않게). 기본은 가운데 정렬 그대로
 }) {
@@ -143,7 +144,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend =
     return d;
   };
   const lastPts = lines.map((l) => [...l.pts].reverse().find((p) => p.v !== null && p.t >= t0 && p.t <= t1) ?? null);
-  const lay = layoutTrendLabels(lastPts.map((p, k) => (p ? { y: y(p.v as number), text: fmt(p.v as number), group: lines[k].color, dashed: !!lines[k].dashed } : null)),
+  const lay = layoutTrendLabels(lastPts.map((p, k) => (p ? { y: y(p.v as number), text: blind ? "—" : fmt(p.v as number), group: lines[k].color, dashed: !!lines[k].dashed } : null)),
     top + 2, top + ph, H + extra);
   const labOf = new Map<number, TrendLabel>();
   for (const l of lay.labels) for (const m of l.members) labOf.set(m, l);
@@ -199,7 +200,7 @@ function Panel({ title, unit, lines, t0, t1, width, hover, setHover, fitLegend =
               points={`${x(p.t) + 3},${y(p.v as number)} ${LEFT + pw + 8},${y(p.v as number)} ${LEFT + pw + 16},${lab.y}`} />
             {first && (
               <text x={LEFT + pw + 20} y={lab.y + 3.5} fontSize={FSPX.small} fill={lab.dashed ? "#5B6470" : "#133A7C"} fontWeight={lab.dashed ? 400 : 700}>
-                {lab.members.length > 1 ? lab.text : <>{fmt(p.v as number)}{lines[k].dashed ? " 목표" : ""}</>}
+                {lab.members.length > 1 ? lab.text : <>{blind ? "—" : fmt(p.v as number)}{lines[k].dashed ? " 목표" : ""}</>}
               </text>
             )}
           </g>
@@ -227,8 +228,9 @@ const trendDefs = (pressureTarget: string): TrendDef[] => [
   { title: "히터 온도", unit: "°C", lines: [["heater.pv", "TC1", "heater.sv"], ["heater.pv2", "TC2", "heater.sv2"]] },
 ];
 
-export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세", fitLegend = false, edgeTicks = false }: {
+export default function Chk2Trend({ trend, equipment, runId, local, nowMs, pressureTarget = "mfc.sp_mtorr", defs, title = "추세", fitLegend = false, edgeTicks = false, blind = false }: {
   trend: TrendPt[]; equipment: string; runId: string | null; local: boolean; nowMs: number; pressureTarget?: string;
+  blind?: boolean;            // W-26 챔버K 만 — 끊김: 오른쪽 마지막 값 글 "—"(Panel 참고). 챔버12 는 넘기지 않아 그대로
   fitLegend?: boolean;        // W-19 챔버K 만 — 범례를 제목 끝 뒤로(Panel 참고)
   edgeTicks?: boolean;        // W-19 챔버K 만 — 끝 시간 글자 안쪽 정렬(Panel 참고). CH1&2 는 넘기지 않아 그대로
   defs?: TrendDef[];          // 없으면 챔버K 그래프(압력·밸브 위치·파워·히터) — 챔버12 는 챔버별 열(값이 바뀌지 않게 메모해서)
@@ -298,7 +300,7 @@ export default function Chk2Trend({ trend, equipment, runId, local, nowMs, press
         {range !== "run" && <p className={`mb-1 ${FS.small} text-[#5B6470]`}>이 화면을 연 뒤부터 쌓은 값입니다(2초 간격).</p>}
         {range === "run" && rows === null ? <Empty>1분 요약을 읽는 중…</Empty>
           : !panels.length ? <Empty>그릴 값이 없습니다. 이번 공정이 쓰는 압력·파워·히터 값이 들어오면 그립니다</Empty>
-          : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} fitLegend={fitLegend} edgeTicks={edgeTicks} />)}
+          : panels.map((p) => <Panel key={p.title} title={p.title} unit={p.unit} lines={p.lines} t0={t0} t1={t1} width={width} hover={hover} setHover={setHover} fitLegend={fitLegend} edgeTicks={edgeTicks} blind={blind} />)}
       </div>
     </Card>
   );

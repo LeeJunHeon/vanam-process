@@ -32,6 +32,8 @@ import { rfChip, rfCommanded } from "@/lib/ops2/chk/rf";
 type Block = { type: string; params: Record<string, unknown> };
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 const fmt = (v: number | null, d = 1) => (v === null ? "—" : String(Number(v.toFixed(d))));
+/** 값 칸 글 — 값이 없으면 빈 글이라 kit Val 이 단위 없이 "—"(끊김 W-26: 값이 없는데 단위만 남지 않게) */
+const fv = (v: number | null, d = 1) => (v === null ? "" : fmt(v, d));
 
 /** 입력 글 → 숫자(빈 칸 null, 숫자가 아니면 NaN) */
 const parse = (t: string): number | null => (t.trim() === "" ? null : Number(t));
@@ -105,7 +107,9 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
   const lockOf = (b: Block) => errOf(b) ?? sameWhy(b) ?? (interrupts(b) && busyWhy && !st?.stopping ? null : stateWhy) ?? lock("MANUAL_BLOCK");
 
   const shut = (k: string) => snap?.[`plc.${k}`] === true;
-  const newDev = snap?.["mfc.ar_on"] !== undefined || snap?.["rf.cmd_on"] !== undefined;   // 묶음 23 장비(같은 상태 거부 규칙이 있음)
+  // 묶음 23 장비(같은 상태 거부 규칙이 있음). 끊김(W-26)에는 스냅숏이 비므로 묶음 정의로 — 버튼·안내 줄이 끊김 때 바뀌지 않게
+  const defined = (col: string) => !!bundle?.snapshot?.blocks?.some((x) => x.fields.some((f) => f.column === col));
+  const newDev = st?.blind ? defined("mfc.ar_on") || defined("rf.cmd_on") : snap?.["mfc.ar_on"] !== undefined || snap?.["rf.cmd_on"] !== undefined;
   // 가스가 켜져 있나 — 장비 GAS_ALREADY_ON 과 같은 판정(유량 켜짐 또는 Ar·O₂ 밸브 열림)
   const gasNowOn = snap?.["mfc.ar_on"] === true || snap?.["mfc.o2_on"] === true || snap?.["plc.ar_valve"] === true || snap?.["plc.o2_valve"] === true;
   const reasonHelp = (code: string, dflt: string) => bundle?.reasons?.find((r) => r.code === code)?.help || dflt;
@@ -168,7 +172,8 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
   const flowBtn1 = (c: "ar" | "o2", label: string) => {
     const name = c === "ar" ? "Ar" : "O₂";
     const v = parse(c === "ar" ? ar : o2);
-    const why = !newDev ? "장비 프로그램을 최신으로 올리면 사용할 수 있습니다"
+    const why = st?.blind ? lock("PROCESS_ADJUST")                   // 끊김(W-26) — 가스 켜짐을 모르니 끊김 이유만
+      : !newDev ? "장비 프로그램을 최신으로 올리면 사용할 수 있습니다"
       : !gasNowOn ? "가스가 꺼져 있어 [가스 켜기]로 켭니다"
       : !man ? "수동 조작 중에만 바꿀 수 있습니다"
       : st?.stopping ? "정지 순서 중"
@@ -221,12 +226,13 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
   /** 같은 상태 잠금(장비 규칙 — 버튼마다 이미 보임)은 빼고 나머지 잠금 이유만 */
   const whyX = (...xs: [Block, string][]) => why(...xs.filter(([bl]) => !sameWhy(bl)));
   const warnNote = (dev: string) => failWhy(dev) ? <Issue level="warn">{failWhy(dev)}</Issue> : undefined;
-  const big2 = (a: [string, number | null, string, number], c?: [string, number | null, string, number]) => (
+  // 큰 값 두 칸 — 다섯째는 열 이름(끊김 W-26 에 끊기기 전 값이 있던 열이면 단위 자리를 남겨 줄 높이가 같게)
+  const big2 = (a: [string, number | null, string, number, string], c?: [string, number | null, string, number, string]) => (
     <div className="grid grid-cols-2 gap-x-3">
       {[a, c].filter(Boolean).map((x) => (
         <div key={x![0]} className="min-w-0">
           <p className={`${FS.small} text-[#5B6470]`}>{x![0]}</p>
-          <Val text={fmt(x![1], x![3])} unit={x![2]} size="big" />
+          <Val text={fv(x![1], x![3])} unit={x![2]} size="big" keepUnit={!!st?.blind && !!st.had?.includes(x![4])} />
         </div>
       ))}
     </div>
@@ -280,7 +286,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
       <div className="@container/run">
         <div className="grid grid-cols-1 gap-3 @min-[650px]/run:grid-cols-2 @min-[950px]/run:grid-cols-3">
           <DevCard title="가스" off={off("mfc")} offNote={OFF_NOTE} onConfig={onConfig} onSettings={setUp("gas")}
-            chip={<Chip tone={b("plc.ar_valve") || b("plc.o2_valve") ? "dark" : "neutral"}>{b("plc.ar_valve") || b("plc.o2_valve") ? "가스 켜짐" : "가스 꺼짐"}</Chip>}
+            chip={st?.blind ? null /* 끊김(W-26) — 지금 상태를 모름 */ : <Chip tone={b("plc.ar_valve") || b("plc.o2_valve") ? "dark" : "neutral"}>{b("plc.ar_valve") || b("plc.o2_valve") ? "가스 켜짐" : "가스 꺼짐"}</Chip>}
             note={warnNote("mfc")}
             actions={<>{btn(gasOn, "가스 켜기", <>가스 켜기</>, "primary")}{newDev && flowBtn}</>}
             footNote={gasNowOn && newDev ? <p className={`${FS.small} text-[#5B6470]`}>가스가 켜져 있어 켜기는 잠김 · 유량은 [유량 바꾸기]로</p>
@@ -302,8 +308,8 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
           </DevCard>
 
           <DevCard title="압력" off={off("mfc")} offNote={OFF_NOTE} onConfig={onConfig} onSettings={setUp("pressure")}
-            chip={spAct !== null && spAct >= 1 ? <Chip tone="dark">SP{spAct} 제어 중</Chip> : <Chip>{spAct === 0 ? "MFC 밸브 조작" : "SP 없음"}</Chip>}
-            big={big2(["챔버 압력", num(snap?.["mfc.pressure_mtorr"]), "mTorr", 2], [nm("mfc.valve_pct"), num(snap?.["mfc.valve_pct"]), "%", 1])}
+            chip={st?.blind ? null : spAct !== null && spAct >= 1 ? <Chip tone="dark">SP{spAct} 제어 중</Chip> : <Chip>{spAct === 0 ? "MFC 밸브 조작" : "SP 없음"}</Chip>}
+            big={big2(["챔버 압력", num(snap?.["mfc.pressure_mtorr"]), "mTorr", 2, "mfc.pressure_mtorr"], [nm("mfc.valve_pct"), num(snap?.["mfc.valve_pct"]), "%", 1, "mfc.valve_pct"])}
             note={warnNote("mfc")}
             actions={btn(press, `압력 SP${sp} 적용`, <>압력 적용</>, "primary")} footNote={why([press, "압력 적용"], [valve("open"), "MFC 밸브"])}
             actionsEnd={<>
@@ -337,7 +343,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
           </DevCard>
 
           <DevCard title="셔터" off={off("plc")} offNote={OFF_NOTE} onConfig={onConfig} onSettings={setUp("shutter")}
-            chip={<Chip tone={openShut.length ? "dark" : "neutral"}>{openShut.length ? `${openShut.join("·")} 열림` : "모두 닫힘"}</Chip>}
+            chip={st?.blind ? null : <Chip tone={openShut.length ? "dark" : "neutral"}>{openShut.length ? `${openShut.join("·")} 열림` : "모두 닫힘"}</Chip>}
             note={<>{warnNote("plc")}{whyX(...([["g1", "s1"], ["g2", "s2"], ["ms", "ms"]] as const).flatMap(([t, c]) => [[shutter("open", t), `${nm(`plc.${c}`)} 열기`], [shutter("close", t), `${nm(`plc.${c}`)} 닫기`]] as [Block, string][]))}
               {newDev && <p>이미 그 상태인 셔터의 버튼은 잠깁니다 · [닫기]는 진행 중인 조작이 있어도 바로 실행</p>}</>}
             >
@@ -354,13 +360,13 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
           </DevCard>
 
           <DevCard title={bundle.snapshot?.blocks?.find((x) => x.name === "dc")?.label ?? "DC Power"} off={off("dc")} offNote={OFF_NOTE} onConfig={onConfig} onSettings={setUp("dc")}
-            chip={outChip(b("dc.out"))} big={big2(["파워", num(snap?.["dc.p"]), "W", 1])} note={warnNote("dc")}
+            chip={outChip(b("dc.out"))} big={big2(["파워", num(snap?.["dc.p"]), "W", 1, "dc.p"])} note={warnNote("dc")}
             actions={btn(pOn({ dc_power: parse(dc) }), `DC ${dc || "?"} W ${onWord(dcOn)}`, <>{onWord(dcOn)}</>, "primary", { red: true, lines: powerLines() })}
             footNote={why([pOn({ dc_power: parse(dc) }), onWord(dcOn)], [pOff({ dc: true }), "끄기"])
               ?? (dcOn && newDev ? <p className={`${FS.small} text-[#5B6470]`}>켜져 있어 [켜기] 대신 [목표 적용] · [끄기]는 진행 중인 조작이 있어도 바로 실행</p> : undefined)}
             actionsEnd={btn(pOff({ dc: true }), "DC 끄기", <>끄기</>, "danger")}>
-            <KV k="전압"><Val text={fmt(num(snap?.["dc.v"]))} unit="V" /></KV>
-            <KV k="전류"><Val text={fmt(num(snap?.["dc.i"]), 3)} unit="A" /></KV>
+            <KV k="전압"><Val text={fv(num(snap?.["dc.v"]))} unit="V" /></KV>
+            <KV k="전류"><Val text={fv(num(snap?.["dc.i"]), 3)} unit="A" /></KV>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Field label="새 목표" unit="W" value={dc} onChange={setDc} />
               {dcMax !== null && <span className={`${FS.small} text-[#5B6470]`}>운전 상한 {dcMax} W</span>}
@@ -369,12 +375,12 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
 
           <DevCard title={bundle.snapshot?.blocks?.find((x) => x.name === "rf")?.label ?? "RF Power"} off={off("rf")} offNote={OFF_NOTE} onConfig={onConfig} onSettings={setUp("rf")}
             chip={rfc ? <Chip tone={rfc.tone}>{rfc.text}</Chip> : outChip(snap?.["rf.out_on"] === undefined && snap?.["rf.fwd_w"] === undefined ? undefined : rfOn)}
-            big={big2([nm("rf.fwd_w"), num(snap?.["rf.fwd_w"]), "W", 1], [nm("rf.ref_w"), num(snap?.["rf.ref_w"]), "W", 1])} note={warnNote("rf")}
+            big={big2([nm("rf.fwd_w"), num(snap?.["rf.fwd_w"]), "W", 1, "rf.fwd_w"], [nm("rf.ref_w"), num(snap?.["rf.ref_w"]), "W", 1, "rf.ref_w"])} note={warnNote("rf")}
             actions={btn(pOn({ rf_power: parse(rf) }), `RF ${rf || "?"} W ${onWord(rfOn)}`, <>{onWord(rfOn)}</>, "primary", { red: true, lines: powerLines() })}
             footNote={why([pOn({ rf_power: parse(rf) }), onWord(rfOn)], [pOff({ rf: true }), "끄기"])
               ?? (rfOn && newDev ? <p className={`${FS.small} text-[#5B6470]`}>켜져 있어 [켜기] 대신 [목표 적용] · [끄기]는 올리는 중에도 바로 실행</p> : undefined)}
             actionsEnd={btn(pOff({ rf: true }), "RF 끄기", <>끄기</>, "danger")}>
-            <KV k="목표"><Val text={fmt(num(snap?.["rf.set_w"]))} unit="W" /></KV>
+            <KV k="목표"><Val text={fv(num(snap?.["rf.set_w"]))} unit="W" /></KV>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Field label="새 목표" unit="W" value={rf} onChange={setRf} />
               {rfMax !== null && <span className={`${FS.small} text-[#5B6470]`}>운전 상한 {rfMax} W</span>}
@@ -382,11 +388,11 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
           </DevCard>
 
           <DevCard title={bundle.snapshot?.blocks?.find((x) => x.name === "rfp")?.label ?? "RF Pulse"} off={!rfpOn || off("rfp")} offNote={OFF_NOTE} onConfig={onConfig} onSettings={setUp("rfp")}
-            chip={outChip(b("rfp.out_on"))} big={big2([nm("rfp.fwd_w"), num(snap?.["rfp.fwd_w"]), "W", 0])} note={warnNote("rfp")}
+            chip={outChip(b("rfp.out_on"))} big={big2([nm("rfp.fwd_w"), num(snap?.["rfp.fwd_w"]), "W", 0, "rfp.fwd_w"])} note={warnNote("rfp")}
             actions={btn(pOn({ rfp_power: parse(rfp), rfp_freq_khz: parse(freq), rfp_duty: parse(duty) }), `RF Pulse ${rfp || "?"} W 켜기`, <>{onWord(snap?.["rfp.out_on"] === true)}</>, "primary", { red: true, lines: powerLines() })}
             footNote={why([pOn({ rfp_power: parse(rfp), rfp_freq_khz: parse(freq), rfp_duty: parse(duty) }), onWord(snap?.["rfp.out_on"] === true)], [pOff({ rfpulse: true }), "끄기"])}
             actionsEnd={btn(pOff({ rfpulse: true }), "RF Pulse 끄기", <>끄기</>, "danger")}>
-            <KV k={nm("rfp.ref_w")}><Val text={fmt(num(snap?.["rfp.ref_w"]), 0)} unit="W" /></KV>
+            <KV k={nm("rfp.ref_w")}><Val text={fv(num(snap?.["rfp.ref_w"]), 0)} unit="W" /></KV>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <Field label="새 목표" unit="W" value={rfp} onChange={setRfp} />
               <Field label="주파수" unit="kHz" value={freq} onChange={setFreq} hint="비우면 장비에 있는 값을 그대로 씁니다." width="w-20" />
@@ -406,7 +412,7 @@ export default function Chk2Manual({ bundle, st, lock, onAsk, onHmi, onSettings,
 /** 현재 / 목표 한 줄 */
 function PairKV({ k, a, b, unit }: { k: string; a: number | null; b: number | null; unit: string }) {
   return (
-    <KV k={k}><Val text={fmt(a, 2)} /><span className={`ml-1 ${FS.small} text-[#5B6470]`}>/ {b === null ? "—" : fmt(b, 2)} {unit}</span></KV>
+    <KV k={k}><Val text={fv(a, 2)} /><span className={`ml-1 ${FS.small} text-[#5B6470]`}>/ {b === null ? "—" : `${fmt(b, 2)} ${unit}`}</span></KV>
   );
 }
 const OFF_NOTE = "장비 설정에서 사용하도록 바꾸면 조작할 수 있습니다.";

@@ -58,9 +58,11 @@ const KEYS: KeyDef[] = [
 ];
 const LIMIT_PARAM: Record<string, string> = { dc: "DC_MAX_POWER", rf: "RF_MAX_POWER", rfp: "RFPULSE_MAX_POWER", heater: "HEATER_MAX_TEMP" };
 
-function KeyTile({ d: d0, bundle, snap }: { d: KeyDef; bundle: Bundle | null; snap: Snap }) {
+function KeyTile({ d: d0, bundle, snap, st }: { d: KeyDef; bundle: Bundle | null; snap: Snap; st?: StateData | null }) {
   // 묶음 15 — tc2(TC2 단독 제어)에서 히터 칸은 PID 가 따라가는 쪽(TC2 와 TC2 목표 SV2), TC1 은 아래 줄에 "기록"
-  const tc2Only = d0.key === "heater" && snap?.["heater.ctrl_mode"] === "tc2";
+  // 끊김(W-26)이면 칸 이름은 마지막 제어 구조로(값은 "—")
+  const cm = st?.blind ? st.shape?.["heater.ctrl_mode"] : snap?.["heater.ctrl_mode"];
+  const tc2Only = d0.key === "heater" && cm === "tc2";
   // 묶음 16 — 압력 칸 목표는 선택된 설정점의 값(SP4·SP5 단계에도), 옛 장비는 SP1 확인값
   const d: KeyDef = tc2Only ? { ...d0, label: "히터 TC2", value: "heater.pv2", target: "heater.sv2" }
     : d0.key === "pressure" ? { ...d0, target: pressureTargetCol(snap, bundle) } : d0;
@@ -82,24 +84,27 @@ function KeyTile({ d: d0, bundle, snap }: { d: KeyDef; bundle: Bundle | null; sn
             mv !== null ? (snap?.["heater.run"] === true ? `DAC ${Math.round(mv)}${amp !== null ? ` ≈${amp.toFixed(1)} A` : ""}` : `정지 (DAC ${Math.round(mv)})`) : "",
             typeof cs === "string" && cs && cs !== "idle" ? enumLabel(csF, cs, snap) ?? cs : ""].filter(Boolean).join(" · ");
   })() : "";
+  // 끊김(W-26)이면 아래 줄 글은 비우되 줄 자리는 끊기기 전처럼(그 줄 값이 있었으면) — 칸 높이가 바뀌지 않게
+  const extraSlot = d.key === "heater" && !!st?.blind && ["heater.pv", "heater.pv2", "heater.mv", "heater.casc_state"].some((k) => st.had?.includes(k));
   return (
     <Tile className="p-3">
       <div className="flex items-baseline justify-between gap-2">
         <span className={`truncate ${FS.body} font-semibold text-[#1B1F24]`}>{d.label}</span>
         {t !== null && <span className={`shrink-0 ${FS.small} text-[#5B6470]`}>목표 {tf ? fieldText(tf, t).text || fmtN(t) : fmtN(t)} {unit}</span>}
       </div>
-      <div className="mt-1"><Val text={txt.text} unit={unit} size="big" alt={txt.alt} altWarn={txt.warn} /></div>
+      <div className="mt-1"><Val text={txt.text} unit={unit} size="big" alt={txt.alt} altWarn={txt.warn} keepUnit={!!st?.blind && !!st.had?.includes(d.value)} /></div>
       {d.key !== "ig" && <div className="mt-1"><RangeBar value={v} target={t} band={band} max={max} label={`${d.label} 막대`} /></div>}
       <p className={`mt-0.5 flex justify-between ${FS.small} tabular-nums text-[#8A929D]`}>
-        {d.key !== "ig" ? <><span>0</span><span>{fmtN(max)} {unit}</span></> : <span>로그 값이라 막대 없음</span>}
+        {/* 막대 끝값은 지금 값·목표로 정한다 — 끊김(W-26)이면 비운다(줄은 그대로) */}
+        {d.key !== "ig" ? <><span>0</span><span>{st?.blind ? "\u00a0" : `${fmtN(max)} ${unit}`}</span></> : <span>로그 값이라 막대 없음</span>}
       </p>
-      {extra && <p className={`mt-1 truncate ${FS.small} text-[#5B6470]`}>{extra}</p>}
+      {(extra || extraSlot) && <p className={`mt-1 truncate ${FS.small} text-[#5B6470]`}>{extra || "\u00a0"}</p>}
       {d.key === "rf" && rfState(snap) === "uncommanded" && <p className="mt-1"><Chip tone="warn">명령 없이 출력 중</Chip></p>}
     </Tile>
   );
 }
 
-function KeyValues({ bundle, st, blocks }: { bundle: Bundle | null; st: StateData | null; blocks: RunBlocks | null }) {
+function KeyValues({ bundle, st, blocks, layoutSnap }: { bundle: Bundle | null; st: StateData | null; blocks: RunBlocks | null; layoutSnap?: Snap }) {
   const snap = st?.snapshot;
   const u = usesNow(st, blocks?.blocks ?? null);
   const used = (k: KeyDef["key"]) => (k === "pressure" ? u.mfc || u.ar || u.o2 : u[k]);
@@ -109,19 +114,24 @@ function KeyValues({ bundle, st, blocks }: { bundle: Bundle | null; st: StateDat
     <Card title="주요 값" right={<span className={`${FS.small} text-[#5B6470]`}>이번 공정이 쓰는 장비</span>}>
       {on.length ? (
         <div className="grid gap-2 sm:grid-cols-2 2xl:grid-cols-3">
-          {on.map((d) => <KeyTile key={d.key} d={d} bundle={bundle} snap={snap} />)}
+          {on.map((d) => <KeyTile key={d.key} d={d} bundle={bundle} snap={snap} st={st} />)}
         </div>
       ) : <Empty>이번 공정이 쓰는 장비 값을 아직 모릅니다</Empty>}
       <p className={`mt-2 ${FS.small} text-[#5B6470]`} title="허용 범위는 장비 판정과 같은 식으로 그립니다. 모르면 띠가 없습니다.">회색 = 허용 범위 · ▲ 목표 · │ 현재</p>
-      {off.length > 0 && (
-        <p className={`mt-1 ${FS.small} text-[#5B6470]`}>
-          이번 공정에서 쓰지 않는 장비: {off.map((d) => {
-            const f = fieldOf(bundle, d.value);
-            const t = f ? fieldText(f, snap?.[d.value], snap, bundle?.snapshot?.blocks) : { text: "", alt: null, warn: false };
-            return `${d.label} ${t.text || t.alt || "—"}${t.text && f?.unit ? ` ${f.unit}` : ""}`;
-          }).join(" · ")}
-        </p>
-      )}
+      {off.length > 0 && (() => {
+        const line = (s: Snap) => `이번 공정에서 쓰지 않는 장비: ${off.map((d) => {
+          const f = fieldOf(bundle, d.value);
+          const t = f ? fieldText(f, s?.[d.value], s, bundle?.snapshot?.blocks) : { text: "", alt: null, warn: false };
+          return `${d.label} ${t.text || t.alt || "—"}${t.text && f?.unit ? ` ${f.unit}` : ""}`;
+        }).join(" · ")}`;
+        // 끊김(W-26) — 글은 "—", 줄 수는 끊기기 전 글로 잡는다(보이지 않는 글 + 그 위에 "—" 글 — 좁은 폭에서 줄이 줄지 않게)
+        return st?.blind && layoutSnap ? (
+          <p className={`relative mt-1 ${FS.small} text-[#5B6470]`}>
+            <span className="invisible" aria-hidden>{line(layoutSnap)}</span>
+            <span className="absolute inset-0">{line(snap)}</span>
+          </p>
+        ) : <p className={`mt-1 ${FS.small} text-[#5B6470]`}>{line(snap)}</p>;
+      })()}
     </Card>
   );
 }
@@ -164,7 +174,8 @@ function Alerts({ bundle, st, feed, onLog, idle, bottom, nowMs }: { bundle: Bund
     <Card title={<><BellRing size={15} /> 알림</>} right={onLog && <Btn size="sm" kind="ghost" onClick={onLog}>기록 전체 보기</Btn>}
       className={idle && !bottom ? "flex flex-col @min-[1360px]/run:absolute @min-[1360px]/run:inset-0" : ""}>
       <p className={`mb-2 ${FS.body} text-[#5B6470]`}>
-        활성 알람 {alarms.length ? <Chip tone="alarm">{alarms.length}개</Chip> : <b className="text-[#1B1F24]">없음</b>}
+        활성 알람 {st?.blind ? <b className="text-[#8A929D]">모름</b>       /* 끊김(W-26) — 지금 알람을 알 수 없음 */
+          : alarms.length ? <Chip tone="alarm">{alarms.length}개</Chip> : <b className="text-[#1B1F24]">없음</b>}
       </p>
       {alarms.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1">
@@ -339,7 +350,7 @@ function NextProcess({ bundle, st, recipes, lock, onAsk, onEdit }: {
   );
 }
 
-export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, feed, trend, recipes, lock, canKey, onAsk, onHmi, onLog, onEditRecipe, onManual, onConfig, onSettings, nowMs, skewMs, view = "run" }: {
+export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, feed, trend, recipes, lock, canKey, onAsk, onHmi, onLog, onEditRecipe, onManual, onConfig, onSettings, nowMs, skewMs, view = "run", layoutSnap }: {
   equipment: string; bundle: Bundle | null; st: StateData | null; runBlocks: RunBlocks | null; editBase: EditBase | null;
   feed: FeedItem[]; trend: TrendPt[];
   recipes: ReturnType<typeof useRecipes> | null; lock: LockFn; canKey: (kind: string, key: string) => boolean; onAsk: (a: Ask) => void;
@@ -347,6 +358,7 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
   view?: "status" | "run";                               // W-21 — 상태 탭(장비 박스 + 알림 띠) / 운전 탭(대기: 다음 공정 + 알림, 공정 중: 공정 화면)
   onSettings?: (dev: DevKey) => void;                    // W-21 장비 박스 [⚙ 설정] → 장비 설정 서랍
   onManual?: () => void; onConfig?: () => void;          // W-20 장비 박스 [수동 조작 열기]·[설정 열기] — 탭이 없으면 넘기지 않는다
+  layoutSnap?: Snap;     // W-26 끊김 때만 — 끊기기 전 스냅숏. 보이지 않는 자리 잡기(줄 수 유지)에만 쓰고 글로 그리지 않는다
 }) {
   const { local } = useChk2Mode();
   const [wide, setWide] = useState(false);       // 순서 고치기 중 — 공정 순서 칸을 한 줄 전체로
@@ -374,9 +386,9 @@ export default function Chk2Run({ equipment, bundle, st, runBlocks, editBase, fe
           <Chk2Seq bundle={bundle} st={st} runBlocks={runBlocks} editBase={editBase} lock={lock} onAsk={onAsk} local={local} onWide={setWide} />
         </div>
         <div className="min-w-0 space-y-3">
-          <KeyValues bundle={bundle} st={st} blocks={runBlocks} />
+          <KeyValues bundle={bundle} st={st} blocks={runBlocks} layoutSnap={layoutSnap} />
           <Chk2Trend trend={trend} equipment={equipment} runId={st?.runId ?? null} local={local} nowMs={nowMs}
-            pressureTarget={pressureTargetCol(snap, bundle)} fitLegend edgeTicks />
+            pressureTarget={pressureTargetCol(snap, bundle)} fitLegend edgeTicks blind={!!st?.blind} />
           <Chk2Adjust bundle={bundle} st={st} skewMs={skewMs} canKey={canKey} onAsk={onAsk} plain feed={feed} />
         </div>
         <div className="grid min-w-0 items-start gap-3 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">

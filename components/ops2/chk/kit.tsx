@@ -132,8 +132,9 @@ export function StateBox({ on, label, title, unknown }: { on: boolean | null | u
 /** 실시간 값 — 남색(줄 값 14px/600, 큰 값 28px/700 + 단위 13px), 단위는 보조색(늘 붙임).
  *  값이 없으면 같은 글꼴로 "—", 또는 상태 이름(alt) — altWarn(연결 안 됨·영점 안 됨·음수·형식 오류)일 때만 주의색 + 아이콘,
  *  나머지 상태(하한 아래·꺼짐 등 대기 때 정상)는 기본색 글자만 */
-export function Val({ text, unit, size = "row", dim, alt, altWarn }: {
+export function Val({ text, unit, size = "row", dim, alt, altWarn, keepUnit }: {
   text: string; unit?: string; size?: "row" | "big"; dim?: boolean; alt?: string | null; altWarn?: boolean;
+  keepUnit?: boolean;     // W-26 챔버K — 값이 없을 때 단위 자리를 보이지 않게 남긴다(큰 값 줄 높이가 값 있을 때와 같게). CH1&2 는 넘기지 않아 그대로
 }) {
   const big = size === "big";
   const cls = big ? `${FS.big} font-bold` : `${FS.body} font-semibold tabular-nums`;
@@ -143,7 +144,7 @@ export function Val({ text, unit, size = "row", dim, alt, altWarn }: {
         ? <span className={`inline-flex items-center gap-1 font-semibold text-[#B54708] ${FS.body}`}><AlertTriangle size={14} />{alt}</span>
         : <span className={`whitespace-nowrap font-semibold text-[#1B1F24] ${big ? `${FS.card} leading-[34px]` : FS.body}`}>{alt}</span>;
     }
-    return <span className={`${cls} text-[#8A929D]`}>—</span>;
+    return <span className={`${cls} text-[#8A929D]`}>—{keepUnit && unit && <span aria-hidden className={`invisible ml-1 font-normal ${big ? FS.unit : FS.small}`}>{unit}</span>}</span>;
   }
   return (
     <span className={`whitespace-nowrap ${cls} ${dim ? "text-[#8A929D]" : "text-[#133A7C]"}`}>
