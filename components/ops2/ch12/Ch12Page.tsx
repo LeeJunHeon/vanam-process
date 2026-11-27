@@ -1,8 +1,12 @@
 "use client";
 
-// 챔버12(CH1&2) v2 장비 화면(메뉴 "CH1&2 v2", 2026-11-18 — 챔버K v2 화면 W-10·W-11 틀로 다시 만듦).
+// 챔버12(CH1&2) 장비 화면(메뉴 "CH1&2 Sputter", 2026-11-18 — 챔버K 화면 W-10·W-11 틀로 다시 만듦. 옛 고정 값 시안 화면은 없앰).
 // 화면 틀: 제목·장비 고르기 → 상태 띠(모든 탭 위에 늘 — Ch12Status, 스크롤로 안 보이면 위에 얇은 줄) → bench 정보 띠 →
-//   탭 운전 · HMI · 레시피 · 기록 · 설정(노트북 로컬 화면은 운전 · HMI · 기록, 주소 ?tab= 에 남김) + 오른쪽 끝 '상세 보기' 토글.
+//   탭 상태 · 운전 · HMI · 레시피 · 기록 · 설정(노트북 화면은 상태 · 운전 · HMI · 기록, 주소 ?tab= 에 남김 — 옛 ?tab=run 도 그대로)
+//   + 오른쪽 끝 '상세 보기' 토글. 상태 = 장비 박스와 알림, 운전 = 다음 공정과 공정 중 화면(U4 — 챔버K Chk2Page 와 같은 나눔).
+// 떠 있는 상자(확인창·알림창·토스트·도움말·순서 고치기)는 body 포털(Float — 챔버K W-23 A)이라 열고 닫아도 페이지 높이·스크롤이 그대로(U5).
+// kit 옵션(U1): chkColors(확인창 빨강은 정지·끄기·끝내기만)·lineIcons(띠 아이콘을 첫 줄 가운데에)는 챔버K 와 같이 켜고, chkWords 는 켜지 않는다
+//   (설정 카드 접은 줄에 챔버K 장비 이름 'CHK·CHK-SIM', 기록의 출처 'LOCAL' 이 나와서 — 보고).
 //   레시피 편집 중 저장 안 한 변경이 있으면 탭·장비를 바꿀 때 확인창.
 // 데이터는 챔버K useChk2 그대로(hello·schema(묶음)·stream·commands·runs — /api/ops2/[equipment]/v1/* 와 노트북 /api/v1/*), 추세 열만 챔버12 열.
 // 잠금(logic.lockReason — 챔버K lockOf 와 같은 순서·문구): 로그인 끊김 → 권한(웹 perms·노트북은 hello.commandKinds) → bench(runMode bench·
@@ -14,7 +18,11 @@ import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObjec
 import { AlertTriangle, Cloud, CloudOff, Code2, Laptop, Lock, LogIn, WifiOff } from "lucide-react";
 import Chk2Config from "../chk/Chk2Config";
 import { CommandLog, RunList } from "../chk/Chk2Logs";
-import { FS, Card, InfoBand, Issue, Notices, SimpleConfirm, Tabs, type Ask, type Notice } from "../chk/kit";
+import { FS, Card, InfoBand, Issue, Notices, SimpleConfirm, Tabs, TipLayer, type Ask, type Notice } from "../chk/kit";
+import { Float } from "../chk/Float";
+import { ConnLabel } from "../chk/Chk2Status";
+import { connOf, connParts } from "@/lib/ops2/chk/conn";
+import { deviceChoiceOf } from "@/lib/ops2/display";
 import Ch12Confirm from "./Ch12Confirm";
 import { plcFresh } from "../chk/logic";
 import { Chk2ModeContext, useDetailPref } from "../chk/mode";
@@ -53,20 +61,20 @@ const SEND_ERROR: Record<string, string> = {
   network: "웹 서버에 닿지 않음",
 };
 
-export type TabKey = "run" | "hmi" | "recipe" | "log" | "config";
+export type TabKey = "status" | "run" | "hmi" | "recipe" | "log" | "config";
 export const FEED_MAIN_KEEP12 = 1500;
+// U4(챔버K W-21 과 같은 나눔): 상태(장비 박스 + 알림 — 기본 탭) / 운전(대기: 다음 공정, 공정 중: 공정 화면). 공정이 시작·끝나도 탭은 그대로
 export const WEB_TABS: { key: TabKey; label: string; title: string }[] = [
-  { key: "run", label: "운전", title: "CH1·CH2 공정 상태·주요 값·장비 카드와 아래 칸 조작" },
+  { key: "status", label: "상태", title: "장비 박스와 알림" },
+  { key: "run", label: "운전", title: "다음 공정, 공정 중이면 공정 순서·주요 값·추세" },
   { key: "hmi", label: "HMI", title: "장비 계통도와 PLC 버튼" },
   { key: "recipe", label: "레시피", title: "공정·Plasma Cleaning 레시피 목록과 편집" },
   { key: "log", label: "기록", title: "로그·조작 기록·공정 이력" },
   { key: "config", label: "설정", title: "장비 설정 보기와 적용" },
 ];
-export const LOCAL_TABS = WEB_TABS.filter((t) => t.key === "run" || t.key === "hmi" || t.key === "log");
+export const LOCAL_TABS = WEB_TABS.filter((t) => t.key === "status" || t.key === "run" || t.key === "hmi" || t.key === "log");
 
 type Device = { equipment: string; label: string | null; runMode: string | null };
-/** 챔버12 장비 ID — CH12(운전)·CH12-SIM(시뮬레이터) 등 CH12 로 시작 */
-const isCh12 = (e: string) => /^CH12(\b|-)/.test(e);
 
 export default function Ch12Page() {
   const [devices, setDevices] = useState<Device[] | null>(null);
@@ -78,12 +86,12 @@ export default function Ch12Page() {
     void (async () => {
       const r = await fetch("/api/ops2/devices", { cache: "no-store" }).catch(() => null);
       const all: Device[] = r?.ok ? (await r.json()).devices ?? [] : [];
-      const list = all.filter((d) => isCh12(d.equipment));
-      setDevices(list);
       let saved: string | null = null;
       try { saved = window.localStorage.getItem(STORE_KEY); } catch { /* 저장소 없음 */ }
-      const has = (e: string | null) => !!e && list.some((d) => d.equipment === e);
-      setPicked(has(saved) ? saved : has("CH12") ? "CH12" : list[0]?.equipment ?? null);
+      // 챔버12 장비만(CH12·CH12-SIM — lib/ops2/display.deviceChoiceOf). 저장된 선택이 그 안에 없으면 CH12
+      const c = deviceChoiceOf("ch12", all, saved);
+      setDevices(c.list);
+      setPicked(c.picked);
     })();
   }, []);
 
@@ -96,8 +104,8 @@ export default function Ch12Page() {
   return (
     <div className="min-h-full space-y-3 bg-[#EEF0F3] p-3 text-[#1B1F24] sm:p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className={`${FS.title} font-bold text-[#1B1F24]`}>CH1&amp;2 v2</h2>
-        {devices && devices.length > 0 && (
+        <h2 className={`${FS.title} font-bold text-[#1B1F24]`}>CH1&amp;2 Sputter</h2>
+        {devices && devices.length > 1 && (                    // 고를 장비가 하나면 고르기 상자를 그리지 않는다(U6 — 챔버K W-24 A)
           <select value={picked ?? ""} onChange={(e) => pick(e.target.value)} aria-label="장비 고르기"
             className={`h-10 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body} font-semibold text-[#1B1F24]`}>
             {devices.map((d) => (
@@ -107,13 +115,13 @@ export default function Ch12Page() {
         )}
       </div>
       {devices && !devices.length && (
-        <Card><p className={`${FS.body} text-[#5B6470]`}>등록된 CH1&amp;2 장비가 없습니다. 장비 관리에서 장비를 등록하세요.</p></Card>
+        <Card><p className={`${FS.body} text-[#5B6470]`}>사용 중인 CH1&amp;2 장비가 없습니다. 장비 관리에서 장비를 등록하거나 사용을 켜세요.</p></Card>
       )}
       {picked && <Ch12Device key={picked} equipment={picked} dirtyRef={dirtyRef} />}
-      {switchTo && (
+      {switchTo && <Float>
         <SimpleConfirm title="저장하지 않음" ok="버리고 바꾸기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 장비를 바꿀까요?"
           onCancel={() => setSwitchTo(null)} onOk={() => { dirtyRef.current = false; setSwitchTo(null); pick(switchTo); }} />
-      )}
+      </Float>}
     </div>
   );
 }
@@ -151,7 +159,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const [recipeReq, setRecipeReq] = useState<{ id: string | null; n: number } | null>(null);   // 운전 탭 [레시피 열기·편집](W-20)
   const [detail, setDetail] = useDetailPref();
   const tabs = local ? LOCAL_TABS : WEB_TABS;
-  const [tab, setTabState] = useState<TabKey>("run");
+  const [tab, setTabState] = useState<TabKey>("status");
   const [tabTo, setTabTo] = useState<TabKey | null>(null);
   const [logTab, setLogTab] = useState<"events" | "commands" | "runs">("events");
   // 알림창(v1 경고·오류창 규칙 — Ch12Popups): 화면을 연 뒤(장비 시계) 온 popup·호스트 error_event 만
@@ -286,7 +294,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
 
   if (!d.hello) {
     return (
-      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail, lockPrefix: LOCK_PREFIX }}>
+      <Chk2ModeContext.Provider value={{ local, hmiKinds: [], detail, lockPrefix: LOCK_PREFIX, chkColors: true, lineIcons: true }}>
         {d.authLost ? <Issue level="alarm"><LogIn size={14} className="mr-1 inline" />로그인이 끊겼습니다. 새로고침하세요. 조작이 잠겼습니다.</Issue>
           : d.error ? <Issue level="alarm">{d.error}</Issue>
           : <section className={`animate-pulse rounded-[12px] border border-[#D9DDE3] bg-white p-6 text-center ${FS.body} text-[#5B6470]`}>장비 정보를 읽는 중…</section>}
@@ -295,12 +303,11 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
   }
 
   const up = st?.uplink;
-  const chipAge = local && !d.streamUp && age !== null ? Math.max(age, LOST_MS + 1) : age;
-  const who = local ? "노트북 프로그램" : "장비";
-  const conn: ConnInfo = neverConnected ? { label: "연결 대기", tone: "neutral" }
-    : chipAge === null ? { label: "상태 없음", tone: "neutral" }
-    : chipAge <= LATE_MS ? { label: `${who} 연결됨 · ${ageSec ?? 0}초 전`, tone: "neutral" }
-    : chipAge <= LOST_MS ? { label: `${who} 늦음 ${ageSec}초`, tone: "warn" } : { label: `${who} 끊김 ${ageSec}초`, tone: "alarm" };
+  // 연결 칩(U2 — 챔버K lib/ops2/chk/conn): 연결됨 / 늦음 N초 / 끊김 N초 / 60초 넘으면 '끊김 · 18:05부터'. 노트북 화면은 프로그램과의
+  //   stream 이 끊기면 바로 끊김(초는 실제로 지난 시간)
+  const cs = connOf(age, now, LATE_MS, LOST_MS, local && !d.streamUp);
+  const conn: ConnInfo = neverConnected ? { label: "연결 대기", tone: "neutral" } : { label: <ConnLabel parts={connParts(cs)} />, tone: cs.tone };
+  const lostCs = connOf(age, now, LATE_MS, LOST_MS);
   const links: ConnInfo[] = [
     ...(neverConnected ? [] : [{ label: plcOk ? "PLC 정상" : "PLC 값 오래됨", tone: (plcOk || !connected ? "neutral" : "warn") as ConnInfo["tone"] }]),
   ];
@@ -325,7 +332,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const localCan = (k: string) => !lock(k);
 
   return (
-    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail, lockPrefix: LOCK_PREFIX }}>
+    <Chk2ModeContext.Provider value={{ local, hmiKinds: perms?.kinds ?? [], detail, lockPrefix: LOCK_PREFIX, chkColors: true, lineIcons: true }}>
       {local && (
         <div className={`flex flex-wrap items-center gap-2 rounded-[12px] bg-[#3A424D] px-4 py-2 ${FS.body} text-white`}>
           <Laptop size={15} /> <b>노트북 화면</b>
@@ -340,7 +347,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {neverConnected ? (
         <section className="rounded-[12px] border border-dashed border-[#C9CED6] bg-white p-6 text-center">
-          <p className={`${FS.card} font-bold text-[#1B1F24]`}>장비 프로그램(v2) 연결 대기</p>
+          <p className={`${FS.card} font-bold text-[#1B1F24]`}>장비 프로그램 연결 대기</p>
           <p className={`mt-1 ${FS.body} text-[#5B6470]`}>장비 노트북에서 프로그램을 실행하면 화면이 채워집니다.</p>
         </section>
       ) : (
@@ -367,22 +374,25 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {local && !d.streamUp && d.streamEver && <Issue level="alarm"><b>노트북 프로그램 연결 끊김</b>. 다시 붙는 중이라 조작이 잠겼습니다. 표시는 마지막 값입니다.</Issue>}
       {d.authLost && <Issue level="alarm">로그인이 끊겼습니다. 새로고침하세요. 조작이 잠겼습니다.</Issue>}
-      {d.error && <Issue level="alarm">{d.error}</Issue>}
+      {/* 노트북 화면이 프로그램과 끊겼을 때는 위 띠 한 줄만(챔버K W-24 B2 — hello 를 못 읽은 글은 같은 일이라 겹쳐 내지 않는다) */}
+      {d.error && !(local && !d.streamUp && d.streamEver) && <Issue level="alarm">{d.error}</Issue>}
       {web && !web.hasSchema && !neverConnected && <Issue level="warn">장비 정보를 받는 중입니다. 장비가 연결되면 받아 옵니다.</Issue>}
       {perms && !perms.canOperate && !local && !neverConnected && <InfoBand>조회만 가능합니다. 장비 담당자·관리자만 조작할 수 있습니다.</InfoBand>}
       {d.state && !connected && (!local || d.streamUp) && (
         <Issue level="alarm">
-          <AlertTriangle size={13} className="mr-1 inline" /><b>장비 끊김 {ageSec}초</b>. 표시는 마지막 값이며 조작이 잠겼습니다.
+          <AlertTriangle size={13} className="mr-1 inline" /><b>장비 끊김{lostCs.since ? ` · ${lostCs.since}부터` : <> <span className="inline-block min-w-[2ch] text-right tabular-nums">{ageSec}</span>초</>}</b>. 표시는 마지막 값이며 조작이 잠겼습니다.
           {webOnline && perms?.canOperate && " 웹은 장비와 이어져 있어 정지 명령은 보낼 수 있습니다."}
         </Issue>
       )}
-      <Notices list={notices} onClose={(id) => setNotices((l) => l.filter((n) => n.id !== id))} />
-      <PopupStack list={popups.open} onClose={popups.close} />
+      <Float>
+        <Notices list={notices} onClose={(id) => setNotices((l) => l.filter((n) => n.id !== id))} />
+        <PopupStack list={popups.open} onClose={popups.close} />
+      </Float>
 
-      <Tabs tabs={shownTabs} value={curTab} onChange={(t) => goTab(t)} right={detailBtn} />
+      <Tabs tabs={shownTabs} value={curTab} onChange={(t) => goTab(t)} right={detailBtn} wrap />
 
-      {curTab === "run" && (
-        <Ch12Run bundle={bundle} st={st} connected={connected} plcOk={plcOk} lock={lock} onAsk={setAsk} feed={d.feed} trend={d.trend}
+      {(curTab === "status" || curTab === "run") && (
+        <Ch12Run view={curTab === "status" ? "status" : "run"} bundle={bundle} st={st} connected={connected} plcOk={plcOk} lock={lock} onAsk={setAsk} feed={d.feed} trend={d.trend}
           nowMs={now + d.offsetMs} skewMs={skew} equipment={equipment} local={local} recipes={local ? null : recipes.list ?? []}
           getRecipe={fullOf} getRow={rowOf} pcRecipes={pcRecipes} onEditSeq={setSeqFor} onLog={() => goTab("log")} send={d.send} notify={notify}
           localCan={local ? localCan : undefined}
@@ -421,14 +431,18 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
           term={toTerms12} valueText={detail ? undefined : settingValue12} />
       )}
 
-      {seqFor && (
-        <Ch12SeqEdit bundle={bundle} st={st} feed={d.feed} ch={seqFor} can={(k) => !lock(k, `${k}@${seqFor}`)} onAsk={setAsk} onClose={() => setSeqFor(null)} />
-      )}
-      {tabTo && (
-        <SimpleConfirm title="저장하지 않음" ok="버리고 나가기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 탭을 바꿀까요?"
-          onCancel={() => setTabTo(null)} onOk={() => { dirtyRef.current = false; const t = tabTo; setTabTo(null); goTab(t, true); }} />
-      )}
-      <Ch12Confirm ask={ask} onOk={run} onCancel={cancel} />
+      {/* 떠 있는 상자는 body 포털(U5 — 챔버K W-23 A: 페이지 묶음의 마지막 자식이 되어 여백이 붙지 않게, 열고 닫아도 높이가 그대로) */}
+      <Float>
+        {seqFor && (
+          <Ch12SeqEdit bundle={bundle} st={st} feed={d.feed} ch={seqFor} can={(k) => !lock(k, `${k}@${seqFor}`)} onAsk={setAsk} onClose={() => setSeqFor(null)} />
+        )}
+        {tabTo && (
+          <SimpleConfirm title="저장하지 않음" ok="버리고 나가기" danger text="레시피에 저장하지 않은 변경이 있습니다. 버리고 탭을 바꿀까요?"
+            onCancel={() => setTabTo(null)} onOk={() => { dirtyRef.current = false; const t = tabTo; setTabTo(null); goTab(t, true); }} />
+        )}
+        <Ch12Confirm ask={ask} onOk={run} onCancel={cancel} />
+        <TipLayer />
+      </Float>
     </Chk2ModeContext.Provider>
   );
 }

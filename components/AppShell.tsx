@@ -10,7 +10,6 @@ import OrdersPage from "@/components/OrdersPage";
 import SubstratePage from "@/components/SubstratePage";
 import ActivityPage from "@/components/ActivityPage";
 import OpsDashboardPage from "@/components/OpsDashboardPage";
-import Ch12Page from "@/components/Ch12Page";
 import EquipmentStubPage from "@/components/EquipmentStubPage";
 import Ops2AdminPage from "@/components/ops2/Ops2AdminPage";
 import Chk2Page from "@/components/ops2/chk/Chk2Page";
@@ -42,7 +41,7 @@ export default function AppShell() {
     let ws: Workspace = "business";
     let pg: Page = WS_HOME.business;
     const deep0 = readPageParam();
-    const deep = (typeof deep0 === "string" && PAGE_ALIAS[deep0]) || deep0;      // 옛 주소(?page=equipChk) → CHK Sputter
+    const deep = (typeof deep0 === "string" && PAGE_ALIAS[deep0]) || deep0;      // 옛 주소(?page=equipChk·equipCh12) → CHK Sputter·CH1&2 Sputter
     if (isPage(deep)) {
       ws = workspaceOf(deep);
       pg = deep;
@@ -125,7 +124,6 @@ export default function AppShell() {
           {page === "substrate" && <SubstratePage />}
           {page === "activity" && <ActivityPage />}
           {page === "opsDashboard" && <OpsDashboardPage onNavigate={navigate} />}
-          {page === "equipCh12" && <Ch12Page />}
           {page === "equipCh12v2" && <Ch12v2Page />}
           {page === "equipChk2" && <Chk2Page />}
           {page === "equipRayvac" && <EquipmentStubPage equip="rayvac" />}

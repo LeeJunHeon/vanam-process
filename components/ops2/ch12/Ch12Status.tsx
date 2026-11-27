@@ -17,7 +17,7 @@ import { asChk, type Ch12Bundle, type Ch12State, type ChamberId } from "./types"
 import { MODE_NAME, fieldName, fieldTipOf, ownerName, placeName, reasonTip } from "@/lib/ops2/ch12/terms";
 
 export type LockFn = (kind: string, key?: string) => string | null;
-export type ConnInfo = { label: string; tone: Tone };
+export type ConnInfo = { label: ReactNode; tone: Tone };          // 연결 칩 글(U2 — 챔버K ConnLabel: 숫자는 고정 폭)
 
 const STATE_WORD: Record<string, string> = { active: "가동 중", stopping: "정지 중", end: "끝남" };
 const idleName = (p: string | null | undefined) => !p || /^idle$/i.test(p);
@@ -133,15 +133,15 @@ export function StatusBand12({ bundle, st, connected, conn, links, mode, equipme
       <div className={`flex flex-wrap items-center gap-2 ${FS.body}`}>
         <b className={`${FS.card} text-[#1B1F24]`}>{label || equipment}</b>
         {label && <span className={`font-mono ${FS.small} text-[#5B6470]`}>{equipment}</span>}
-        <Chip tone={conn.tone}>{conn.label}</Chip>
-        {links.map((l) => <Chip key={l.label} tone={l.tone}>{l.label}</Chip>)}
+        <Chip tone={conn.tone} className="tabular-nums">{conn.label}</Chip>
+        {links.map((l, i) => <Chip key={i} tone={l.tone}>{l.label}</Chip>)}
         {mode === "bench" && <Chip tone="dark" icon={<Lock size={11} />}>{MODE_NAME.bench}</Chip>}
         {mode === "sim" && <Chip tone="info">{MODE_NAME.sim}</Chip>}
         {mode === "run" && <Chip>{MODE_NAME.run}</Chip>}
         {extra && <span className="ml-auto flex items-center gap-2">{extra}</span>}
       </div>
       <div className="mt-2 flex flex-wrap items-start gap-3">
-        <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+        <div className="grid min-w-0 flex-[1_1_18rem] gap-2 sm:grid-cols-2">   {/* 18rem 보다 좁으면 정지 버튼이 아래 줄로(390px 에서 챔버 칸이 눌리지 않게) */}
           <ChamberCell bundle={bundle} st={st} ch="ch1" connected={connected} nowMs={nowMs} />
           <ChamberCell bundle={bundle} st={st} ch="ch2" connected={connected} nowMs={nowMs} />
         </div>
