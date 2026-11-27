@@ -1,6 +1,6 @@
 "use client";
 
-// 챔버12(CH1&2) v2 장비 화면(메뉴 "CH1&2 v2", 2026-11-18 — 챔버K v2 화면 W-10·W-11 틀로 다시 만듦).
+// 챔버12(CH1&2) 장비 화면(메뉴 "CH1&2 Sputter", 2026-11-18 — 챔버K 화면 W-10·W-11 틀로 다시 만듦. 옛 고정 값 시안 화면은 없앰).
 // 화면 틀: 제목·장비 고르기 → 상태 띠(모든 탭 위에 늘 — Ch12Status, 스크롤로 안 보이면 위에 얇은 줄) → bench 정보 띠 →
 //   탭 운전 · HMI · 레시피 · 기록 · 설정(노트북 로컬 화면은 운전 · HMI · 기록, 주소 ?tab= 에 남김) + 오른쪽 끝 '상세 보기' 토글.
 //   레시피 편집 중 저장 안 한 변경이 있으면 탭·장비를 바꿀 때 확인창.
@@ -96,7 +96,7 @@ export default function Ch12Page() {
   return (
     <div className="min-h-full space-y-3 bg-[#EEF0F3] p-3 text-[#1B1F24] sm:p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className={`${FS.title} font-bold text-[#1B1F24]`}>CH1&amp;2 v2</h2>
+        <h2 className={`${FS.title} font-bold text-[#1B1F24]`}>CH1&amp;2 Sputter</h2>
         {devices && devices.length > 0 && (
           <select value={picked ?? ""} onChange={(e) => pick(e.target.value)} aria-label="장비 고르기"
             className={`h-10 rounded-[10px] border border-[#D9DDE3] bg-white px-2 ${FS.body} font-semibold text-[#1B1F24]`}>
@@ -340,7 +340,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {neverConnected ? (
         <section className="rounded-[12px] border border-dashed border-[#C9CED6] bg-white p-6 text-center">
-          <p className={`${FS.card} font-bold text-[#1B1F24]`}>장비 프로그램(v2) 연결 대기</p>
+          <p className={`${FS.card} font-bold text-[#1B1F24]`}>장비 프로그램 연결 대기</p>
           <p className={`mt-1 ${FS.body} text-[#5B6470]`}>장비 노트북에서 프로그램을 실행하면 화면이 채워집니다.</p>
         </section>
       ) : (

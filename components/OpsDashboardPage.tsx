@@ -21,14 +21,14 @@ import { CHK_BASE_ID, isChkEquipment } from "@/lib/ops2/display";
 import { fmtKst } from "@/lib/ops2/time";
 
 type EquipState = "가동" | "대기" | "경고" | "오류" | "미연결";
-type EquipPage = "equipCh12" | "equipChk2" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline";
+type EquipPage = "equipCh12v2" | "equipChk2" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline";
 type Unit = { key: string; name: string; state: EquipState; page: EquipPage };
 
 // 연동 전 장비는 상태를 지어내지 않는다(지금 데이터 그대로 — 연동 예정)
 const CH12: Unit[] = [
-  { key: "ch1", name: "CH1", state: "미연결", page: "equipCh12" },
-  { key: "ch2", name: "CH2", state: "미연결", page: "equipCh12" },
-  { key: "ll", name: "LoadLock", state: "미연결", page: "equipCh12" },
+  { key: "ch1", name: "CH1", state: "미연결", page: "equipCh12v2" },
+  { key: "ch2", name: "CH2", state: "미연결", page: "equipCh12v2" },
+  { key: "ll", name: "LoadLock", state: "미연결", page: "equipCh12v2" },
 ];
 const OTHERS: Unit[] = [
   { key: "rayvac", name: "Rayvac ALD", state: "미연결", page: "equipRayvac" },
@@ -263,7 +263,7 @@ export default function OpsDashboardPage({ onNavigate }: { onNavigate?: (p: Equi
             ))}
           </div>
           <div className="flex border-t border-[#E3E6EA] pt-3">
-            <span className="ml-auto"><Btn onClick={() => onNavigate?.("equipCh12")}><Cpu size={14} /> CH1&2 Sputter 열기</Btn></span>
+            <span className="ml-auto"><Btn onClick={() => onNavigate?.("equipCh12v2")}><Cpu size={14} /> CH1&2 Sputter 열기</Btn></span>
           </div>
         </Card>
         <div className="grid grid-cols-1 gap-3 @min-[420px]/dash:grid-cols-2 @min-[900px]/dash:grid-cols-4 @min-[1200px]/dash:col-span-8">
