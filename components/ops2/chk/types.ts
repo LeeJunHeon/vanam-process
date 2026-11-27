@@ -154,6 +154,9 @@ export type StateData = {
   devParams?: DevParams | null;                  // 묶음 23(W-22) — 컨트롤러 값. 묶음 22 장비는 없음
   targets?: MountedTargets | null;               // 묶음 23 — 재고관리 장착 타겟(읽기 없으면 null)
   recipeCopy?: { syncedAt?: string | null; count?: number; error?: string | null } | null;   // 묶음 23 — 웹 레시피 사본
+  blind?: boolean;                               // 웹만(W-26) — 끊겨서 지금 값을 비운 state(lib/ops2/chk/conn.ts blindState)
+  had?: string[];                                // 웹만(W-26) — 끊김 때 마지막 스냅숏에서 값이 있던 열(칸 모양 유지용)
+  shape?: Record<string, unknown>;               // 웹만(W-26) — 끊김 때 줄 구성을 정하는 제어 구조(히터 제어 방식) 마지막 값
 };
 
 /** 장착 타겟 하나(재고관리 chamber-slots) */

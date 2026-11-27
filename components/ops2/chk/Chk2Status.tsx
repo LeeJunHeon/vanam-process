@@ -47,19 +47,21 @@ export type LockFn = (kind: string) => string | null;
 /** 정지 줄 — 부저 정지·공정 STOP(빨간 테두리)·ALL STOP(빨간 채움). 정지 쪽 규칙은 부르는 쪽(lock) */
 export function StopButtons({ lock, onAsk, small }: { lock: LockFn; onAsk: (a: Ask) => void; small?: boolean }) {
   const size = small ? "sm" : "lg";
+  // 잠기면 자물쇠가 버튼 그림 자리에 — 버튼 폭이 잠김·풀림에 같아 390 폭에서 줄을 넘지 않는다(W-26 끊김 확인에서 찾음)
+  const ic = (kind: string, icon: ReactNode) => (lock(kind) ? null : icon);
   return (
     <div className="flex shrink-0 flex-nowrap gap-2">
       <Btn size={size} lock={lock("BUZZ_STOP")}
         onClick={() => onAsk({ kind: "BUZZ_STOP", label: "부저 정지", stop: true, note: "울리는 부저를 끕니다." })}>
-        <BellOff size={14} /> 부저 정지
+        {ic("BUZZ_STOP", <BellOff size={14} />)} 부저 정지
       </Btn>
       <Btn size={size} kind="danger" lock={lock("PROCESS_STOP")} title="공정을 정지 순서대로 멈춥니다."
         onClick={() => onAsk({ kind: "PROCESS_STOP", label: "공정 STOP", stop: true, note: "공정을 정지 순서대로 멈춥니다." })}>
-        <Square size={14} /> STOP
+        {ic("PROCESS_STOP", <Square size={14} />)} STOP
       </Btn>
       <Btn size={size} kind="dangerSolid" lock={lock("ALL_STOP")} title="펌프·밸브까지 모두 끕니다."
         onClick={() => onAsk({ kind: "ALL_STOP", label: "ALL STOP", stop: true, note: "펌프·밸브까지 모두 끕니다." })}>
-        <OctagonX size={14} /> ALL STOP
+        {ic("ALL_STOP", <OctagonX size={14} />)} ALL STOP
       </Btn>
     </div>
   );
@@ -83,7 +85,7 @@ export function StatusBar({ bundle, st, connected, lock, onAsk }: {
       {st?.paused && <Chip tone="warn" icon={<PauseCircle size={11} />}>일시정지</Chip>}
       {st?.run?.manual && <Chip tone="dark">{st.run.manual.label || "수동 조작 중"}</Chip>}
       {step && <span className={`${FS.small} text-[#5B6470]`}>단계 {step.no}/{step.total}</span>}
-      {!st?.run?.manual && typeof r === "number" && r >= 0 && <span className={`${FS.card} font-bold tabular-nums text-[#133A7C]`}>남은 {fmtClock(r)}</span>}
+      {!st?.run?.manual && typeof r === "number" && r >= 0 && <span className={`${FS.card} font-bold tabular-nums ${connected ? "text-[#133A7C]" : "text-[#8A929D]"}`}>남은 {fmtClock(r)}</span>}
       <span className="ml-auto"><StopButtons lock={lock} onAsk={onAsk} small /></span>
     </div>
   );
@@ -128,7 +130,9 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
   const target = blockTarget(curType, st?.snapshot);
   const pauseMax = typeof paramValue(bundle, "PROCESS_PAUSE_MAX_SEC") === "number" ? paramValue(bundle, "PROCESS_PAUSE_MAX_SEC") as number : 0;
   const paused = st?.run?.paused ?? null;
-  const progText = st?.paused ? "멈춤" : cur !== null ? `남은 ${fmtClock(cur)}` : curType && OPEN_TYPES.has(curType) ? "도달 대기 중" : "";
+  // 끊김(W-26)이면 진행 줄은 '마지막으로 받은 단계'로 회색, 셈은 부르는 쪽이 멈춘 nowMs 로(자리는 그대로 — 화면이 흔들리지 않게)
+  const progText = !connected ? "마지막으로 받은 단계" : st?.paused ? "멈춤" : cur !== null ? `남은 ${fmtClock(cur)}` : curType && OPEN_TYPES.has(curType) ? "도달 대기 중" : "";
+  const ink = connected ? "text-[#1B1F24]" : "text-[#8A929D]";
   const endAt = rem.sec !== null && active ? new Date(nowMs + rem.sec * 1000) : null;
   const recText = rec ? `${rec.name || "이름 없음"}${rec.listActive ? ` · ${rec.row ?? "-"}/${rec.rows ?? "-"}행` : rec.row ? ` · ${rec.row}/${rec.rows ?? "-"}행` : ` · 적재됨 · ${rec.rows ?? "-"}행`}` : null;
   const hm = (d: Date) => fmtKst(d.toISOString()).slice(-8, -3);
@@ -163,17 +167,17 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
             </p>
           )}
           {active && st && !manual && (
-            <p className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 ${FS.body} text-[#1B1F24]`}>
-              {step && <span className="tabular-nums text-[#5B6470]">단계 {step.no}/{step.total}</span>}
+            <p className={`mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 ${FS.body} ${ink}`}>
+              {step && <span className={`tabular-nums ${connected ? "text-[#5B6470]" : "text-[#8A929D]"}`}>단계 {step.no}/{step.total}</span>}
               <b>{v1Row || !st.step?.type || st.procState === "CSV_DELAY" || st.run?.current === "delay" ? blockTitle(bundle, st, v1Row)
                 : stepName(bundle, { type: st.step.type, label: st.step.label })}</b>
               {target && <span className="text-[#5B6470]">{target}</span>}
-              {progText && <span className="font-semibold tabular-nums text-[#133A7C]">{progText}</span>}
+              {progText && <span className={`font-semibold tabular-nums ${connected ? "text-[#133A7C]" : "text-[#8A929D]"}`}>{progText}</span>}
               {/* 영점 대기(W-23 H1, 묶음 24 state.run.waitText — '영점 대기 n s') */}
-              {st.run?.waitText && <Chip tone="warn" className="tabular-nums">{st.run.waitText}</Chip>}
+              {connected && st.run?.waitText && <Chip tone="warn" className="tabular-nums">{st.run.waitText}</Chip>}
             </p>
           )}
-          {active && st && manual && st.run?.waitText && (
+          {active && st && manual && connected && st.run?.waitText && (
             <p className={`mt-1 ${FS.body}`}><Chip tone="warn" className="tabular-nums">{st.run.waitText}</Chip></p>
           )}
           {st && !active && lastRun && (
@@ -199,15 +203,15 @@ export function StatusBand({ bundle, st, connected, conn, mode, equipment, label
         <div className="mt-3 space-y-1.5">
           {progress !== null && (
             <div className="h-2 overflow-hidden rounded-full bg-[#E3E6EA]" role="progressbar" aria-valuemin={0} aria-valuemax={100}
-              aria-valuenow={Math.round(progress * 100)} aria-label="공정 진행">
-              <div className="h-full rounded-full bg-[#133A7C] transition-all" style={{ width: `${progress * 100}%` }} />
+              aria-valuenow={Math.round(progress * 100)} aria-label={connected ? "공정 진행" : "공정 진행(마지막으로 받은 값)"}>
+              <div className={`h-full rounded-full transition-all ${connected ? "bg-[#133A7C]" : "bg-[#C9CED6]"}`} style={{ width: `${progress * 100}%` }} />
             </div>
           )}
-          <p className={`flex flex-wrap gap-x-4 gap-y-1 ${FS.body} text-[#5B6470]`}>
-            {startedMs !== null && <span>시작 <b className="tabular-nums text-[#1B1F24]">{hm(new Date(startedMs))}</b></span>}
-            {elapsedS !== null && <span>경과 <b className="tabular-nums text-[#1B1F24]">{fmtDur(elapsedS)}</b></span>}
-            {rem.sec !== null && <span>남은 시간 <b className="tabular-nums text-[#1B1F24]">{fmtDur(rem.sec)}{rem.open ? " 이상" : ""}</b></span>}
-            {endAt && <span>예상 끝 <b className="tabular-nums text-[#1B1F24]">{hm(endAt)}{rem.open ? " 이후" : ""}</b>
+          <p className={`flex flex-wrap gap-x-4 gap-y-1 ${FS.body} ${connected ? "text-[#5B6470]" : "text-[#8A929D]"}`}>
+            {startedMs !== null && <span>시작 <b className={`tabular-nums ${ink}`}>{hm(new Date(startedMs))}</b></span>}
+            {elapsedS !== null && <span>경과 <b className={`tabular-nums ${ink}`}>{fmtDur(elapsedS)}</b></span>}
+            {rem.sec !== null && <span>남은 시간 <b className={`tabular-nums ${ink}`}>{fmtDur(rem.sec)}{rem.open ? " 이상" : ""}</b></span>}
+            {endAt && <span>예상 끝 <b className={`tabular-nums ${ink}`}>{hm(endAt)}{rem.open ? " 이후" : ""}</b>
               {rem.open > 0 && <span className="ml-1">(끝을 모르는 대기 {rem.open}개)</span>}</span>}
           </p>
         </div>

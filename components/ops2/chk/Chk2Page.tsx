@@ -17,7 +17,7 @@ import { chkDeviceChoice, showEquipment } from "@/lib/ops2/display";
 import { Code2, Cloud, CloudOff, Laptop, Lock, LockOpen, LogIn, WifiOff } from "lucide-react";
 import Chk2Hmi from "./Chk2Hmi";
 import { ConnLabel, StatusBand, StatusBar, type ConnInfo } from "./Chk2Status";
-import { connOf, connParts } from "@/lib/ops2/chk/conn";
+import { blindState, connOf, connParts, showsNow } from "@/lib/ops2/chk/conn";
 import Chk2Run from "./Chk2Run";
 import Chk2SettingsDrawer, { type DevKey } from "./Chk2SettingsDrawer";
 import Chk2DevParams from "./Chk2DevParams";
@@ -203,13 +203,16 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
   const web = d.hello?.web;
   const bench = d.hello?.runMode === "bench" || d.hello?.writesAllowed === false;
   const perms = local ? (d.hello ? { canOperate: true, isAdmin: false, kinds: d.hello.commandKinds ?? [] } : undefined) : web?.perms;
-  const st = d.state?.data ?? null;
-  const snap = st?.snapshot;
   const skew = web?.clockSkewMs ?? 0;
   // 마지막 state 의 나이 — 장비 시계(ts) → 웹 시계(− 시계 차) → 이 브라우저 시계(− 웹과의 차)
   const age = d.state ? now + d.offsetMs - (Date.parse(d.state.ts) - skew) : null;
   const ageSec = age === null ? null : Math.max(0, Math.round(age / 1000));
-  const connected = age !== null && age <= LOST_MS && (!local || d.streamUp);   // 로컬은 노트북 프로그램 stream 이 살아 있어야
+  const connected = showsNow(age, LOST_MS, !local || d.streamUp);   // 로컬은 노트북 프로그램 stream 이 살아 있어야(lib/ops2/chk/conn.ts)
+  // 끊기면 지금 값을 그리지 않는다(W-26) — 아래 화면 모두 이 state 를 받는다(값 "—"·상태 '모름'). 추세·기록·사건·지난 공정은 state 밖이라 그대로
+  const st = connected ? d.state?.data ?? null : blindState(d.state?.data ?? null);
+  const snap = st?.snapshot;
+  // 셈을 멈춘 지금(W-26) — 끊기면 마지막 값을 받은 때에 멈춘다(경과·남은 시간·예상 끝이 끊긴 뒤에 움직이지 않게)
+  const nowView = connected || age === null ? now + d.offsetMs : now + d.offsetMs - age;
   const plcLink = st?.links?.plc;
   const staleSec = typeof paramValue(d.bundle, "HEATER_STALE_SEC") === "number"
     ? (paramValue(d.bundle, "HEATER_STALE_SEC") as number) : STALE_SEC_DEFAULT;
@@ -342,7 +345,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
     if (r?.startedAt) return Date.parse(r.startedAt);
     return runStart ? Date.parse(runStart.ts) - skew : null;
   })();
-  const elapsedS = runStartMs !== null ? Math.max(0, (now + d.offsetMs - runStartMs) / 1000) : null;
+  const elapsedS = runStartMs !== null ? Math.max(0, (nowView - runStartMs) / 1000) : null;
   const runParams = runStart && runStart.data.params && typeof runStart.data.params === "object" ? runStart.data.params as Record<string, unknown> : null;
   const v1Row = !!runParams && runParams.blocks !== true;
 
@@ -434,10 +437,10 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
             : <Btn size="sm" onClick={() => setUnlockUntil(Date.now() + relockMin * 60_000)}
                 title={`${relockMin}분 동안 조작이 없으면 다시 잠깁니다.`}><LockOpen size={12} /> 잠금 풀기</Btn>)}
           <span className={`ml-auto flex items-center gap-1 rounded-[8px] px-2 py-0.5 ${FS.small} ${
-            !up?.enabled ? "bg-white/10 text-white/80" : up.connected ? "bg-white/15" : "bg-[#B54708] text-white"}`}
+            st?.blind || !up?.enabled ? "bg-white/10 text-white/80" : up.connected ? "bg-white/15" : "bg-[#B54708] text-white"}`}
             title={up?.enabled ? `마지막 성공 ${up.lastOkAt ? fmtKst(up.lastOkAt) : "-"}${detail && up.lastError ? ` · ${up.lastError}` : ""}` : undefined}>
             {up?.enabled && up.connected ? <Cloud size={12} /> : <CloudOff size={12} />}
-            {!up?.enabled ? "웹 연결 사용하지 않음" : up.connected ? "웹 연결됨" : `웹 끊김${(up.queued ?? 0) > 0 ? ` · 미전송 ${up.queued}건` : ""}`}
+            {st?.blind ? "웹 연결 모름" : !up?.enabled ? "웹 연결 사용하지 않음" : up.connected ? "웹 연결됨" : `웹 끊김${(up.queued ?? 0) > 0 ? ` · 미전송 ${up.queued}건` : ""}`}
             {up?.enabled && detail && ` · 보관 ${up.queued ?? 0} · 버림 ${up.dropped ?? 0}`}
           </span>
         </div>
@@ -461,7 +464,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
           <div ref={setStatusEl}>
             <StatusBand bundle={d.bundle} st={st} connected={connected} conn={conn} mode={modeChip} equipment={d.hello.equipment ?? equipment}
               label={web?.label ?? null} lock={lock} onAsk={setAsk} lastRun={d.runs[0] ?? null} startedMs={runStartMs} elapsedS={elapsedS}
-              blocks={d.runBlocks?.blocks ?? null} nowMs={now + d.offsetMs} v1Row={v1Row}
+              blocks={d.runBlocks?.blocks ?? null} nowMs={nowView} v1Row={v1Row}
               extra={<>{detailInfo}{!d.streamUp && !local && (
                 <span className={`flex items-center gap-1 ${FS.small} text-[#5B6470]`}><WifiOff size={12} /> {d.streamEver ? "다시 연결 중…" : "연결 중…"}</span>)}
                 {Math.abs(skew) > SKEW_WARN_MS && <span className={`${FS.small} font-semibold text-[#B54708]`}>장비 시계 차 {(skew / 1000).toFixed(1)} s</span>}</>} />
@@ -475,7 +478,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
         </InfoBand>
       )}
       {local && !d.streamUp && d.streamEver && (
-        <Issue level="alarm"><b>노트북 프로그램 연결 끊김</b>. 다시 붙는 중이라 조작이 잠겼습니다. 표시는 마지막 값입니다.</Issue>
+        <Issue level="alarm"><b>노트북 프로그램 연결 끊김</b>. 지금 값은 알 수 없어 표시하지 않으며, 다시 붙는 중이라 조작이 잠겼습니다.</Issue>
       )}
       {d.authLost && <Issue level="alarm">로그인이 끊겼습니다. 새로고침하세요. 조작이 잠겼습니다.</Issue>}
       {/* 노트북 화면이 프로그램과 끊겼을 때는 위 띠 한 줄만(W-24 B2 — hello 를 못 읽은 '닿지 않습니다' 는 같은 일이라 겹쳐 내지 않는다) */}
@@ -486,7 +489,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       )}
       {d.state && !connected && (!local || d.streamUp) && (
         <Issue level="alarm">
-          <b>장비 끊김{lostCs.since ? ` · ${lostCs.since}부터` : <> <span className="inline-block min-w-[2ch] text-right tabular-nums">{ageSec}</span>초</>}</b>. 표시는 마지막 값이며 조작이 잠겼습니다.
+          <b>장비 끊김{lostCs.since ? ` · ${lostCs.since}부터` : <> <span className="inline-block min-w-[2ch] text-right tabular-nums">{ageSec}</span>초</>}</b>. 지금 값은 알 수 없어 표시하지 않으며 조작이 잠겼습니다.
           {webOnline && perms?.canOperate && " 웹은 장비와 이어져 있어 정지 명령은 보낼 수 있습니다."}
         </Issue>
       )}
@@ -498,7 +501,8 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
       {(curTab === "status" || curTab === "run") && (
         <Chk2Run equipment={equipment} bundle={d.bundle} st={st} runBlocks={d.runBlocks} editBase={d.editBase} feed={d.feed} trend={d.trend}
           view={curTab === "status" ? "status" : "run"} onSettings={setDrawer}
-          recipes={local ? null : recipes} lock={lock} canKey={canKey} onAsk={setAsk} nowMs={now + d.offsetMs} skewMs={skew}
+          recipes={local ? null : recipes} lock={lock} canKey={canKey} onAsk={setAsk} nowMs={nowView} skewMs={skew}
+          layoutSnap={connected ? undefined : d.state?.data?.snapshot}
           onHmi={() => goTab("hmi")} onLog={() => goTab("log")}
           onManual={shownTabs.some((t) => t.key === "manual") ? () => goTab("manual") : undefined}
           onConfig={shownTabs.some((t) => t.key === "config") ? () => goTab("config") : undefined}
@@ -509,7 +513,7 @@ export function Chk2Device({ equipment, dirtyRef, mode: screen = "web" }: {
           onAsk={setAsk} note={mimicNote} viewOnly={local && !plcLocal} />
       )}
       {curTab === "manual" && (
-        <Chk2Manual bundle={d.bundle} st={st} lock={lock} onAsk={setAsk} onHmi={() => goTab("hmi")} onSettings={setDrawer} nowMs={now + d.offsetMs}
+        <Chk2Manual bundle={d.bundle} st={st} lock={lock} onAsk={setAsk} onHmi={() => goTab("hmi")} onSettings={setDrawer} nowMs={nowView}
           onConfig={shownTabs.some((t) => t.key === "config") ? () => goTab("config") : undefined} />
       )}
       {curTab === "recipe" && !local && (

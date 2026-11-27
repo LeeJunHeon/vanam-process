@@ -13,13 +13,13 @@ import { ExternalLink } from "lucide-react";
 import { FS, Btn, Card, Chip } from "@/components/ops2/chk/kit";
 import { useChk2 } from "@/components/ops2/chk/useChk2";
 import { rfState } from "@/lib/ops2/chk/rf";
-import { connOf, connParts } from "@/lib/ops2/chk/conn";
+import { connOf, connParts, showsNow } from "@/lib/ops2/chk/conn";
 import { ConnLabel } from "@/components/ops2/chk/Chk2Status";
 import { kindOf, pressureTargetCol } from "@/components/ops2/chk/runview";
 import { ALERT_KEEP, alertLines, reasonText } from "@/components/ops2/chk/logView";
 import { CH12_DEVICE_NAME, Ch12Area, type Ch12Report, type DashAlert } from "@/components/ops2/ch12/Ch12Dash";
 import { RUN_RESULT, type StateData } from "@/components/ops2/chk/types";
-import { runTitle } from "@/components/ops2/chk/text";
+import { fieldText, runTitle } from "@/components/ops2/chk/text";
 import { MODE_NAME, fieldName, stepName } from "@/lib/ops2/chk/terms";
 import { CHK_BASE_ID, deviceChoiceOf, isChkEquipment } from "@/lib/ops2/display";
 import { fmtKst } from "@/lib/ops2/time";
@@ -69,16 +69,20 @@ function useEvery<T>(v: T, ms: number): T {
   return shown;
 }
 
-function Tile({ title, value, unit }: { title: string; value: string; unit: string }) {
+/** 값 칸 — 값이 없으면("—") 단위를 붙이지 않고 회색(kit Val 과 같은 규칙, W-26). alt = 값 대신 상태 이름(kit fieldText — 연결 안 됨·음수 등),
+ *  warn 이면 주의색. 칸 크기는 값이 있을 때와 같다(같은 글꼴·줄 높이) */
+function Tile({ title, value, unit, alt, warn }: { title: string; value: string; unit: string; alt?: string | null; warn?: boolean }) {
+  const none = value === "—" && !alt;
   return (
     <div className="flex min-w-0 flex-col gap-1 rounded-[10px] border border-[#E3E6EA] px-3.5 py-3">
       <span className={`truncate ${FS.small} text-[#5B6470]`}>{title}</span>
-      <span className="whitespace-nowrap text-[24px] font-bold leading-tight text-[#133A7C]">{value} <span className={`${FS.small} font-normal text-[#5B6470]`}>{unit}</span></span>
+      {alt ? <span className={`truncate text-[24px] font-bold leading-tight ${warn ? "text-[#B54708]" : "text-[#1B1F24]"}`}>{alt}</span>
+        : <span className={`whitespace-nowrap text-[24px] font-bold leading-tight ${none ? "text-[#8A929D]" : "text-[#133A7C]"}`}>{value}{!none && <> <span className={`${FS.small} font-normal text-[#5B6470]`}>{unit}</span></>}</span>}
     </div>
   );
 }
 
-function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onNavigate?: (p: EquipPage) => void; onState: (s: EquipState, online: boolean) => void }) {
+export function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onNavigate?: (p: EquipPage) => void; onState: (s: EquipState, online: boolean) => void }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), REDRAW_MS); return () => clearInterval(t); }, []);
   const state = useEvery(d.state, REDRAW_MS);
@@ -87,7 +91,8 @@ function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onN
   const b = d.bundle;
   const skew = d.hello?.web?.clockSkewMs ?? 0;
   const age = state ? now + d.offsetMs - (Date.parse(state.ts) - skew) : null;
-  const online = age !== null && age <= LOST_MS;
+  // 지금 값을 보여도 되는가 — CHK 화면과 같은 규칙 하나(lib/ops2/chk/conn showsNow, W-26). 끊기면 값 칸 "—"·상태 칩 하나
+  const online = showsNow(age, LOST_MS);
   const kind = kindOf(b, st);
   const active = kind === "active" || kind === "stopping";
   const alarms = st?.alarms ?? [];
@@ -102,9 +107,19 @@ function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onN
   const last = d.runs?.find((r) => r.endedAt) ?? null;
   const pct = step && step.total ? Math.min(100, Math.max(0, ((step.no - 1) / step.total) * 100)) : 0;
   const pt = pressureTargetCol(snap, b);
-  const tgt = (v: number | null) => (v !== null && v > 0 ? ` · 목표 ${fmtN(v)}` : "");
+  // 끊김(W-26)이면 제목 뒤 '· 목표 …'·'· 꺼짐'을 붙이지 않는다(지금 목표·켜짐을 모름)
+  const tgt = (v: number | null) => (online && v !== null && v > 0 ? ` · 목표 ${fmtN(v)}` : "");
   // 꺼져 있으면 목표 대신 '꺼짐'(W-23 G3 — 꺼진 채널의 남은 목표 값은 보이지 않는다). on 을 모르면(옛 묶음) 목표 그대로
-  const tgtIf = (on: unknown, v: number | null) => (on === false ? " · 꺼짐" : tgt(v));
+  const tgtIf = (on: unknown, v: number | null) => (!online ? "" : on === false ? " · 꺼짐" : tgt(v));
+  // 값 칸 — 끊기면 "—"(단위 없음). 값이 비고 상태 열이 ok 가 아니면 kit 과 같은 상태 이름(fieldText — 음수 등은 kit 규칙 그대로)
+  const cell = (col: string, dgt: number) => {
+    if (!online) return { value: "—", alt: null, warn: false };
+    const v = num(snap?.[col]);
+    if (v !== null) return { value: fmtN(v, dgt), alt: null, warn: false };
+    const f = b?.snapshot?.blocks?.flatMap((x) => x.fields).find((x) => x.column === col);
+    const t = f ? fieldText(f, snap?.[col], snap, b?.snapshot?.blocks) : null;
+    return { value: "—", alt: t?.alt ?? null, warn: !!t?.warn };
+  };
   const rfOn = snap?.["rf.cmd_on"] ?? snap?.["rf.out_on"];
   // 쓰는 파워 — 켜진 것(DC·RF·RF Pulse), 없으면 RF
   const pw = snap?.["dc.out"] === true ? ["DC Power", "dc.p", "dc.set_w", "dc.out"] : snap?.["rfp.out_on"] === true ? ["RF Pulse", "rfp.fwd_w", "rfp.set_w", "rfp.out_on"]
@@ -121,34 +136,40 @@ function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onN
         {mode && MODE_NAME[mode] && <Chip>{MODE_NAME[mode]}</Chip>}
         {stateChip}
       </span>}>
+      {/* 진행 — 끊기면(W-26) 줄은 그대로 두고 회색, 남은 시간·예상 끝은 세지 않는다(CHK 화면 띠와 같은 선택 — 칸이 움직이지 않게) */}
       {active && step ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-            <span className={`min-w-0 ${FS.body} text-[#1B1F24]`}>
+            <span className={`min-w-0 ${FS.body} ${online ? "text-[#1B1F24]" : "text-[#8A929D]"}`}>
               <b>{st?.run?.manual ? "수동 조작" : runTitle({ name: run?.name ?? st?.recipe?.name ?? null, recipeName: run?.recipeName ?? null }) || "공정"}</b>
               {` · 단계 ${step.no}/${step.total} ${stepName(b, { type: step.type ?? null, label: step.label ?? null })}`}
             </span>
             <span className={`${FS.small} text-[#5B6470]`}>
-              {[started ? `시작 ${hm(started)}` : "", remain !== null ? `남은 ${dur(remain)}` : "", remain !== null ? `예상 끝 ${hm(now + remain * 1000)}` : ""].filter(Boolean).join(" · ")}
+              {(online ? [started ? `시작 ${hm(started)}` : "", remain !== null ? `남은 ${dur(remain)}` : "", remain !== null ? `예상 끝 ${hm(now + remain * 1000)}` : ""]
+                : [started ? `시작 ${hm(started)}` : "", "마지막으로 받은 단계"]).filter(Boolean).join(" · ")}
             </span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-[#E3E6EA]" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label="공정 진행">
-            <i className="block h-full rounded-full bg-[#1D4ED8]" style={{ width: `${pct}%` }} />
+            <i className={`block h-full rounded-full ${online ? "bg-[#1D4ED8]" : "bg-[#C9CED6]"}`} style={{ width: `${pct}%` }} />
           </div>
         </div>
       ) : <p className={`${FS.body} text-[#5B6470]`}>{online ? "대기 중" : "장비 연결을 기다리는 중"}</p>}
       <div className="grid grid-cols-2 gap-2.5 @min-[640px]/dash:grid-cols-4">
-        <Tile title={`챔버 압력${tgt(num(snap?.[pt]))}`} value={fmtN(num(snap?.["mfc.pressure_mtorr"]), 2)} unit="mTorr" />
-        <Tile title={`Ar 유량${tgtIf(snap?.["mfc.ar_on"], num(snap?.["mfc.ar_set"]))}`} value={fmtN(num(snap?.["mfc.ar_sccm"]))} unit="sccm" />
-        <Tile title={`${pw[0]}${tgtIf(pwOn, num(snap?.[pw[2]]))}`} value={fmtN(num(snap?.[pw[1]]))} unit="W" />
-        <Tile title={`히터 TC1${snap?.["heater.run"] === true ? tgt(num(snap?.["heater.sv"])) : ""}`} value={fmtN(num(snap?.["heater.pv"]))} unit="°C" />
+        <Tile title={`챔버 압력${tgt(num(snap?.[pt]))}`} unit="mTorr" {...cell("mfc.pressure_mtorr", 2)} />
+        <Tile title={`Ar 유량${tgtIf(snap?.["mfc.ar_on"], num(snap?.["mfc.ar_set"]))}`} unit="sccm" {...cell("mfc.ar_sccm", 1)} />
+        <Tile title={`${pw[0]}${tgtIf(pwOn, num(snap?.[pw[2]]))}`} unit="W" {...cell(pw[1], 1)} />
+        <Tile title={`히터 TC1${snap?.["heater.run"] === true ? tgt(num(snap?.["heater.sv"])) : ""}`} unit="°C" {...cell("heater.pv", 1)} />
       </div>
-      <div className="flex flex-wrap gap-1.5">
-        <Chip tone={vacOk ? "neutral" : "warn"}>{vacOk ? "진공 정상" : "진공 확인"}</Chip>
-        <Chip tone={openShut.length ? "dark" : "neutral"}>{openShut.length ? `${openShut.join("·")} 열림` : "셔터 모두 닫힘"}</Chip>
-        <Chip tone={itlOk ? "neutral" : "warn"}>{itlOk ? "인터락 정상" : `${fieldName(b, "plc.mv_interlock")} 꺼짐`}</Chip>
-        <Chip tone={alarms.length ? "alarm" : "neutral"}>{alarms.length ? `활성 알람 ${alarms.length}개` : "활성 알람 없음"}</Chip>
-        {rfState(snap) === "uncommanded" && <Chip tone="warn">RF 명령 없이 출력 중</Chip>}
+      {/* 끊기면(W-26) 지금 상태처럼 보이는 칩은 모두 내리고 하나만(중립색). 줄 높이는 그대로 — 내린 칩은 자리만 남긴다(좁은 폭에서 두 줄이던 것도) */}
+      <div className="relative">
+        <div className={`flex flex-wrap gap-1.5 ${online ? "" : "invisible"}`} aria-hidden={!online || undefined} data-dash-chips={online ? "now" : "hidden"}>
+          <Chip tone={vacOk ? "neutral" : "warn"}>{vacOk ? "진공 정상" : "진공 확인"}</Chip>
+          <Chip tone={openShut.length ? "dark" : "neutral"}>{openShut.length ? `${openShut.join("·")} 열림` : "셔터 모두 닫힘"}</Chip>
+          <Chip tone={itlOk ? "neutral" : "warn"}>{itlOk ? "인터락 정상" : `${fieldName(b, "plc.mv_interlock")} 꺼짐`}</Chip>
+          <Chip tone={alarms.length ? "alarm" : "neutral"}>{alarms.length ? `활성 알람 ${alarms.length}개` : "활성 알람 없음"}</Chip>
+          {rfState(snap) === "uncommanded" && <Chip tone="warn">RF 명령 없이 출력 중</Chip>}
+        </div>
+        {!online && <span className="absolute left-0 top-0"><Chip>끊김 — 지금 상태를 모름</Chip></span>}
       </div>
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-3">
         <span className={`min-w-0 ${FS.body} text-[#5B6470]`}>

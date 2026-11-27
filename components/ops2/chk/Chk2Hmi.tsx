@@ -40,6 +40,7 @@ type Props = {
 };
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+const UNKNOWN = "#C9CED6";                       // 모름 테두리 — kit StateBadge 의 값 없음(점선)과 같은 색(W-26)
 const f5 = (v: number | null) => (v === null ? "—" : String(Number(v.toPrecision(5))));
 
 const MAX_SCALE = 1.12;
@@ -70,6 +71,9 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
   const buttons = bundle?.plcButtons ?? [];
   const btn = (t: string) => buttons.find((b) => b.target === t);
   const raw = (t: string) => snap?.[`plc.${btn(t)?.addr ?? t}`];
+  // 지금 상태를 아는가 — PLC 값이 살아 있고 그 값이 있을 때만. 모르면(끊김 W-26 — 스냅숏이 비어 있음, PLC 값 오래됨) 기호는 '모름'
+  // 모양(회색 점선 — kit 의 값 없음 배지와 같은 색)으로, 마지막 열림/닫힘으로 그리지 않는다
+  const known = (t: string) => plcOk && typeof raw(t) === "boolean";
   const on = (t: string) => plcOk && raw(t) === true;
   const wait = (t: string) => plcOk && pending[t] !== undefined && pending[t] !== (raw(t) === true);
   const { detail } = useChk2Mode();
@@ -87,7 +91,7 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
   };
   /** 지금 상태 글 — 밸브·셔터·도어 = 열림/닫힘, 펌프 = 켜짐/꺼짐 */
   const stateWord = (t: string, kind: "open" | "run") =>
-    !plcOk ? "—" : wait(t) ? "전환 중" : on(t) ? (kind === "open" ? "열림" : "켜짐") : (kind === "open" ? "닫힘" : "꺼짐");
+    !known(t) ? "모름" : wait(t) ? "전환 중" : on(t) ? (kind === "open" ? "열림" : "켜짐") : (kind === "open" ? "닫힘" : "꺼짐");
   /** 누를 수 있는 노드 묶음(키보드·aria·마우스 올리면 테두리 강조) */
   const node = (t: string, label: string, kind: "open" | "run", children: ReactNode) => {
     const w = why(t);
@@ -102,8 +106,8 @@ export default function Chk2Hmi({ bundle, snapshot: snap, links, plcOk, lockOf, 
     );
   };
   const fill = (t: string) => (on(t) ? T.on : "#FFFFFF");
-  const stroke = (t: string) => (wait(t) ? T.primary : on(t) ? T.on : T.off);
-  const dash = (t: string) => (wait(t) ? "4 3" : undefined);
+  const stroke = (t: string) => (!known(t) ? UNKNOWN : wait(t) ? T.primary : on(t) ? T.on : T.off);
+  const dash = (t: string) => (!known(t) ? "3 3" : wait(t) ? "4 3" : undefined);
   const ink = (t: string) => (on(t) ? "#FFFFFF" : T.text);
   const stateFill = (t: string) => (wait(t) ? T.primary : T.muted);
   const label = (x: number, y: number, name: string, anchor: "start" | "middle" | "end" = "middle", color: string = T.text) => (
@@ -347,7 +351,7 @@ function ValuePanel({ bundle, snap, links, plcOk, ion }: {
     const f = fieldOf(valueCol);
     const t = f ? fieldText(f, snap?.[valueCol], snap, bundle?.snapshot?.blocks) : null;
     const out = snap?.[outCol];
-    const val = <span className="whitespace-nowrap font-semibold tabular-nums text-[#133A7C]">
+    const val = <span className={`whitespace-nowrap font-semibold tabular-nums ${t?.text ? "text-[#133A7C]" : "text-[#8A929D]"}`}>
       {t?.text || "—"}{t?.text && f?.unit && <span className={`ml-1 font-normal text-[#5B6470] ${FS.small}`}>{f.unit}</span>}
     </span>;
     return (
