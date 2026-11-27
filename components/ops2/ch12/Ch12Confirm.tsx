@@ -5,10 +5,10 @@
 // PLC 버튼(Ch12Hmi plcAsk — procLine·hazards 가 있음):
 //   맨 위 빨간 줄 'CH1 공정 중 · 지금 단계 · 공정 이름'(그 버튼의 챔버가 공정 중일 때 — 잠그지 않고 알린다, 사용자 결정 2026-11-20),
 //   무엇을·어떻게, 안내, 위험 두 갈래(사람 위험 = 빨강 · 장비 위험 = 주황 — 문구는 장비 묶음 plcHazardText),
-//   누가 기록되는지(웹 = 로그인한 이름·계정, 노트북 = '노트북'), 실행 버튼은 공정 중·위험이면 빨강. Esc 취소.
+//   누가 기록되는지(웹 = 로그인한 이름·계정, 노트북 = '노트북'), 실행 버튼 빨강은 정지·끄기·끝내기만(U1 — 챔버K 규칙, runRed). Esc 취소.
 import { useEffect, useRef } from "react";
 import { AlertOctagon } from "lucide-react";
-import { FS, Btn, Issue, type Ask } from "../chk/kit";
+import { FS, Btn, Issue, isStopLike, type Ask } from "../chk/kit";
 import { useChk2Mode } from "../chk/mode";
 import type { PlcAsk } from "./Ch12Hmi";
 
@@ -39,8 +39,13 @@ export function PlcConfirmBody({ ask, local }: { ask: PlcAsk; local: boolean }) 
   );
 }
 
+/** 실행 버튼 빨강(U1 — 챔버K kit chkColors 와 같은 규칙): 켜면 정지·끄기·끝내기만 빨강(시작·실행·켜기·열기·적용은 파랑).
+ *  PLC 버튼은 '이름 → 끄기'처럼 detail 에 동작이 있어 그것까지 본다. 끄면(옛 규칙) 위험·정지·물리 동작이면 빨강 */
+export const runRed = (ask: Ask, chkColors: boolean | undefined) =>
+  chkColors ? isStopLike({ stop: ask.stop, label: `${ask.label} ${ask.detail ?? ""}` }) : !!(ask.danger || ask.stop || ask.red);
+
 function PlcConfirm({ ask, onOk, onCancel }: { ask: PlcAsk; onOk: () => void; onCancel: () => void }) {
-  const { local } = useChk2Mode();
+  const { local, chkColors } = useChk2Mode();
   const okRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); };
@@ -55,7 +60,7 @@ function PlcConfirm({ ask, onOk, onCancel }: { ask: PlcAsk; onOk: () => void; on
           <Btn kind="ghost" onClick={onCancel}>취소</Btn>
           <button ref={okRef} onClick={onOk}
             className={`h-10 rounded-[10px] px-4 font-semibold text-white ${FS.body} outline-offset-2 focus:outline-2 focus:outline-[#1D4ED8] ${
-              ask.red ? "bg-[#B42318]" : "bg-[#1D4ED8]"}`}>
+              (chkColors ? runRed(ask, true) : ask.red) ? "bg-[#B42318]" : "bg-[#1D4ED8]"}`}>
             실행
           </button>
         </div>
@@ -77,6 +82,7 @@ function What({ ask }: { ask: Ask }) {
 
 /** 그 밖의 확인창 — kit ConfirmDialog 와 같은 동작(Esc 취소, 정지 쪽은 열리면 실행에 포커스, 위험·정지·물리 동작이면 실행 빨강) */
 function AskConfirm({ ask, onOk, onCancel }: { ask: Ask; onOk: () => void; onCancel: () => void }) {
+  const { chkColors } = useChk2Mode();
   const okRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (ask.stop) okRef.current?.focus();
@@ -105,7 +111,7 @@ function AskConfirm({ ask, onOk, onCancel }: { ask: Ask; onOk: () => void; onCan
           <Btn kind="ghost" onClick={onCancel}>취소</Btn>
           <button ref={okRef} onClick={onOk}
             className={`h-10 rounded-[10px] px-4 font-semibold text-white ${FS.body} outline-offset-2 focus:outline-2 focus:outline-[#1D4ED8] ${
-              ask.danger || ask.stop || ask.red ? "bg-[#B42318]" : "bg-[#1D4ED8]"}`}>
+              runRed(ask, chkColors) ? "bg-[#B42318]" : "bg-[#1D4ED8]"}`}>
             실행
           </button>
         </div>

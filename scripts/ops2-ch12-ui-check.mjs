@@ -10,7 +10,7 @@
 // 새 의존성 없음(esbuild·react-dom 은 이미 devDependency·dependency). 묶은 파일은 node_modules/.cache/ops2-ch12-ui/(git 밖).
 // 다른 것이 하나라도 있으면 exit 1. 장비 저장소가 없으면(포털만 받은 곳) 1)·2)의 장비 값 확인은 못 한다 — exit 2.
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import * as esbuild from "esbuild";
@@ -144,9 +144,11 @@ await esbuild.build({
       export { HeaterBox12, ThicknessBox12, ChamberDevices, VacuumBox12, ShutterBox12, GasBox12, PowerBox12 } from "./components/ops2/ch12/Ch12Devices";
       export { StatusBand12 } from "./components/ops2/ch12/Ch12Status";
       export { default as Ch12Hmi, drawnTargets, plcAsk, plcContext, plcChamber, HAZARD_TEXT } from "./components/ops2/ch12/Ch12Hmi";
-      export { default as Ch12Confirm, PlcConfirmBody, recordNote, isPlcAsk } from "./components/ops2/ch12/Ch12Confirm";
+      export { default as Ch12Confirm, PlcConfirmBody, recordNote, isPlcAsk, runRed } from "./components/ops2/ch12/Ch12Confirm";
+      export { connOf, connParts } from "./lib/ops2/chk/conn";
+      export { deviceChoiceOf } from "./lib/ops2/display";
       export { withServerArgs } from "./lib/ops2/commandArgs";
-      export { Ch12EventFeed, ch12LogLine, RunAlerts } from "./components/ops2/ch12/Ch12Logs";
+      export { Ch12EventFeed, ch12LogLine, RunAlerts, alertLines12 } from "./components/ops2/ch12/Ch12Logs";
       export { WEB_TABS, LOCAL_TABS } from "./components/ops2/ch12/Ch12Page";
       export { Chk2ModeContext } from "./components/ops2/chk/mode";
       export { default as Chk2Trend, layoutTrendLabels, LABEL_LINE, LABEL_GAP } from "./components/ops2/chk/Chk2Trend";
@@ -222,16 +224,21 @@ const chamberProps = (ch) => ({
         && b["건너뛰기"] === false && b["일시정지"] === false && b["공정 순서 편집"] === false
         && (!cs.stepLabel || t.includes(`진행 중 동작 ${cs.stepLabel}`)),
         { procState: cs.procState, stop: b["CH1 STOP"], b, text: t.slice(0, 400) });
-  // W-20 ④ 알림 띠 — 챔버 칸마다 있던 '알림·로그' 카드 대신 운전 탭 알림 띠 하나(두 챔버·공통, 최근 60줄, 챔버 줄은 출처 앞에 장소 이름)
-  const al = render(U.RunAlerts, { bundle, st, feed, onLog: noop }), at = textOf(al);
-  const mainAll = feed.map((e) => ({ e, l: U.ch12LogLine(bundle, e) })).filter((x) => x.l.main);
-  const mine = mainAll.slice(-60).filter((x) => L.feedChamber(x.e) === "ch1").map((x) => x.l);
-  const other = mainAll.slice(-60).filter((x) => L.feedChamber(x.e) !== "ch1").map((x) => x.l);
-  check("ui:run-alerts — 알림 띠 하나(두 챔버·공통 줄 — 줄 = 시각 + 장소·출처 + 이름 + 내용, 최근 60줄), 챔버 칸 '알림·로그' 카드 없음",
+  // W-20 ④ 알림 띠 하나(두 챔버·공통, 챔버 줄은 출처 앞에 장소 이름) — U3: 챔버K logView.alertLines 규칙(경고·오류 사건·거부·실패한 명령,
+  //   24시간, 최근 20줄, 최신이 위, 없으면 '알림 없음'). 단계 시작 같은 평범한 줄은 기록 탭에만
+  const al = render(U.RunAlerts, { bundle, st, feed, onLog: noop, nowMs }), at = textOf(al);
+  const want = U.alertLines12(bundle, feed, nowMs);
+  const allWarn = feed.map((e) => ({ e, l: U.ch12LogLine(bundle, e) })).filter((x) => ["warn", "error", "critical"].includes(x.l.level));
+  const old = feed.map((e) => ({ e, l: U.ch12LogLine(bundle, e) })).filter((x) => x.l.main && x.l.level === "info" && x.l.kind === "단계");
+  const aged = U.alertLines12(bundle, feed, nowMs + 25 * 3600_000);
+  const none = textOf(render(U.RunAlerts, { bundle, st: { ...st, alarms: [], chambers: Object.fromEntries(Object.entries(st.chambers).map(([k, v]) => [k, { ...v, alarms: [] }])) }, feed: [], nowMs }));
+  check("ui:run-alerts — 알림 띠 하나(두 챔버·공통 — 줄 = 시각 + 장소·출처 + 이름 + 내용), 규칙은 챔버K alertLines(경고·오류·거부·실패만, 24시간, 최근 20줄, 없으면 '알림 없음')",
         !t.includes("알림·로그") && !t.includes("기록 전체 보기") && at.includes("알림") && at.includes("기록 전체 보기")
-        && mine.length > 0 && mine.every((l) => at.includes(l.text.replace(/\s+/g, " "))) && at.includes("CH1 공정") && other.length > 0
-        && other.every((l) => at.includes(l.text.replace(/\s+/g, " "))) && (al.match(/data-log-line/g) ?? []).length === Math.min(60, mainAll.length)
-        && mine.some((l) => l.source === "공정" && l.kind === "단계" && l.text.includes("시작")), { main: mainAll.length, ch1: mine.length, other: other.length });
+        && want.length > 0 && want.length === Math.min(20, allWarn.length) && (al.match(/data-log-line/g) ?? []).length === want.length
+        && want.every((l) => at.includes(l.text.replace(/\s+/g, " "))) && want.every((l) => ["warn", "error", "critical"].includes(l.level))
+        && old.length > 0 && !old.some((x) => at.includes(x.l.text.replace(/\s+/g, " ")) && !want.some((w) => w.text === x.l.text))
+        && aged.length === 0 && none.includes("알림 없음"),
+        { want: want.length, warn: allWarn.length, old: old.length, aged: aged.length });
   check("ui:no-dev-text — 운전 탭 CH1 칸에 개발용 글(인자 형식·명령 이름·코일 이름·열 이름)이 없음(상세 끔)", devHits(t).length === 0, devHits(t));
 }
 {
@@ -250,6 +257,9 @@ const chamberProps = (ch) => ({
         && gap.test(band) && textOf(band).includes("확정 전"),
         { run: t.match(/적재 .{0,40}/)?.[0], legend: t.match(/▲.{0,20}/)?.[0], band: band.match(/공정 끝까지.{0,200}/)?.[0] });
 }
+// U4 — 장비 박스·공통 장비는 상태 탭(Ch12Run view status), 운전 탭(view run)은 머리 카드·다음 공정·공정 화면
+const runP0 = { ...chamberProps("ch1"), plcOk: true, pcRecipes: [], getRow: async () => null, onEditSeq: noop, send: async () => ({}), notify: noop, onHmi: noop };
+const statusView = (over = {}) => render(U.Ch12Run, { ...runP0, view: "status", ...over });
 {
   const html = render(U.ChamberRun, chamberProps("ch2"));
   const t = textOf(html), b = buttons(html);
@@ -260,7 +270,7 @@ const chamberProps = (ch) => ({
   const pl = pop && U.ch12LogLine(bundle, pop);
   check("ui:popup-line — v1 경고창(시작 가드 '대기 필요' 등)은 로그 줄(경고)로 — 문구 그대로, 시작은 COOLDOWN 거부",
         !!pop && pl.level === "warn" && pop.data.message.startsWith("이전 공정 종료 후 1분 대기 필요합니다.")
-        && textOf(render(U.RunAlerts, { bundle, st, feed })).includes(pl.text.replace(/\s+/g, " "))
+        && textOf(render(U.RunAlerts, { bundle, st, feed, nowMs })).includes(pl.text.replace(/\s+/g, " "))
         && fx.cmd.start2_cooldown.reason === "COOLDOWN", { pop: pop?.data, cmd: fx.cmd.start2_cooldown });
   const ht = textOf(render(U.HeaterBox12, { ctx: { bundle, st, lock: noLock, onAsk: noop }, plcOk: true }));
   // 히터 레지스터 칸(41칸)은 상세 보기에서 — PV·목표·MV 는 히터 박스(v1 히터 패널 글). 라벨의 레지스터 주소 '(D112)' 는 상세에서만
@@ -268,15 +278,16 @@ const chamberProps = (ch) => ({
   const blocks = (bundle.chambers.find((c) => c.id === "ch2").blocks ?? []).map((n) => bundle.snapshot.blocks.find((x) => x.name === n))
     .filter((x) => x && !["dcpulse", "rfpulse", "stm100", "oes", "rga", "dc", "rf", "heater"].includes(x.name.split(".").pop()));
   const labels = blocks.flatMap((x) => x.fields.slice(0, 2).map((f) => [x.name, plain(f.label)]));
-  const miss = labels.filter(([, l]) => !t.includes(l));
-  const heaterVals = ht.includes(Number(st.heater.pv).toFixed(1)) && ht.includes("히터") && t.includes("히터") && !/\(D1\d\d\)/.test(ht);
-  check("ui:chamber-values — 챔버 장비 박스 1초 값(가스·압력·Ion Gauge·CH2 두께 판정은 CH2 칸 두께 모니터 박스, 히터 값은 CH2 칸 히터 박스)",
+  const sv = textOf(statusView());
+  const miss = labels.filter(([, l]) => !sv.includes(l));
+  const heaterVals = ht.includes(Number(st.heater.pv).toFixed(1)) && ht.includes("히터") && sv.includes("히터") && !/\(D1\d\d\)/.test(ht);
+  check("ui:chamber-values — 챔버 장비 박스 1초 값(상태 탭 — 가스·압력·Ion Gauge·CH2 두께 판정은 CH2 칸 두께 모니터 박스, 히터 값은 CH2 칸 히터 박스)",
         labels.length > 0 && miss.length === 0 && heaterVals, { miss, heaterVals });
 }
 {
   // W-20 ① 장비 박스 틀 — 챔버K DevCard(머리 제목·칩 → 큰 값/요약 → 줄 → 상태 → 안내 → 맨 아래 버튼 줄, 버튼 없으면 줄 없음) · 읽는 순서
   const titlesOf = (ch) => {
-    const h = render(U.ChamberRun, chamberProps(ch));
+    const h = statusView();
     const seg = h.slice(h.indexOf(`data-devices="${ch}"`));
     return [...seg.matchAll(/<h3[^>]*>([^<]*)<\/h3>/g)].map((m) => m[1]);
   };
@@ -292,7 +303,7 @@ const chamberProps = (ch) => ({
   const order = at(vac, "<h3") < sum && sum < at(vac, ">MV<") && at(vac, ">MV<") < at(vac, "mt-auto")
     && at(vac, "mt-auto") < at(vac, "HMI 열기") && /border-t[^"]*pt-3/.test(vac);
   check("ui:device-boxes — 챔버 장비 박스(챔버K DevCard 틀) 읽는 순서·박스 틀 순서(머리 → 요약 → 상태 → 버튼 줄), 버튼 없는 박스는 버튼 줄 없음, 옛 접힘 글 없음",
-        JSON.stringify(got) === JSON.stringify(want) && order && !ig.includes("mt-auto") && !/접어 둠/.test(render(U.ChamberRun, chamberProps("ch2"))),
+        JSON.stringify(got) === JSON.stringify(want) && order && !ig.includes("mt-auto") && !/접어 둠/.test(statusView()),
         { got, order });
 }
 {
@@ -300,8 +311,8 @@ const chamberProps = (ch) => ({
   const st4 = JSON.parse(JSON.stringify(st));
   st4.links = { ...(st4.links ?? {}), "ch1.rfpulse": { ...(st4.links?.["ch1.rfpulse"] ?? {}), q: "off" } };
   const boxOf = (h) => { const i = h.indexOf(">RF Pulse</h3>"); return i < 0 ? "" : h.slice(h.lastIndexOf("<div", h.lastIndexOf("<h3", i) - 1), h.indexOf("</h3>", h.indexOf("<h3", i + 20))); };
-  const web = render(U.ChamberRun, { ...chamberProps("ch1"), st: st4, onConfig: noop });
-  const loc = render(U.ChamberRun, { ...chamberProps("ch1"), st: st4 });
+  const web = statusView({ st: st4, onConfig: noop });
+  const loc = statusView({ st: st4 });
   const wb = textOf(boxOf(web)), lb = textOf(boxOf(loc));
   check("ui:device-off — 꺼진 장비(블록 품질 off)는 칩 '사용하지 않음'·안내 한 줄·[설정 열기](설정 탭 있을 때만)·값 줄 없음, 옛 '접어 둠' 없음",
         wb.includes("사용하지 않음") && wb.includes("장비 설정에서 사용하도록 바꾸면 값이 표시됩니다.") && wb.includes("설정 열기") && !wb.includes("Reflected")
@@ -310,39 +321,43 @@ const chamberProps = (ch) => ({
 {
   // W-20 ③ 대기 화면 배치 — 대기 칸: 머리 카드 → 다음 공정 → 장비 박스 격자만(주요 값·추세·공정 순서는 공정 중에만), 공정 중 칸은 그대로.
   //   다음 공정: 적재 없음은 머리 오른쪽 한 줄, [레시피 열기](레시피 탭이 있을 때만). 격자 = 챔버 칸 폭(컨테이너 ch) 950px 3개 · 650px 2개 · 그 밖 1개
+  //   U4: 장비 박스 격자는 상태 탭(챔버 칸 = 장비 박스만), 운전 탭 칸에는 없음
   const idle = render(U.ChamberRun, { ...chamberProps("ch2"), onEditRecipe: noop }), it = textOf(idle);
   const noEdit = render(U.ChamberRun, chamberProps("ch2"));
   const run = render(U.ChamberRun, chamberProps("ch1")), rt = textOf(run);
+  const sv = statusView();
   const pos = (h, x) => h.indexOf(x);
   const loaded2 = !!L.engineOf(st, "ch2")?.recipe_name;
   const idleOk = st.chambers.ch2.procState === "IDLE" && idle.includes('data-layout="idle"') && pos(idle, "대기 중") < pos(idle, ">다음 공정<")
-    && pos(idle, ">다음 공정<") < pos(idle, 'data-devices="ch2"') && !it.includes("주요 값") && !it.includes("추세") && !/>\s?공정 순서</.test(idle)
+    && !idle.includes("data-devices=") && !it.includes("주요 값") && !it.includes("추세") && !/>\s?공정 순서</.test(idle)
     && (loaded2 || it.includes("장비에 적재된 공정 레시피 없음")) && "레시피 열기" in buttons(idle) && !("레시피 열기" in buttons(noEdit));
   const runOk = run.includes('data-layout="run"') && rt.includes("주요 값") && rt.includes("CH1 추세") && />\s?공정 순서</.test(run) && !/>다음 공정</.test(run)
-    && run.search(/>\s?공정 순서</) < pos(run, 'data-devices="ch1"');
-  const gridOk = /class="@container\/ch [^"]*" data-chamber="ch2"/.test(idle) && /class="[^"]*@min-\[650px\]\/ch:grid-cols-2[^"]*@min-\[950px\]\/ch:grid-cols-3[^"]*" data-devices="ch2"/.test(idle);
-  check("ui:idle-layout — 대기 칸 머리 → 다음 공정 → 장비 박스(주요 값·추세·공정 순서 없음), 공정 중 칸은 그대로, [레시피 열기]는 레시피 탭 있을 때만, 격자는 챔버 칸 폭 기준",
+    && !run.includes("data-devices=");
+  const gridOk = /class="@container\/ch [^"]*" data-chamber="ch2" data-layout="status"/.test(sv)
+    && /class="[^"]*@min-\[650px\]\/ch:grid-cols-2[^"]*@min-\[950px\]\/ch:grid-cols-3[^"]*" data-devices="ch2"/.test(sv)
+    && !/>다음 공정</.test(sv) && !/>\s?공정 순서</.test(sv);
+  check("ui:idle-layout — 운전 탭 대기 칸 머리 → 다음 공정(주요 값·추세·공정 순서·장비 박스 없음), 공정 중 칸은 공정 화면, [레시피 열기]는 레시피 탭 있을 때만, 장비 박스 격자는 상태 탭(챔버 칸 폭 기준)",
         idleOk && runOk && gridOk, { idleOk, runOk, gridOk, loaded2 });
 }
 {
   // W-20 ④ 운전 탭 영역(컨테이너 run) 1360px 이상: 왼쪽 3/4 CH1·CH2 칸 · 오른쪽 1/4 알림 띠(왼쪽 높이를 따름 — absolute, 목록 안 스크롤),
   //   공통 장비는 아래 전체 폭. 더 좁으면 알림은 맨 아래(order-last, 목록 최대 240px)
-  const runP = { ...chamberProps("ch1"), plcOk: true, pcRecipes: [], getRow: async () => null, onEditSeq: noop, send: async () => ({}), notify: noop };
-  const html = render(U.Ch12Run, runP);
+  const html = statusView(), runV = render(U.Ch12Run, runP0);
   const left = /class="min-w-0 @min-\[1360px\]\/run:col-span-3"/.test(html), grid4 = /@container\/run[\s\S]{0,120}@min-\[1360px\]\/run:grid-cols-4/.test(html);
   const band = /class="relative order-last min-w-0 @min-\[1360px\]\/run:order-none" data-alerts=""/.test(html)
     && /@min-\[1360px\]\/run:absolute @min-\[1360px\]\/run:inset-0/.test(html) && /max-h-\[240px\][^"]*@min-\[1360px\]\/run:flex-1/.test(html);
   const one = (html.match(/data-alerts=""/g) ?? []).length === 1 && !textOf(html).includes("알림·로그");
   const order = html.indexOf('data-chamber="ch2"') < html.indexOf('data-alerts=""') && html.indexOf('data-alerts=""') < html.indexOf("Plasma Cleaning");
-  check("ui:run-band — 운전 탭 1360px 이상 왼쪽 3/4 챔버 칸 · 오른쪽 1/4 알림 띠(하나, 왼쪽 높이·목록 안 스크롤), 좁으면 알림 맨 아래(240px)",
-        left && grid4 && band && one && order, { left, grid4, band, one, order });
+  const runTab = /class="min-w-0 @min-\[1360px\]\/run:col-span-3"/.test(runV) && (runV.match(/data-alerts=""/g) ?? []).length === 1
+    && !runV.includes('data-common=""') && !runV.includes("data-devices=");
+  check("ui:run-band — 상태·운전 탭 1360px 이상 왼쪽 3/4 챔버 칸 · 오른쪽 1/4 알림 띠(하나, 왼쪽 높이·목록 안 스크롤), 좁으면 알림 맨 아래(240px), 공통 장비는 상태 탭에만",
+        left && grid4 && band && one && order && runTab, { left, grid4, band, one, order, runTab });
 }
 {
   // W-20 ⑤ 공통 장비 — 챔버 장비 박스와 같은 틀(DevCard)·같은 격자 기준(영역 폭 950px 3개 · 650px 2개 · 그 밖 1개).
   //   읽는 순서 Loadlock → Plasma Cleaning → TSP → 프리스퍼터 예약 → 로봇 연결 → 장비 공통 조작 → (노트북 레시피 파일) → 장비 응답 시간
-  const runP = { ...chamberProps("ch1"), plcOk: true, pcRecipes: [], getRow: async () => null, onEditSeq: noop, send: async () => ({}), notify: noop, onHmi: noop };
   const titlesOf = (h) => [...h.slice(h.indexOf('data-common=""')).matchAll(/<h3 class="min-w-0 truncate[^"]*">([^<]*)<\/h3>/g)].map((m) => m[1]);
-  const web = render(U.Ch12Run, runP), loc = render(U.Ch12Run, { ...runP, local: true, localCan: () => true });
+  const web = statusView(), loc = statusView({ local: true, localCan: () => true });
   const want = ["Loadlock", "Plasma Cleaning", "TSP", "프리스퍼터 예약", "로봇 연결", "장비 공통 조작", "장비 응답 시간"];
   const wantLoc = ["Loadlock", "Plasma Cleaning", "TSP", "프리스퍼터 예약", "로봇 연결", "장비 공통 조작", "노트북 레시피 파일", "장비 응답 시간"];
   const grid = /class="grid grid-cols-1 gap-3 @min-\[650px\]\/common:grid-cols-2 @min-\[950px\]\/common:grid-cols-3" data-common=""/.test(web);
@@ -351,7 +366,7 @@ const chamberProps = (ch) => ({
   const llOk = ll.includes("HMI 열기") && ll.indexOf("mt-auto") < ll.indexOf("HMI 열기") && /인터락/.test(ll) && ll.includes("4Pin 올림");
   const pcSeg = seg.slice(seg.indexOf(">Plasma Cleaning</h3>")), pcBox = pcSeg.slice(0, pcSeg.indexOf("</section>"));
   const pcOk = pcBox.indexOf("mt-auto") < pcBox.indexOf(">시작<") || pcBox.indexOf("mt-auto") < pcBox.search(/<\/svg> ?시작/);
-  check("ui:common-boxes — 공통 장비 박스(챔버K DevCard 틀) 읽는 순서·격자 기준(950·650), Loadlock 상태·인터락·[HMI 열기], 버튼은 맨 아래 줄",
+  check("ui:common-boxes — 공통 장비 박스(상태 탭 — 챔버K DevCard 틀) 읽는 순서·격자 기준(950·650), Loadlock 상태·인터락·[HMI 열기], 버튼은 맨 아래 줄",
         JSON.stringify(titlesOf(web)) === JSON.stringify(want) && JSON.stringify(titlesOf(loc)) === JSON.stringify(wantLoc) && grid && llOk && pcOk,
         { web: titlesOf(web), loc: titlesOf(loc), grid, llOk, pcOk });
 }
@@ -649,12 +664,13 @@ const chamberProps = (ch) => ({
         && b["부저 정지"] === false && (html.match(/data-band-chamber="ch[12]"/g) ?? []).length === 2, b);
 }
 {
-  // 탭·잠금 — 웹 운전·HMI·레시피·기록·설정 / 노트북 운전·HMI·기록, 잠금 순서·문구 = 챔버K lockOf
+  // 탭·잠금 — U4: 웹 상태·운전·HMI·레시피·기록·설정 / 노트북 상태·운전·HMI·기록(수동 조작 탭 없음), 잠금 순서·문구 = 챔버K lockOf
   const base = { authLost: false, perms: { canOperate: true, kinds: ["PLC_BUTTON", "PROCESS_STOP", "PROCESS_START", "RECIPE_LOAD"] }, local: false, bench: false,
     benchOk: (k) => k === "RECIPE_LOAD", connected: true, webOnline: true, streamUp: true, plcOk: true, inflight: () => false };
   const lr = L.lockReason;
-  check("ui:tabs-locks — 탭(웹 운전·HMI·레시피·기록·설정 / 노트북 운전·HMI·기록)·잠금 순서와 문구(로그인 → 권한 → bench → 정지 쪽 → 기다림 → 끊김 → PLC)",
-        U.WEB_TABS.map((x) => x.label).join() === "운전,HMI,레시피,기록,설정" && U.LOCAL_TABS.map((x) => x.label).join() === "운전,HMI,기록"
+  check("ui:tabs-locks — 탭(웹 상태·운전·HMI·레시피·기록·설정 / 노트북 상태·운전·HMI·기록, 옛 ?tab=run 그대로)·잠금 순서와 문구(로그인 → 권한 → bench → 정지 쪽 → 기다림 → 끊김 → PLC)",
+        U.WEB_TABS.map((x) => x.label).join() === "상태,운전,HMI,레시피,기록,설정" && U.LOCAL_TABS.map((x) => x.label).join() === "상태,운전,HMI,기록"
+        && U.WEB_TABS.map((x) => x.key).join() === "status,run,hmi,recipe,log,config" && U.LOCAL_TABS.some((x) => x.key === "run")
         && U.WEB_TABS.every((x) => !!x.title) && U.LOCAL_TABS.every((x) => !!x.title)
         && lr({ ...base, authLost: true }, "PROCESS_STOP") === "로그인이 끊겨 새로고침해야 함" && lr({ ...base, perms: undefined }, "X") === "권한 정보를 읽는 중"
         && lr({ ...base, local: true }, "PC_START") === "노트북 화면에서 받지 않는 조작이라 웹에서 해야 함" && lr(base, "PC_START") === "권한 없음(장비 담당자·관리자만)"
@@ -868,6 +884,53 @@ const chamberProps = (ch) => ({
   const rk = scan(U.KT.toTerms, U.KT.OLD_TO_NEW, false);
   console.log(`  (보고) 챔버K toTerms 같은 검사 — (a) ${rk.a.length} · (b) ${rk.b.length} · (c) ${rk.c.length} · 낱말 속 바꿈 ${rk.d.length}` +
               `${rk.d.length ? ` — ${[...new Set(rk.d)].slice(0, 6).join(" · ")}` : ""} (챔버K 는 고치지 않음)`);
+}
+
+// ───────────── U — 챔버K 와 같은 부분(U1·U2·U5·U6) ─────────────
+{
+  // U1 kit 옵션 chkColors — 확인창 실행 빨강은 정지·끄기·끝내기만(챔버K kit isStopLike — 시작·실행·켜기·열기·적용은 파랑), 옵션이 꺼지면 옛 규칙
+  const btn = (ask, mode) => { const h = render(U.Ch12Confirm, { ask, onOk: noop, onCancel: noop }, mode); return /bg-\[#B42318\][^"]*">\s*실행|실행\s*<\/button>/.test(h) && /class="[^"]*bg-\[#B42318\][^"]*"[^>]*>\s*실행/.test(h); };
+  const start = { kind: "PROCESS_START", label: "CH1 공정 시작", red: true, note: "가스·파워·셔터가 움직입니다." };
+  const stop = { kind: "PROCESS_STOP", label: "CH1 STOP", stop: true };
+  const vent = { kind: "X", label: "Vent", detail: "→ 켜기", danger: true };
+  const off = { kind: "X", label: "Turbo", detail: "→ 끄기" };
+  const on = { chkColors: true };
+  check("ui:kit-colors — 챔버K chkColors: 확인창 실행 빨강은 정지·끄기·끝내기만(공정 시작·켜기는 파랑), 옵션 끄면 옛 규칙(위험·정지·red 빨강)",
+        !btn(start, on) && btn(stop, on) && !btn(vent, on) && btn(off, on) && btn(start, {}) && btn(vent, {})
+        && U.runRed(off, true) && !U.runRed(start, true),
+        { start: btn(start, on), stop: btn(stop, on), vent: btn(vent, on), off: btn(off, on) });
+  const src = readFileSync(join(root, "components/ops2/ch12/Ch12Page.tsx"), "utf8");
+  check("ui:kit-options — 챔버12 화면 kit 옵션 chkColors·lineIcons 켬(두 곳), chkWords 는 켜지 않음(챔버K 장비 이름·'LOCAL' 이 나와서)",
+        (src.match(/chkColors: true, lineIcons: true/g) ?? []).length === 2 && !/chkWords: true/.test(src), null);
+}
+{
+  // U2 연결 칩·끊김 띠 — 챔버K lib/ops2/chk/conn: 연결됨 / 늦음 N초 / 끊김 N초 / 60초 넘으면 '끊김 · 18:05부터', 노트북 화면이 끊기면 바로 끊김(실제 지난 시간)
+  const parts = (age, lost = false) => U.connParts(U.connOf(age, nowMs, 3000, 10000, lost)).filter((x) => x !== null && x !== "").join("");
+  const since = parts(125_000);
+  const band = render(U.StatusBand12, { bundle, st, connected: false, conn: { label: "끊김 30초", tone: "alarm" },
+    links: [], mode: "sim", equipment: "CH12-SIM", label: null, lock: noLock, onAsk: noop, nowMs, plcOk: false });
+  const src = readFileSync(join(root, "components/ops2/ch12/Ch12Page.tsx"), "utf8");
+  check("ui:conn-chip — 연결 칩 연결됨 / 늦음 N초 / 끊김 N초 / '끊김 · HH:MM부터'(챔버K conn), 노트북 화면이 끊기면 바로 끊김, 빨간 띠는 한 줄",
+        parts(1000) === "연결됨" && parts(5000) === "늦음 5초" && parts(30_000) === "끊김 30초" && /^끊김 · \d\d:\d\d부터$/.test(since)
+        && parts(1000, true) === "끊김 1초" && textOf(band).includes("끊김 30초") && /connOf\(age, now, LATE_MS, LOST_MS, local && !d\.streamUp\)/.test(src)
+        && /d\.error && !\(local && !d\.streamUp && d\.streamEver\)/.test(src) && /lostCs\.since/.test(src),
+        { since, late: parts(5000), lost: parts(30_000) });
+}
+{
+  // U5 떠 있는 상자(확인창·알림창·토스트·도움말·순서 고치기)는 body 포털(챔버K Float·TipLayer) — 페이지 흐름에 끼지 않는다. 실제 높이 변화는 화면 캡처로 잰다
+  const src = readFileSync(join(root, "components/ops2/ch12/Ch12Page.tsx"), "utf8");
+  const floats = src.match(/<Float>[\s\S]*?<\/Float>/g) ?? [];
+  const inFloat = (x) => floats.some((f) => f.includes(x));
+  check("ui:float — 확인창(Ch12Confirm)·저장 안 함 확인·순서 고치기·알림 토스트(Notices)·알림창(PopupStack)·도움말(TipLayer)이 Float 안",
+        ["<Ch12Confirm", "<Ch12SeqEdit", "<Notices", "<PopupStack", "<TipLayer", "버리고 나가기", "버리고 바꾸기"].every(inFloat), floats.length);
+  // U6 장비 고르기 상자 — 고를 장비가 하나면 그리지 않는다(챔버K W-24 A 와 같은 규칙, lib/ops2/display.deviceChoiceOf)
+  const one = U.deviceChoiceOf("ch12", [{ equipment: "CH12-SIM" }, { equipment: "CHK2" }], null);
+  const two = U.deviceChoiceOf("ch12", [{ equipment: "CH12" }, { equipment: "CH12-SIM" }, { equipment: "CHK2-SIM" }], "CHK2-SIM");
+  const kept = U.deviceChoiceOf("ch12", [{ equipment: "CH12" }, { equipment: "CH12-SIM" }], "CH12-SIM");
+  check("ui:device-picker — 챔버12 장비만(CH12·CH12-SIM), 하나면 고르기 상자 없음, 저장된 선택이 다른 종류면 CH12, 없으면 첫 장비",
+        one.list.length === 1 && one.picked === "CH12-SIM" && !one.showPicker && two.list.length === 2 && two.showPicker && two.picked === "CH12"
+        && kept.picked === "CH12-SIM" && /devices && devices\.length > 1 &&/.test(src),
+        { one, two: two.picked, kept: kept.picked });
 }
 
 // ───────────── 2) logic.ts ─────────────
