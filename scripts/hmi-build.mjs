@@ -20,8 +20,8 @@ const args = process.argv.slice(2);
 const TARGETS = {
   chk: { entry: "hmi/main.tsx", css: "index.css", out: "dist-hmi", title: "CHK Sputter — 노트북 화면",
          what: "챔버K v2 노트북 로컬 화면(vanam-process hmi/ — W-7)" },
-  ch12: { entry: "hmi/ch12.tsx", css: "ch12.css", out: "dist-hmi/ch12", title: "챔버12(CH1&2) v2 — 노트북 화면",
-          what: "챔버12(CH1&2) v2 노트북 로컬 화면(vanam-process hmi/ch12.tsx — 8단계)" },
+  ch12: { entry: "hmi/ch12.tsx", css: "ch12.css", out: "dist-hmi/ch12", title: "CH1&2 Sputter — 노트북 화면",
+          what: "챔버12(CH1&2 Sputter) 노트북 화면(vanam-process hmi/ch12.tsx — 8단계)" },
 };
 const tArg = args.indexOf("--target");
 const targetName = tArg >= 0 && args[tArg + 1] ? args[tArg + 1] : "chk";

@@ -4,32 +4,31 @@
 // 마지막 state·사건, 장비에 새 요청 없음)을 받고, 화면은 2초마다만 다시 그린다.
 // 맨 위: 가동·대기·경고·오류·미연결 개수, 연결된 장비 수. CHK Sputter 박스: 연결·운전 모드·상태 칩, 공정 중이면 레시피·단계 n/m·단계 이름·
 //   진행 막대·시작·남은 시간·예상 끝, 주요 값 4칸, 상태 칩, 맨 아래 지난 공정 한 줄과 [CHK Sputter 열기]. 오른쪽 '최근 알림'은
-//   평소 보기 기록 줄(시각 · 장비 · 출처 · 이름 · 내용)과 활성 알람. CH1&2·나머지 장비는 지금 데이터(연동 예정) 그대로 같은 박스 틀로.
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Cpu, ExternalLink } from "lucide-react";
+//   두 장비(CHK·CH1&2)의 알림 줄(시각 · 장비 · 출처 · 이름 · 내용)을 시간 순 한 목록으로와 활성 알람. CH1&2 Sputter 박스는 챔버12 데이터
+//   (components/ops2/ch12/Ch12Dash — 같은 틀: 연결·모드·상태 칩, CH1·CH2·Loadlock 칸, 지난 공정, [CH1&2 Sputter 열기]), 장비 고르기는
+//   lib/ops2/display.deviceChoiceOf("ch12")(켜진 CH12, 없으면 첫 챔버12 장비). 맨 위 개수의 세는 단위는 CH1·CH2·LoadLock·CHK·나머지 넷.
+//   나머지 장비는 지금 데이터(연동 예정) 그대로 같은 박스 틀로.
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ExternalLink } from "lucide-react";
 import { FS, Btn, Card, Chip } from "@/components/ops2/chk/kit";
 import { useChk2 } from "@/components/ops2/chk/useChk2";
 import { rfState } from "@/lib/ops2/chk/rf";
 import { connOf, connParts } from "@/lib/ops2/chk/conn";
 import { ConnLabel } from "@/components/ops2/chk/Chk2Status";
 import { kindOf, pressureTargetCol } from "@/components/ops2/chk/runview";
-import { alertLines, reasonText } from "@/components/ops2/chk/logView";
+import { ALERT_KEEP, alertLines, reasonText } from "@/components/ops2/chk/logView";
+import { CH12_DEVICE_NAME, Ch12Area, type Ch12Report, type DashAlert } from "@/components/ops2/ch12/Ch12Dash";
 import { RUN_RESULT, type StateData } from "@/components/ops2/chk/types";
 import { runTitle } from "@/components/ops2/chk/text";
 import { MODE_NAME, fieldName, stepName } from "@/lib/ops2/chk/terms";
-import { CHK_BASE_ID, isChkEquipment } from "@/lib/ops2/display";
+import { CHK_BASE_ID, deviceChoiceOf, isChkEquipment } from "@/lib/ops2/display";
 import { fmtKst } from "@/lib/ops2/time";
 
 type EquipState = "가동" | "대기" | "경고" | "오류" | "미연결";
-type EquipPage = "equipCh12" | "equipChk2" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline";
+type EquipPage = "equipCh12v2" | "equipChk2" | "equipRayvac" | "equipNcd" | "equipEvap" | "equipInline";
 type Unit = { key: string; name: string; state: EquipState; page: EquipPage };
 
 // 연동 전 장비는 상태를 지어내지 않는다(지금 데이터 그대로 — 연동 예정)
-const CH12: Unit[] = [
-  { key: "ch1", name: "CH1", state: "미연결", page: "equipCh12" },
-  { key: "ch2", name: "CH2", state: "미연결", page: "equipCh12" },
-  { key: "ll", name: "LoadLock", state: "미연결", page: "equipCh12" },
-];
 const OTHERS: Unit[] = [
   { key: "rayvac", name: "Rayvac ALD", state: "미연결", page: "equipRayvac" },
   { key: "ncd", name: "NCD ALD", state: "미연결", page: "equipNcd" },
@@ -161,30 +160,26 @@ function ChkBox({ d, onNavigate, onState }: { d: ReturnType<typeof useChk2>; onN
   );
 }
 
-/** 최근 알림 — 평소 보기 기록 줄(시각 · 장비 · 출처 · 이름 · 내용)과 활성 알람. 큰 화면에서는 오른쪽 띠(왼쪽 묶음 높이를 따르고 목록 안에서 스크롤) */
-function RecentCard({ d, onNavigate }: { d: ReturnType<typeof useChk2>; onNavigate?: (p: EquipPage) => void }) {
-  const feed = useEvery(d.feed, REDRAW_MS);
-  const st = useEvery(d.state, REDRAW_MS);
-  // 주의가 필요한 것만(W-23 C — 경고·오류 사건, 거부·실패한 명령, 24시간 안, 최근 20줄)
+/** 최근 알림 — 두 장비(CHK·CH1&2)의 알림 줄(시각 · 장비 · 출처 · 이름 · 내용)을 시간 순 한 목록으로, 규칙은 챔버K logView.alertLines
+ *  (경고·오류 사건·거부·실패한 명령, 24시간, 최근 20줄 — 챔버12 는 같은 규칙의 alertLines12)와 활성 알람. 큰 화면에서는 오른쪽 띠 */
+function RecentCard({ items, alarms, onNavigate }: { items: DashAlert[]; alarms: string[]; onNavigate?: (p: EquipPage) => void }) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(t); }, []);
-  const lines = useMemo(() => alertLines(d.bundle, feed, now), [d.bundle, feed, now]);
-  const alarms = st?.data?.alarms ?? [];
   const today = fmtKst(new Date(now).toISOString()).slice(0, 5);
   return (
     <Card className="flex flex-col @min-[1200px]/dash:absolute @min-[1200px]/dash:inset-0" title="최근 알림"
       right={<Btn size="sm" kind="ghost" onClick={() => onNavigate?.("equipChk2")}>전체 보기</Btn>}>
       <p className={`mb-2 rounded-[10px] bg-[#F5F6F8] px-3 py-2 ${FS.body} text-[#5B6470]`}>
-        활성 알람 {alarms.length ? alarms.map((a) => reasonText(d.bundle, a.code, "알람")).join(" · ") : <b className="text-[#1B1F24]">없음</b>} · 모든 장비
+        활성 알람 {alarms.length ? alarms.join(" · ") : <b className="text-[#1B1F24]">없음</b>} · 모든 장비
       </p>
-      {lines.length ? (
+      {items.length ? (
         <ul className="max-h-[360px] min-h-0 flex-1 overflow-y-auto pr-1 @min-[1200px]/dash:max-h-none">
-          {lines.map((r) => {
-            const full = fmtKst(r.e.ts);
+          {items.map((r) => {
+            const full = fmtKst(r.ts);
             return (
-              <li key={r.e.id} className={`grid grid-cols-[auto_auto_auto_minmax(0,1fr)] items-baseline gap-2 border-b border-[#EEF0F3] py-1.5 ${FS.small}`} title={r.desc}>
+              <li key={r.key} className={`grid grid-cols-[auto_auto_auto_minmax(0,1fr)] items-baseline gap-2 border-b border-[#EEF0F3] py-1.5 ${FS.small}`} title={r.desc}>
                 <span className="tabular-nums text-[#5B6470]">{full.slice(0, 5) === today ? full.slice(-8) : full.slice(0, 11)}</span>
-                <span className="text-[#5B6470]">CHK</span>
+                <span className="text-[#5B6470]">{r.device}</span>
                 <span className="text-[#5B6470]">{r.source}</span>
                 <span className="min-w-0">
                   {r.level === "warn" ? <Chip tone="warn">{r.kind}</Chip> : r.level === "error" || r.level === "critical" ? <Chip tone="alarm">{r.kind}</Chip>
@@ -211,28 +206,59 @@ function SmallBox({ u, onNavigate }: { u: Unit; onNavigate?: (p: EquipPage) => v
   );
 }
 
-/** CHK Sputter 박스 + 최근 알림 — 스트림 하나(useChk2)를 같이 쓴다. 큰 화면: 박스 왼쪽 8칸, 알림 오른쪽 4칸(2~4줄) */
-function ChkArea({ id, onNavigate, onState }: { id: string; onNavigate?: (p: EquipPage) => void; onState: (s: EquipState, online: boolean) => void }) {
+/** CHK Sputter 박스 — 스트림 하나(useChk2)로 박스를 그리고 최근 알림 줄·활성 알람을 부르는 쪽에 알린다(알림은 두 장비 한 목록). 큰 화면: 왼쪽 8칸 */
+function ChkArea({ id, onNavigate, onState, onAlerts }: { id: string; onNavigate?: (p: EquipPage) => void;
+  onState: (s: EquipState, online: boolean) => void; onAlerts: (items: DashAlert[], alarms: string[]) => void }) {
   const d = useChk2(id, "web");
-  return (
-    <>
-      <div className="min-w-0 @min-[1200px]/dash:col-span-8"><ChkBox d={d} onNavigate={onNavigate} onState={onState} /></div>
-      <div className="relative min-w-0 @min-[1200px]/dash:col-span-4 @min-[1200px]/dash:col-start-9 @min-[1200px]/dash:row-span-3 @min-[1200px]/dash:row-start-2">
-        <RecentCard d={d} onNavigate={onNavigate} />
-      </div>
-    </>
-  );
+  const feed = useEvery(d.feed, REDRAW_MS);
+  const st = useEvery(d.state, REDRAW_MS);
+  // 주의가 필요한 것만(W-23 C — 경고·오류 사건, 거부·실패한 명령, 24시간 안, 최근 20줄) — 1분마다만 다시 거른다
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(t); }, []);
+  const items = useMemo(() => alertLines(d.bundle, feed, now).map((r): DashAlert => ({
+    key: `${id}:${r.e.id}`, ts: r.e.ts, device: "CHK", source: r.source ?? "", kind: r.kind, text: r.text, level: r.level, desc: r.desc,
+  })), [d.bundle, feed, now, id]);
+  const alarms = (st?.data?.alarms ?? []).map((a) => reasonText(d.bundle, a.code, "알람"));
+  const sig = JSON.stringify([items.map((x) => x.key), alarms]);
+  const cb = useRef(onAlerts);
+  useEffect(() => { cb.current = onAlerts; }, [onAlerts]);
+  useEffect(() => { cb.current(items, alarms); }, [sig]);   // eslint-disable-line react-hooks/exhaustive-deps
+  return <div className="min-w-0 @min-[1200px]/dash:col-span-8"><ChkBox d={d} onNavigate={onNavigate} onState={onState} /></div>;
+}
+
+/** CH1&2 Sputter 장비 ID — 켜진 챔버12 장비 중 CH12, 없으면 첫 챔버12 장비(CH12-SIM — useChkId 와 같은 규칙) */
+function useCh12Id(): string | null {
+  const [id, setId] = useState<string | null>(null);
+  useEffect(() => {
+    let off = false;
+    void fetch("/api/ops2/devices", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).then((j) => {
+      const ds = (j?.devices ?? []) as { equipment: string }[];
+      if (!off) setId(deviceChoiceOf("ch12", ds, null).picked ?? "");
+    }).catch(() => { if (!off) setId(""); });
+    return () => { off = true; };
+  }, []);
+  return id;
 }
 
 export default function OpsDashboardPage({ onNavigate }: { onNavigate?: (p: EquipPage) => void }) {
   const chkId = useChkId();
+  const ch12Id = useCh12Id();
   const [chk, setChk] = useState<{ state: EquipState; online: boolean }>({ state: "미연결", online: false });
   const onState = useMemo(() => (s: EquipState, online: boolean) => setChk((x) => (x.state === s && x.online === online ? x : { state: s, online })), []);
-  const units = [...CH12, ...OTHERS];
+  const [chkAl, setChkAl] = useState<{ items: DashAlert[]; alarms: string[] }>({ items: [], alarms: [] });
+  const onChkAlerts = useCallback((items: DashAlert[], alarms: string[]) => setChkAl({ items, alarms }), []);
+  const [ch12, setCh12] = useState<Ch12Report | null>(null);
+  const onCh12 = useCallback((r: Ch12Report) => setCh12(r), []);
+  // 세는 단위는 지금 그대로(CH1·CH2·LoadLock 셋 + CHK 하나 + 나머지 넷) — 챔버12 장비가 없거나 끊기면 셋 다 미연결
+  const ch12Units: EquipState[] = ch12Id && ch12 ? [ch12.units.ch1, ch12.units.ch2, ch12.units.ll] : ["미연결", "미연결", "미연결"];
+  const units: EquipState[] = [...ch12Units, ...OTHERS.map((u) => u.state)];
   const counts = { 가동: 0, 대기: 0, 경고: 0, 오류: 0, 미연결: 0 } as Record<EquipState, number>;
-  for (const u of units) counts[u.state] += 1;
+  for (const u of units) counts[u] += 1;
   counts[chk.state] += 1;
   const total = units.length + 1;
+  const online = (chk.online ? 1 : 0) + (ch12Id && ch12?.online ? ch12Units.length : 0);
+  const items = [...chkAl.items, ...(ch12Id && ch12 ? ch12.alerts : [])].sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts)).slice(0, ALERT_KEEP);
+  const alarms = [...chkAl.alarms, ...(ch12Id && ch12 ? ch12.alarms.map((a) => `${CH12_DEVICE_NAME} ${a}`) : [])];
   return (
     <div className="@container/dash min-h-full bg-[#EEF0F3] p-3 text-[#1B1F24] sm:p-5">
       <div className="grid grid-cols-1 gap-3 @min-[1200px]/dash:grid-cols-12">
@@ -246,26 +272,20 @@ export default function OpsDashboardPage({ onNavigate }: { onNavigate?: (p: Equi
               <Chip tone={counts.오류 ? "alarm" : "neutral"}>오류 {counts.오류}</Chip>
               <Chip>미연결 {counts.미연결}</Chip>
             </div>
-            <span className={`${FS.body} text-[#5B6470]`}>연결된 장비 {chk.online ? 1 : 0} / {total}</span>
+            <span className={`${FS.body} text-[#5B6470]`}>연결된 장비 {online} / {total}</span>
           </div>
         </Card>
-        {chkId ? <ChkArea id={chkId} onNavigate={onNavigate} onState={onState} />
+        {chkId ? <ChkArea id={chkId} onNavigate={onNavigate} onState={onState} onAlerts={onChkAlerts} />
           : <Card className="@min-[1200px]/dash:col-span-8" title="CHK Sputter">
               <p className={`${FS.body} text-[#5B6470]`}>{chkId === "" ? "등록된 CHK Sputter 장비가 없습니다." : "장비 목록을 읽는 중…"}</p>
             </Card>}
-        <Card className="flex flex-col gap-3 @min-[1200px]/dash:col-span-8" title="CH1&2 Sputter" right={<Chip>미연결</Chip>}>
-          <div className="grid grid-cols-1 gap-2.5 @min-[520px]/dash:grid-cols-3">
-            {CH12.map((u) => (
-              <div key={u.key} className="flex min-w-0 flex-col gap-1 rounded-[10px] border border-[#E3E6EA] px-3.5 py-3">
-                <span className={`${FS.small} text-[#5B6470]`}>{u.name}</span>
-                <span className={`${FS.body} text-[#8A929D]`}>미연결 · 연동 예정</span>
-              </div>
-            ))}
-          </div>
-          <div className="flex border-t border-[#E3E6EA] pt-3">
-            <span className="ml-auto"><Btn onClick={() => onNavigate?.("equipCh12")}><Cpu size={14} /> CH1&2 Sputter 열기</Btn></span>
-          </div>
-        </Card>
+        <div className="relative min-w-0 @min-[1200px]/dash:col-span-4 @min-[1200px]/dash:col-start-9 @min-[1200px]/dash:row-span-3 @min-[1200px]/dash:row-start-2">
+          <RecentCard items={items} alarms={alarms} onNavigate={onNavigate} />
+        </div>
+        {ch12Id ? <div className="min-w-0 @min-[1200px]/dash:col-span-8"><Ch12Area id={ch12Id} onOpen={() => onNavigate?.("equipCh12v2")} onReport={onCh12} /></div>
+          : <Card className="@min-[1200px]/dash:col-span-8" title="CH1&2 Sputter">
+              <p className={`${FS.body} text-[#5B6470]`}>{ch12Id === "" ? "등록된 CH1&2 Sputter 장비가 없습니다." : "장비 목록을 읽는 중…"}</p>
+            </Card>}
         <div className="grid grid-cols-1 gap-3 @min-[420px]/dash:grid-cols-2 @min-[900px]/dash:grid-cols-4 @min-[1200px]/dash:col-span-8">
           {OTHERS.map((u) => <SmallBox key={u.key} u={u} onNavigate={onNavigate} />)}
         </div>

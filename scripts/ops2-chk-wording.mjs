@@ -33,7 +33,7 @@ const OLD_TERMS_CHK = ["가스 도입", "정상 끝 정지", "셔터 딜레이",
 const RECIPE_FILES = /(Chk2BlockEditor|Chk2RecipeEditor|Chk2Recipes|recipeText|Ch12Recipes|Ch12BlockEditor)\.tsx?$|lib\/ops2\/(chk|ch12)\/(blocks|recipe|recipes)\.ts$/;
 // 평소 보기 화면 파일 — 한글 글 60자 안, PLC 주소·v1·묶음 번호 없음
 const EVERYDAY = /components\/ops2\/chk\/(Chk2Page|Chk2Status|Chk2Run|Chk2Devices|Chk2Hmi|Chk2Manual|Chk2Logs|Chk2Seq|Chk2Trend|Chk2LocalNext|Chk2LocalConfig|StateTag|logView)\.tsx?$|lib\/ops2\/chk\/(plain|terms)\.ts$/
-  .source + "|" + /components\/ops2\/ch12\/(Ch12Page|Ch12Status|Ch12Run|Ch12Hmi|Ch12Aux|Ch12Thickness|Ch12Logs|Ch12History|Ch12Confirm|Ch12Popups|Ch12LocalFiles|Ch12SeqEdit|Ch12Spectra|Ch12Timing|Ch12Inputs|Ch12Devices|BlockCard|logic)\.tsx?$|lib\/ops2\/ch12\/terms\.ts$/.source;
+  .source + "|" + /components\/ops2\/ch12\/(Ch12Page|Ch12Status|Ch12Run|Ch12Hmi|Ch12Aux|Ch12Thickness|Ch12Logs|Ch12History|Ch12Confirm|Ch12Popups|Ch12LocalFiles|Ch12SeqEdit|Ch12Spectra|Ch12Timing|Ch12Inputs|Ch12Devices|Ch12Dash|BlockCard|logic)\.tsx?$|lib\/ops2\/ch12\/terms\.ts$/.source;
 const isEveryday = (rel) => new RegExp(EVERYDAY).test(rel);
 function problems(rel, t) {
   const out = [];
