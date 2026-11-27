@@ -23,6 +23,14 @@ export function pcRanges(bundle: unknown): Record<string, { min: number | null; 
     const p = f.param ? params.find((x) => x.key === f.param) : undefined;
     out[f.key] = { min: typeof p?.min === "number" ? p.min : null, max: typeof p?.max === "number" ? p.max : null };
   }
+  // RF Power 위 한도 = Plasma Cleaning RF 운전 상한(장비 R·D432 — PC_RF_OPERATING_MAX_W, RF_MAX_POWER 보다 크지 않게). 장비도 넘으면 시작 거부
+  const val = (k: string) => {
+    const p = params.find((x) => x.key === k);
+    const v = typeof p?.current === "number" ? p.current : p?.default;
+    return typeof v === "number" ? v : null;
+  };
+  const op = val("PC_RF_OPERATING_MAX_W"), rated = val("RF_MAX_POWER");
+  if (op !== null && out.rf_power) out.rf_power = { ...out.rf_power, max: rated !== null ? Math.min(op, rated) : op };
   return out;
 }
 

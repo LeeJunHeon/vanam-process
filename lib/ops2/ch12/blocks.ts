@@ -18,7 +18,7 @@ export const WEB_BLOCKS_VERSION = 1;
 /** 이 파일이 아는 값 사이 규칙(web_blocks.VALUE_RULES id) */
 export const KNOWN_RULES = [
   "chamber_only", "needs_cap", "gas_flow_blank", "ch1_no_n2", "shutter_gun_exists", "power_cap", "pulse_exclusive",
-  "rfp_freq_range", "dcp_off_range", "heater_limit", "main_change_together", "heater_wait_target",
+  "rfp_freq_range", "dcp_off_range", "heater_limit", "main_change_together", "heater_wait_target", "rf_operating_max",
 ] as const;
 
 export type Cfg = Readonly<Record<string, unknown>>;
@@ -46,7 +46,7 @@ export type Ch12Defs = {
     adjust: { command: string; items: unknown[] }; empty: string; rules: string;
   };
   cfg: {
-    keys: { key: string; field: string; type: string; use: string }[]; plainKeys: { key: string; default: number; use: string }[];
+    keys: { key: string; field: string; type: string; use: string }[]; plainKeys: { key: string; default: number | null; use: string }[];
     stepCfgDefaults: Record<string, StepCfgDefaults>; rfpFreqMaxHzDefault: number; channelRule: string;
   };
   recipe: {
@@ -141,13 +141,35 @@ export function rfpFreqMaxKhz(defs: Ch12Defs, cfg: Cfg, ch: number): number {
 /** recipe_check.heater_limit_c — min(MAX_TEMP, SV_LIMIT), SV ≤ 0 → 500, MAX ≤ 0 또는 > SV → SV */
 export function heaterLimitC(defs: Ch12Defs, cfg: Cfg): number {
   const [svK, mtK] = ["CH2_HEATER_SV_LIMIT_C", "CH2_HEATER_MAX_TEMP"].map((k) => defs.cfg.plainKeys.find((x) => x.key === k));
-  const val = (k: { key: string; default: number } | undefined, dk: string) =>
+  const val = (k: { key: string; default: number | null } | undefined, dk: string) =>
     pyFloatAny(cfg[k?.key ?? dk] ?? k?.default ?? 900.0);
   let sv = val(svK, "CH2_HEATER_SV_LIMIT_C");
   if (sv <= 0) sv = 500.0;
   let mt = val(mtK, "CH2_HEATER_MAX_TEMP");
   if (mt <= 0 || mt > sv) mt = sv;
   return Math.min(mt, sv);
+}
+
+/** recipe_check.rf_operating_max — CH2 RF 운전 상한 W(장비 R·D432): RF_OPERATING_MAX_W(없으면 RF_MAX_POWER), RF_MAX_POWER 보다 크지 않게.
+ *  rated = float(cfg.get("RF_MAX_POWER", 600) or 0), v = float(cfg.get(key, rated)) — 숫자가 아니면 rated */
+export function rfOperatingMax(defs: Ch12Defs, cfg: Cfg): number {
+  const dflt = defs.cfg.plainKeys.find((x) => x.key === "RF_MAX_POWER")?.default ?? 600.0;
+  const rv = "RF_MAX_POWER" in cfg ? cfg.RF_MAX_POWER : dflt;
+  let rated = 0;
+  try {
+    rated = pyFloatAny(rv || 0);
+  } catch {
+    rated = 0;
+  }
+  let v = rated;
+  if ("RF_OPERATING_MAX_W" in cfg) {
+    try {
+      v = pyFloatAny(cfg.RF_OPERATING_MAX_W);
+    } catch {
+      v = rated;
+    }
+  }
+  return Math.max(0.0, Math.min(rated, v));
 }
 
 /** recipe_check.dcp_max_off_us */
@@ -313,6 +335,9 @@ function checkOne(env: Ch12Env, b: unknown, path: string, errs: string[], warns:
   if (d.type === "power_on") {
     for (const [k, cap, lab] of POWER_CAPS) {           // power_cap
       if (isNum(o[k]) && !caps[cap]) errs.push(`${pre}: ${k}: 이 챔버는 ${lab} 미지원`);
+    }
+    if (isNum(o.rf_power) && caps.rf && o.rf_power > rfOperatingMax(defs, cfg)) {   // rf_operating_max(R)
+      errs.push(`${pre}: rf_power: ${g(o.rf_power)} > ${g(rfOperatingMax(defs, cfg))} W(운전 상한 RF_OPERATING_MAX_W)`);
     }
     if (isNum(o.dcp_power) && isNum(o.rfp_power)) {     // pulse_exclusive
       errs.push(`${pre}: RF Pulse와 DC Pulse는 동시에 사용할 수 없습니다 (같은 시리얼 포트)`);

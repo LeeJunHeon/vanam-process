@@ -10,7 +10,7 @@
 // 숫자 문구: 정규화 값의 형식(float·int)은 열마다 정해져 있어(normalize_row) 그 형식으로 찍는다.
 // 행 값은 CSV 처럼 글로 오는 것을 기준으로 한다(숫자 값은 str() 로 — JSON 의 5.0 은 웹에서 5 라 문구가 '5' 가 된다).
 // 골든 lib/ops2/ch12/golden/web_ch12_template.json·web_ch12_recipe_check.json 을 npm run ops2:golden 이 확인한다.
-import { capsFromCfg, checkDcPulse, heaterLimitC, rfpFreqMaxKhz, stepCfg, type Caps, type Cfg, type Ch12Defs } from "./blocks";
+import { capsFromCfg, checkDcPulse, heaterLimitC, rfOperatingMax, rfpFreqMaxKhz, stepCfg, type Caps, type Cfg, type Ch12Defs } from "./blocks";
 import {
   asciiDigits, fr, fx, g, HMS, isNum, isObj, PY_WS, PyError, pyFloatAny, pyFloatStr, pyGet, pyIntOfFloat, pyMax, pyNum,
   pyRepr, pyRoundInt, pyRoundN, pyStr, pyStrip, pyTruthy,
@@ -453,6 +453,17 @@ export function checkNormParams(p0: Params, chamber: number, caps: Caps, cfg: Cf
     if (pyTruthy(p.use_dc_power) && numOr0(p.dc_power) < 0) errs.push("DC Target Power(W)는 0 이상이어야 합니다.");
     if (pyTruthy(p.use_dc_power2) && numOr0(p.dc_power2) < 0) errs.push("DC2 Target Power(W)는 0 이상이어야 합니다.");
     if (pyTruthy(p.use_dc_power2) && !caps.dc2) errs.push("DC2 Power 는 사용할 수 없습니다(DC2 폐지)");
+    if (pyTruthy(p.use_rf_power)) {                     // 운전 상한(장비 R·D432) — 넘으면 거부, 고쳐 쓰지 않음
+      const lim = rfOperatingMax(defs, cfg);
+      let rfw = 0.0;
+      try {
+        const v = pyGet(p, "rf_power", 0);
+        rfw = pyFloatAny(pyTruthy(v) ? v : 0);
+      } catch {
+        rfw = 0.0;
+      }
+      if (rfw > lim) errs.push(`RF Target Power(W)는 운전 상한 ${g(lim)} W 이하여야 합니다 (현재 ${g(rfw)}, RF_OPERATING_MAX_W)`);
+    }
   }
   if (pyTruthy(p.use_heater)) {
     const avail = heaterAvailable ?? caps.heater;

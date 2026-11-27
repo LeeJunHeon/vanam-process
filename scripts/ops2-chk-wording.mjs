@@ -102,6 +102,7 @@ const EXCEPT = [
   //  같기를 요구 — ops2:golden). 레시피 탭 검사 결과·적재 전 확인에만 보인다
   ["lib/ops2/ch12/blocks.ts", "뺄 수 없는 단계"], ["lib/ops2/ch12/blocks.ts", "DC2(폐지 — 히터와 배타)"],
   ["lib/ops2/ch12/blocks.ts", "이 챔버 설정에서 꺼져 있음(SUPPORTS_"], ["lib/ops2/ch12/blocks.ts", "이 챔버에 없는 건 셔터"],
+  ["lib/ops2/ch12/blocks.ts", "W(운전 상한 RF_OPERATING_MAX_W)"], ["lib/ops2/ch12/recipe.ts", "RF Target Power(W)는 운전 상한"],
   ["lib/ops2/ch12/recipe.ts", "CESAR 사양 3-5"], ["lib/ops2/ch12/recipe.ts", "SUPPORTS_HEATER=false 또는 히터 초기화 실패"],
   ["lib/ops2/ch12/recipe.ts", "메인 공정 구간에 있습니다 —"], ["lib/ops2/ch12/recipe.ts", "기본 램프 속도"], ["lib/ops2/ch12/recipe.ts", "히터 사용 — 목표"],
   ["lib/ops2/ch12/recipes.ts", "장비가 처리하지 못하는 값"],
