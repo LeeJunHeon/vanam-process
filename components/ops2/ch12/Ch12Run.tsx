@@ -335,6 +335,8 @@ export function ChamberRun(p: ChamberProps) {
               <p className={`${FS.body} text-[#1B1F24]`}>
                 <span className="tabular-nums text-[#5B6470]">단계 {step.no ?? "-"}/{step.total ?? "-"}</span> <b>{blockLabel(bundle, step.type)}</b>
                 {typeof step.elapsedS === "number" && <span className="text-[#5B6470]"> · 단계 경과 {clockOrDash(step.elapsedS)}</span>}
+                {/* 영점 대기(Z — 묶음 20 waitText '영점 대기 n s'). 기다리지 않으면 없음 */}
+                {cs?.waitText && <>{" "}<Chip tone="warn" className="tabular-nums">{cs.waitText}</Chip></>}
               </p>
             )}
             {/* 지금 동작(W-19 ④) — 장비 묶음 16 의 화면 이름(stepLabel — 'Main 가스 열기'·'RF Pulse 켜기 120 W'). v1 스텝 문구(엔진 text)는 상세 보기에서만 */}

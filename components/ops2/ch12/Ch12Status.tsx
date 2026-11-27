@@ -49,7 +49,8 @@ export function chamberLine(bundle: Ch12Bundle | null, st: Ch12State | null, ch:
   const info = stateInfo(bundle, cs.procState, ch);
   const step = cs.step;
   const rem = cs.remainS ?? step?.remainS;
-  return [info.label, step?.no ? `단계 ${step.no}/${step.total ?? "-"}` : "", typeof rem === "number" ? `남은 ${clockOrDash(rem)}` : ""]
+  return [info.label, step?.no ? `단계 ${step.no}/${step.total ?? "-"}` : "", cs.waitText ?? "",       // 영점 대기 n s(Z) — 기다릴 때만
+    typeof rem === "number" ? `남은 ${clockOrDash(rem)}` : ""]
     .filter(Boolean).join(" · ");
 }
 
@@ -85,6 +86,8 @@ function ChamberCell({ bundle, st, ch, connected, nowMs }: {
         <p className={`truncate ${FS.body} text-[#1B1F24]`}>
           <span className="tabular-nums text-[#5B6470]">단계 {step.no ?? "-"}/{step.total ?? "-"}</span>{" "}
           <b>{blockLabel(bundle, step.type)}</b>
+          {/* 영점 대기(Z — 장비 묶음 20 state.chambers.<c>.waitText '영점 대기 n s', 챔버K 상태 띠와 같은 칩). 기다리지 않으면 없음 */}
+          {cs?.waitText && <>{" "}<Chip tone="warn" className="tabular-nums">{cs.waitText}</Chip></>}
         </p>
       ) : (
         <p className={`truncate ${FS.body} text-[#5B6470]`}>{eng?.recipe_name ? `적재 '${String(eng.recipe_name)}'` : "적재된 레시피 없음"}</p>

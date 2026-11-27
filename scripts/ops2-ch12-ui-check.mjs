@@ -142,7 +142,7 @@ await esbuild.build({
       export { default as Ch12Run, ChamberRun, trendDefs, TREND_COLS12 } from "./components/ops2/ch12/Ch12Run";
       export { PcPanel, TspPanel, PresputterPanel, RobotPanel, CommonOps } from "./components/ops2/ch12/Ch12Aux";
       export { HeaterBox12, ThicknessBox12, ChamberDevices, VacuumBox12, ShutterBox12, GasBox12, PowerBox12 } from "./components/ops2/ch12/Ch12Devices";
-      export { StatusBand12 } from "./components/ops2/ch12/Ch12Status";
+      export { StatusBand12, StatusBar12 } from "./components/ops2/ch12/Ch12Status";
       export { default as Ch12Hmi, drawnTargets, plcAsk, plcContext, plcChamber, HAZARD_TEXT } from "./components/ops2/ch12/Ch12Hmi";
       export { default as Ch12Confirm, PlcConfirmBody, recordNote, isPlcAsk, runRed } from "./components/ops2/ch12/Ch12Confirm";
       export { connOf, connParts } from "./lib/ops2/chk/conn";
@@ -257,6 +257,34 @@ const chamberProps = (ch) => ({
         t.includes("적재 CH1 RF Pulse Ar · 공정 1/1") && !/\d\/\d+행/.test(t) && t.includes("▲ 목표 · │ 현재") && !t.includes("세로선")
         && gap.test(band) && textOf(band).includes("확정 전"),
         { run: t.match(/적재 .{0,40}/)?.[0], legend: t.match(/▲.{0,20}/)?.[0], band: band.match(/공정 끝까지.{0,200}/)?.[0] });
+}
+{
+  // Z — 영점 대기(장비 묶음 20 state.chambers.<c>.waitText '영점 대기 n s' — 챔버K state.run.waitText 와 같은 뜻): 단계 표시 옆 주의 칩
+  //   (상태 띠 칸·얇은 줄·운전 카드 머리·운전 대시보드 칸). 기다리지 않으면(null·키 없음) 지금과 같은 화면(같은 HTML)
+  const W = "영점 대기 12 s";
+  const withWait = (v) => ({ ...st, chambers: { ...st.chambers, ch1: { ...st.chambers.ch1, waitText: v } } });
+  const noKey = { ...st, chambers: { ...st.chambers, ch1: Object.fromEntries(Object.entries(st.chambers.ch1).filter(([k]) => k !== "waitText")) } };
+  const bandOf = (s) => render(U.StatusBand12, { bundle, st: s, connected: true, conn: { label: "장비 연결됨 · 1초 전", tone: "neutral" },
+    links: [], mode: "sim", equipment: "CH12-SIM", label: null, lock: noLock, onAsk: noop, nowMs, plcOk: true });
+  const barOf = (s) => render(U.StatusBar12, { bundle, st: s, connected: true, lock: noLock, onAsk: noop });
+  const runOf = (s) => render(U.ChamberRun, { ...chamberProps("ch1"), st: s });
+  const dashOf = (s) => render(U.DashChamberCell, { bundle, st: s, ch: "ch1", nowMs, online: true });
+  // 단계 글('단계 1/1')과 같은 줄(<p>·<span>) 안에 칩이 있는가
+  const sameLine = (html) => {
+    const i = html.indexOf("단계 1/1"), j = html.indexOf(W);
+    return i >= 0 && j > i && j - i < 800 && !/<\/p>|<p\b|<div\b|<\/div>/.test(html.slice(i, j));   // 단계 글 뒤, 줄(p·div)이 바뀌기 전
+  };
+  const views = [["band", bandOf], ["bar", barOf], ["run", runOf], ["dash", dashOf]];
+  const shown = Object.fromEntries(views.map(([k, f]) => [k, textOf(f(withWait(W))).includes(W)]));
+  const near = Object.fromEntries(views.filter(([k]) => k !== "bar").map(([k, f]) => [k, sameLine(f(withWait(W)))]));
+  const same = Object.fromEntries(views.map(([k, f]) => [k, f(withWait(null)) === f(noKey) && f(st) === f(noKey)]));
+  const barText = textOf(barOf(withWait(W)));
+  check("ui:zero-wait — 영점 대기 'n s'(묶음 20 waitText)가 단계 표시 옆에(상태 띠·얇은 줄·운전 카드·대시보드), 주의 칩. 기다리지 않으면 지금과 같은 화면",
+        "waitText" in st.chambers.ch1 && st.chambers.ch1.waitText === null                     // 장비가 열을 보낸다(지금 sim 은 기다리지 않음)
+        && Object.values(shown).every(Boolean) && Object.values(near).every(Boolean) && Object.values(same).every(Boolean)
+        && /단계 1\/1 · 영점 대기 12 s/.test(barText)
+        && (bandOf(withWait(W)).match(/영점 대기 12 s/g) ?? []).length === 1,
+        { wait: st.chambers.ch1.waitText, shown, near, same, bar: barText.match(/CH1.{0,60}/)?.[0] });
 }
 // U4 — 장비 박스·공통 장비는 상태 탭(Ch12Run view status), 운전 탭(view run)은 머리 카드·다음 공정·공정 화면
 const runP0 = { ...chamberProps("ch1"), plcOk: true, pcRecipes: [], getRow: async () => null, onEditSeq: noop, send: async () => ({}), notify: noop, onHmi: noop };

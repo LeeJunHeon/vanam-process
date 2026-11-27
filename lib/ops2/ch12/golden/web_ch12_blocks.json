@@ -1,15 +1,15 @@
 {
  "_출처": {
-  "Chamber.Total_program": "rewrite/v2 c19dd4b (c19dd4b51fecdafdeb9de14d0ef18b9ff7d67d7a)",
+  "Chamber.Total_program": "rewrite/v2 91b4d17 (91b4d17ea20a15525d5bcc0a941e796eef575bc2)",
   "dirty": false,
   "file": "v2/tests/golden/web_ch12_blocks.json",
   "defsVersion": 1,
-  "defsHash": "eef4864a577e15b938c92969df681489997d336cf4a30fd117d9c01b5a9bf6de",
+  "defsHash": "95b810330ba69e5e0156bdee42f4d0deae504d9ccb082772343f49636a4348c9",
   "설명": "_출처 밖은 장비 파일 그대로(손으로 고치지 않음). dirty=true 면 커밋 전 작업 트리에서 만든 것 — 커밋 뒤 python -m v2.tools.make_web_golden_ch12 --copy <포털> 로 다시 복사. npm run ops2:golden 이 확인"
  },
  "_설명": "챔버12 웹 검사 골든 — 블록 검사·시퀀스 편집(v2.tools.make_web_golden_ch12 가 만든다 — 손으로 고치지 않음). 모양은 생성기 머리말",
  "defsVersion": 1,
- "defsHash": "eef4864a577e15b938c92969df681489997d336cf4a30fd117d9c01b5a9bf6de",
+ "defsHash": "95b810330ba69e5e0156bdee42f4d0deae504d9ccb082772343f49636a4348c9",
  "defs": {
   "version": 1,
   "blocks": {
@@ -860,7 +860,7 @@
      "needs": "",
      "skippable": true,
      "skipCleanup": [
-      "메인 타이머 끝냄 → 다음 블록(끝 정지가 셔터·파워를 끔)",
+      "메인 타이머 끝냄 → 다음 블록(끝 정지에서 셔터·파워를 끕니다)",
       "OES 측정 정지"
      ],
      "pausable": true,
@@ -1862,7 +1862,7 @@
     "chuck_position": {
      "desc": "공정 전 Chuck 위치 up/mid/down",
      "unit": "",
-     "blank": "이동 안 함",
+     "blank": "이동하지 않음",
      "key": "chuck_position"
     },
     "main_shutter": {

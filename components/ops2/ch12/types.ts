@@ -49,6 +49,7 @@ export type ChamberState = {
           elapsedS: number | null; remainS: number | null } | null;
   remainS: number | null; etaRemainingS: number | null; minTotalS: number | null; paused: boolean | null; alarms: string[];
   stepLabel?: string | null;                                                      // 묶음 16 — 진행 중 동작의 화면 이름(step_labels)
+  waitText?: string | null;                                                       // 묶음 20(Z) — 단계 안의 기다림 이름('영점 대기 n s', 챔버K state.run.waitText)
 };
 
 /** 엔진 web_state(아직 장비가 보내지 않을 수 있다 — 있으면 쓴다). 공정 엔진 state_dict 와 같은 키를 기대한다 */

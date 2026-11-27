@@ -73,6 +73,7 @@ export function ChamberCell({ bundle, st, ch, nowMs, online }: { bundle: B; st: 
         <>
           <span className={`min-w-0 truncate ${FS.body} text-[#1B1F24]`}>
             <b>{eng?.recipe_name ? String(eng.recipe_name) : "공정"}</b>{` · 단계 ${step.no ?? "-"}/${step.total ?? "-"} ${blockLabel(bundle, step.type)}`}
+            {cs?.waitText && <>{" "}<Chip tone="warn" className="tabular-nums">{cs.waitText}</Chip></>}{/* 영점 대기(Z) */}
           </span>
           <div className="h-2 overflow-hidden rounded-full bg-[#E3E6EA]" role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label={`${name} 공정 진행`}>
             <i className="block h-full rounded-full bg-[#1D4ED8]" style={{ width: `${pct}%` }} />
