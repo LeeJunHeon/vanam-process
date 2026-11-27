@@ -445,7 +445,7 @@ export default function Ch12Run(p: RunProps) {
           </div>
         </div>
         <div className="relative order-last min-w-0 @min-[1360px]/run:order-none" data-alerts="">
-          <RunAlerts bundle={bundle} st={st} feed={feed} onLog={p.onLog} />
+          <RunAlerts bundle={bundle} st={st} feed={feed} onLog={p.onLog} nowMs={nowMs} />
         </div>
         {/* 공통 장비(W-20 — 챔버 장비 박스와 같은 틀·같은 격자 기준: 이 영역 폭 950px 이상 3개, 650px 이상 2개, 그 밖 1개) */}
         <div className="@container/common min-w-0 @min-[1360px]/run:col-span-4">

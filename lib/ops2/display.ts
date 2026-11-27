@@ -23,3 +23,24 @@ export function chkDeviceChoice<T extends { equipment: string }>(all: T[], saved
   const picked = has(saved) ? (saved as string) : has(CHK_BASE_ID) ? CHK_BASE_ID : list[0]?.equipment ?? null;
   return { list, picked, showPicker: list.length > 1 };
 }
+
+// ───────────── 장비 종류별 고르기(챔버12 화면·운전 대시보드 — 챔버K 위 함수와 같은 규칙, 종류를 인자로) ─────────────
+export type EquipKind = "chk" | "ch12";
+/** 종류마다 기준 장비 ID — 이 ID 와 그 시뮬레이터(-SIM)만 그 종류 */
+export const BASE_ID: Record<EquipKind, string> = { chk: CHK_BASE_ID, ch12: "CH12" };
+
+/** 그 종류의 장비인가 — 기준 ID 가 같은 것(CH12·CH12-SIM / CHK2·CHK2-SIM) */
+export function isEquipmentOf(kind: EquipKind, id: string | null | undefined): boolean {
+  if (!id) return false;
+  return (id.endsWith("-SIM") ? id.slice(0, -4) : id) === BASE_ID[kind];
+}
+
+/** 켜진 장비(/api/ops2/devices) 중 그 종류만, 저장된 선택이 그 안에 없으면 기준 ID(그것도 꺼져 있으면 목록의 첫 장비).
+ *  showPicker = 고를 장비가 둘 이상일 때만 고르기 상자 */
+export function deviceChoiceOf<T extends { equipment: string }>(kind: EquipKind, all: T[], saved: string | null | undefined) {
+  const list = all.filter((d) => isEquipmentOf(kind, d.equipment));
+  const has = (e: string | null | undefined) => !!e && list.some((d) => d.equipment === e);
+  const base = BASE_ID[kind];
+  const picked = has(saved) ? (saved as string) : has(base) ? base : list[0]?.equipment ?? null;
+  return { list, picked, showPicker: list.length > 1 };
+}

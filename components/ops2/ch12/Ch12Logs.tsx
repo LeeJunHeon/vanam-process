@@ -11,7 +11,7 @@ import { AlertOctagon, AlertTriangle, BellRing, CheckSquare, Square } from "luci
 import { FS, Btn, Card, Chip, Empty, Tabs } from "../chk/kit";
 import { useChk2Mode } from "../chk/mode";
 import { adjustLine, fmtDur, logLine, type LogLine } from "../chk/text";
-import { withoutSource } from "../chk/logView";
+import { ALERT_KEEP, ALERT_MAX_AGE_MS, withoutSource } from "../chk/logView";
 import type { FeedItem } from "../chk/useChk2";
 import { fmtKst } from "@/lib/ops2/time";
 import { byWord } from "@/lib/ops2/chk/plain";
@@ -180,26 +180,43 @@ function whenText(iso: string): string {
  *  챔버에 딸린 줄은 출처 앞에 장소 이름). 활성 알람 = 챔버 알람(장소 이름 + 사유 이름) + 장비 알람.
  *  운전 탭 영역(컨테이너 run) 1360px 이상: 오른쪽 1/4 띠 — 높이는 왼쪽 묶음을 따르고(페이지를 늘이지 않음) 목록이 남은 높이를 채워 스크롤,
  *  그보다 좁으면 맨 아래 한 줄 전체 · 목록 최대 240px */
-export function RunAlerts({ bundle, st, feed, onLog, max = 60 }: {
-  bundle: Ch12Bundle | null; st: Ch12State | null; feed: FeedItem[]; onLog?: () => void; max?: number;
-}) {
-  const { detail } = useChk2Mode();
-  const lines = useMemo(() => feed.map((e) => ({ e, ...ch12LogLine(bundle, e) })).filter((r) => r.main).slice(-max).reverse()
-    .map((r) => ({ ...r, source: sourceWithPlace(bundle, r.e, r) })), [bundle, feed, max]);
+/** 알림 줄(챔버K logView.alertLines 와 같은 규칙 — 사용자 결정 2026-11-26): 경고·오류 수준 사건, 거부·실패한 명령(설정 결과 포함),
+ *  정상이 아니게 끝난 공정만. 24시간이 지난 줄은 빼고 최근 keep(20) 줄, 최신이 위. 줄 글은 챔버12 로그 줄(ch12LogLine — 출처 앞에 장소 이름).
+ *  활성 알람은 부르는 쪽이 따로(alarmList12). 운전 대시보드도 같은 함수 */
+export function alertLines12(bundle: Ch12Bundle | null, feed: FeedItem[], nowMs: number, keep = ALERT_KEEP) {
+  return feed.map((e) => ({ e, ...ch12LogLine(bundle, e) }))
+    .filter((r) => (r.level === "warn" || r.level === "error" || r.level === "critical") && !(nowMs - Date.parse(r.e.ts) > ALERT_MAX_AGE_MS))
+    .slice(-keep).reverse().map((r) => ({ ...r, source: sourceWithPlace(bundle, r.e, r) }));
+}
+
+/** 활성 알람(챔버별 <c>.proc.alarms + state.alarms) — 이름은 묶음 사유 이름(없으면 '알람', 코드는 상세 보기에서만) */
+export function alarmList12(bundle: Ch12Bundle | null, st: Ch12State | null, detail: boolean): { ruleId: string; text: string; tip?: string; chamber?: string }[] {
   const name = (code: string) => { const l = reasonLabel(asChk(bundle), code); return l !== code ? l : detail ? code : "알람"; };
-  const alarms: { ruleId: string; text: string; tip?: string }[] = [];
+  const alarms: { ruleId: string; text: string; tip?: string; chamber?: string }[] = [];
   const own = new Set<string>();
   for (const c of ["ch1", "ch2", "pc", "tsp"] as const) {
     for (const r of chamberState(st, c)?.alarms ?? []) {
       own.add(r);
-      alarms.push({ ruleId: `${c}:${r}`, text: `${placeName(bundle, c)} ${name(r)}`, tip: reasonTip(asChk(bundle), r, detail) });
+      alarms.push({ ruleId: `${c}:${r}`, text: `${placeName(bundle, c)} ${name(r)}`, tip: reasonTip(asChk(bundle), r, detail), chamber: c });
     }
   }
   for (const a of st?.alarms ?? []) {
     if (own.has(a.ruleId)) continue;
     const t = a.code ? reasonLabel(asChk(bundle), a.code) : a.ruleId;
-    alarms.push({ ruleId: a.ruleId, text: a.chamber ? `${placeName(bundle, a.chamber)} ${t}` : t, tip: reasonTip(asChk(bundle), a.code, detail) });
+    alarms.push({ ruleId: a.ruleId, text: a.chamber ? `${placeName(bundle, a.chamber)} ${t}` : t, tip: reasonTip(asChk(bundle), a.code, detail),
+      chamber: a.chamber ?? undefined });
   }
+  return alarms;
+}
+
+export function RunAlerts({ bundle, st, feed, onLog, nowMs }: {
+  bundle: Ch12Bundle | null; st: Ch12State | null; feed: FeedItem[]; onLog?: () => void; nowMs: number;
+}) {
+  const { detail } = useChk2Mode();
+  // 1분마다만 다시 거른다(24시간 기준 — 매초 바뀔 일이 없다)
+  const minute = Math.floor(nowMs / 60_000);
+  const lines = useMemo(() => alertLines12(bundle, feed, minute * 60_000), [bundle, feed, minute]);
+  const alarms = alarmList12(bundle, st, detail);
   return (
     <Card title={<><BellRing size={15} /> {CARD.alerts}</>} right={onLog && <Btn size="sm" kind="ghost" onClick={onLog}>기록 전체 보기</Btn>}
       className="flex flex-col @min-[1360px]/run:absolute @min-[1360px]/run:inset-0">
@@ -221,7 +238,7 @@ export function RunAlerts({ bundle, st, feed, onLog, max = 60 }: {
             </li>
           ))}
         </ul>
-      ) : <Empty>최근 기록이 없습니다</Empty>}
+      ) : <Empty>알림 없음</Empty>}
     </Card>
   );
 }
