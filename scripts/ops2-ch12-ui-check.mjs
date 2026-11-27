@@ -448,10 +448,10 @@ const statusView = (over = {}) => render(U.Ch12Run, { ...runP0, view: "status", 
         && t.includes("PC-1") && !/<textarea|font-mono/.test(html) && devHits(t).length === 0 && fx.cmd.pc_sel.ok, { b, dev: devHits(t) });
   const rg = U.PC.pcRanges(bundle);
   const good = { use_ch: "2", process_name: "PC", base_pressure: "5e-6", gas_flow: "20", working_pressure: "2", rf_power: "100", process_time: "1" };
-  check("ui:pc-recipe — PC 레시피 열(v1 PC CSV 첫 행)·범위(묶음 PC_DEFAULT_*)·검사(빈 칸·범위 밖 막음)",
+  check("ui:pc-recipe — PC 레시피 열(v1 PC CSV 첫 행)·범위(묶음 PC_DEFAULT_*, RF Power 위 한도 = PC_RF_OPERATING_MAX_W 340)·검사(빈 칸·범위 밖 막음)",
         U.PC.checkPcRow(good, rg).length === 0 && U.PC.checkPcRow({ ...good, rf_power: "9999" }, rg)[0]?.includes("밖입니다")
         && U.PC.checkPcRow({ ...good, gas_flow: "" }, rg)[0]?.includes("값을 넣으세요") && U.PC.checkPcRow({ ...good, use_ch: "3" }, rg).length === 1
-        && rg.rf_power.max === 600 && U.PC.PC_FIELDS.map((f) => f.key).join() === "use_ch,process_name,base_pressure,gas_flow,working_pressure,rf_power,process_time",
+        && rg.rf_power.max === 340 && U.PC.PC_FIELDS.map((f) => f.key).join() === "use_ch,process_name,base_pressure,gas_flow,working_pressure,rf_power,process_time",
         rg);
 }
 {
