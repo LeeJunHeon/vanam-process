@@ -941,6 +941,12 @@ const statusView = (over = {}) => render(U.Ch12Run, { ...runP0, view: "status", 
         on1.includes("공정 중") && on1.includes("단계") && !on1.includes("미연결") && off1.includes("미연결") && !off1.includes("공정 중")
         && off2.includes("미연결") && !/대기(?! 중)/.test(off2.replace(/챔버 압력|Ion Gauge 압력/g, "")) && !on2.includes("미연결"),
         { on1: on1.slice(0, 80), on2: on2.slice(0, 80), off1: off1.slice(0, 80), off2: off2.slice(0, 80) });
+  // U7 390px — 추세 범례가 넓이를 넘으면 다음 줄로(챔버K 와 같은 fitLegend), 위 띠는 좁으면 정지 버튼이 챔버 칸 아래 줄로
+  const runSrc = readFileSync(join(root, "components/ops2/ch12/Ch12Run.tsx"), "utf8");
+  const band = render(U.StatusBand12, { bundle, st, connected: true, conn: { label: "연결됨", tone: "neutral" },
+    links: [], mode: "sim", equipment: "CH12-SIM", label: null, lock: noLock, onAsk: noop, nowMs, plcOk: true });
+  check("ui:narrow-390 — 추세 그래프 fitLegend(범례 다음 줄)·위 띠 챔버 칸 flex-basis 18rem(좁으면 정지 버튼 아래 줄)",
+        /<Chk2Trend[^>]*\bfitLegend\b/.test(runSrc.replace(/\n\s*/g, " ")) && band.includes("flex-[1_1_18rem]"), null);
 }
 
 // ───────────── 2) logic.ts ─────────────

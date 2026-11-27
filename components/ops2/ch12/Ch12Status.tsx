@@ -141,7 +141,7 @@ export function StatusBand12({ bundle, st, connected, conn, links, mode, equipme
         {extra && <span className="ml-auto flex items-center gap-2">{extra}</span>}
       </div>
       <div className="mt-2 flex flex-wrap items-start gap-3">
-        <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-2">
+        <div className="grid min-w-0 flex-[1_1_18rem] gap-2 sm:grid-cols-2">   {/* 18rem 보다 좁으면 정지 버튼이 아래 줄로(390px 에서 챔버 칸이 눌리지 않게) */}
           <ChamberCell bundle={bundle} st={st} ch="ch1" connected={connected} nowMs={nowMs} />
           <ChamberCell bundle={bundle} st={st} ch="ch2" connected={connected} nowMs={nowMs} />
         </div>

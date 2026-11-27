@@ -399,7 +399,7 @@ export function ChamberRun(p: ChamberProps) {
       <KeyValues bundle={bundle} st={st} ch={ch} running={running} />
 
       <Chk2Trend trend={p.trend} equipment={p.equipment} runId={cs?.runId ?? null} local={p.local} nowMs={nowMs}
-        defs={trendDefs(bundle, ch)} title={`${label} ${CARD.trend}`} edgeTicks />
+        defs={trendDefs(bundle, ch)} title={`${label} ${CARD.trend}`} fitLegend edgeTicks />   {/* 범례가 넓이를 넘으면 다음 줄로(챔버K 와 같게, 390px) */}
 
       </>}
       {busy && <Spectra feed={feed} st={st} ch={ch} />}
