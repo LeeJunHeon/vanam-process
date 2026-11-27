@@ -28,10 +28,11 @@ const SPEC: Record<DevKey, { title: string; groups: string[]; comm: string[]; ex
 };
 const APPLY: Record<string, string> = { live: "바로 적용", idle: "대기 중 적용", restart: "재시작 필요" };
 
-/** 그 장비의 설정 — 묶음 순서 그대로(비밀값 제외) */
-export function settingsOf(bundle: Bundle | null, dev: DevKey): { main: ParamDef[]; comm: ParamDef[] } {
+/** 그 장비의 설정 — 묶음 순서 그대로(비밀값 제외). 아무 동작도 하지 않는 설정(묶음 25 params[].unused — W-25 C2)은
+ *  withUnused(상세 보기)일 때만 */
+export function settingsOf(bundle: Bundle | null, dev: DevKey, withUnused = false): { main: ParamDef[]; comm: ParamDef[] } {
   const s = SPEC[dev];
-  const ps = (bundle?.params ?? []).filter((p) => p.scope !== "secret");
+  const ps = (bundle?.params ?? []).filter((p) => p.scope !== "secret" && (withUnused || !p.unused));
   const main = ps.filter((p) => s.groups.includes(p.group ?? "") || (!!s.extra && p.group === "process" && s.extra.test(p.key)));
   return { main, comm: ps.filter((p) => s.comm.includes(p.group ?? "")) };
 }
@@ -52,6 +53,7 @@ function Row({ p, editor, open, onOpen }: { p: ParamDef; editor?: (key: string) 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className={`min-w-0 flex-1 basis-48 ${FS.body} text-[#1B1F24]`} title={p.desc || undefined}>
           {p.label || p.key}{detail && <span className={`ml-1.5 font-mono ${FS.small} text-[#8A929D]`}>{p.key}</span>}
+          {p.unused && <span className={`ml-1.5 rounded bg-[#EEF0F3] px-1 ${FS.small} text-[#5B6470]`}>쓰지 않음</span>}
         </span>
         <span className={`${FS.body} font-bold tabular-nums text-[#133A7C]`}>
           {valueText(p)}{p.unit && <span className={`ml-1 ${FS.small} font-normal text-[#5B6470]`}>{p.unit}</span>}
@@ -69,7 +71,8 @@ export default function Chk2SettingsDrawer({ dev, bundle, onClose, editor, contr
   editor?: (key: string) => ReactNode;          // [수정] — 설정 탭 편집 흐름(Chk2Config onlyKeys). 없으면 보기만(노트북)
   controller?: ReactNode;                       // 컨트롤러 값(W-22) — 장비가 값을 줄 때만
 }) {
-  const { main, comm } = settingsOf(bundle, dev);
+  const { detail } = useChk2Mode();
+  const { main, comm } = settingsOf(bundle, dev, detail);
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [commOpen, setCommOpen] = useState(false);
   const box = useRef<HTMLElement | null>(null);

@@ -177,10 +177,10 @@ export function Btn({ kind = "neutral", size = "md", lock, disabled, onClick, ti
 }) {
   const h = size === "lg" ? `h-11 px-4 ${FS.body}` : size === "md" ? `h-10 px-3 ${FS.body}` : `h-8 px-2.5 ${FS.small}`;
   const locked = !!lock;
-  const { lockPrefix } = useChk2Mode();          // CH1&2 만 바꾼다(W-19 — 없으면 지금 글 그대로)
+  const { lockPrefix } = useChk2Mode();          // CH1&2 는 자기 앞말(LOCK_PREFIX)을 넘긴다. 없으면 '잠김: '(W-25 B1 — 예전 '잠김 — ')
   return (
     <button type="button" onClick={onClick} disabled={locked || disabled} aria-label={ariaLabel}
-      title={locked ? `${lockPrefix ?? "잠김 — "}${lock}` : title}
+      title={locked ? `${lockPrefix ?? "잠김: "}${lock}` : title}
       className={`inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-[10px] font-semibold
         outline-offset-2 focus-visible:outline-2 focus-visible:outline-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-45
         ${h} ${BTN[kind]} ${className}`}>

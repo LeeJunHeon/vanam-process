@@ -133,4 +133,11 @@ export const OLD_TO_NEW: [RegExp, string][] = [
   [/블록/g, "단계"], [/가스 도입/g, "가스 주입"], [/정상 끝 정지/g, "공정 끝"], [/셔터 딜레이/g, "Shutter Delay"], [/메인 셔터/g, "Main 셔터"],
   [/램프다운/g, "천천히 내리기"], [/램프업/g, "천천히 올리기"], [/램프/g, "승온"], [/로컬/g, "노트북"],
 ];
-export const toTerms = (t: string) => OLD_TO_NEW.reduce((x, [re, to]) => x.replace(re, to), t);
+/** 조사 — 낱말 뒤에 이것만 붙으면(블록을·스텝이) 바꾼다. 그 밖의 한글이 이어지면 다른 낱말이라 바꾸지 않는다(챔버12 terms 와 같은 규칙) */
+const JOSA = ["에서", "에게", "으로", "까지", "부터", "보다", "처럼", "마다", "이나", "이랑", "하고", "이다", "입니다", "이며", "이고", "이면", "이라",
+  "은", "는", "이", "가", "을", "를", "의", "에", "께", "로", "와", "과", "도", "만", "나", "랑", "인", "라"].join("|");
+/** 낱말 단위(W-25 A4) — 앞에 한글이 붙어 있으면(클램프) 바꾸지 않고, 뒤에는 조사만 붙거나 한글이 아닌 글자일 때만 바꾼다 */
+const word = (src: string) => new RegExp(`(?<![가-힣])(?:${src})(?=(?:${JOSA})*(?![가-힣]))`, "g");
+/** 챔버K 낱말 바꾸기 규칙(차례대로) — OLD_TO_NEW 를 낱말 단위로 감싼 것(OLD_TO_NEW 자체는 챔버12 가 같이 쓰므로 그대로) */
+export const TERM_RULES: [RegExp, string][] = OLD_TO_NEW.map(([re, to]): [RegExp, string] => [word(re.source), to]);
+export const toTerms = (t: string) => TERM_RULES.reduce((x, [re, to]) => x.replace(re, to), t);

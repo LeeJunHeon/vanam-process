@@ -49,6 +49,7 @@ export type ParamDef = {
   key: string; label?: string; unit?: string; type?: string; current?: unknown; default?: unknown; pending?: unknown;
   group?: string; min?: number | null; max?: number | null; enum?: unknown[] | null; pattern?: string | null;
   safety?: string; apply?: string; scope?: string; role?: string; webLocked?: boolean; desc?: string; note?: string;
+  unused?: boolean;                                // 묶음 25(W-25 C2) — 아무 동작도 하지 않는 설정(평소 보기에서 숨김)
   v1Key?: string | null; v1Source?: string | null; v1Default?: unknown; pendingConfirm?: boolean;
   choices?: unknown[] | null;                    // 묶음 15 — int·float 의 허용 숫자 목록(있으면 선택 목록으로 그린다)
   enumLabels?: Record<string, string> | null;    // 묶음 17 — enum 값의 화면 이름(SPn_SOURCE "프로그램 값"·"장비 값")

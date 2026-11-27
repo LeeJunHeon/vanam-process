@@ -26,7 +26,9 @@ const OLD_TERMS = ["인터록", "이온 게이지", "이오나이저", "필라�
   "건 셔터", "Gun 1", "Gun 2", "순방향", "반사", "설정점", "끄기 순서", "끄기 단계", "감시 신호", "램프", "런 이력", "사건", "로컬",
   "장비 정의", "실제/설정", "안전·유틸리티", "유틸리티", "셔터·안전",
   // W-19: 챔버12 용어표 옛 말(장비 묶음 16 test_web_labels OLD_TERMS 와 같은 목록)
-  "로터리", "터보 펌프", "러핑", "포어라인", "벤트", "게이트 밸브", "로드락", "4핀", "척 모터", "플라즈마 클리닝", "메인 셔터", "시퀀스"];
+  "로터리", "터보 펌프", "러핑", "포어라인", "벤트", "게이트 밸브", "로드락", "4핀", "척 모터", "플라즈마 클리닝", "메인 셔터", "시퀀스",
+  // W-25 A6(사용자 결정 2026-11-26): '두절' → '끊김' 하나로
+  "두절"];
 // W-21: 챔버K 화면에서 바꾼 말(가스 도입 → 가스 주입, 정상 끝 정지 → 공정 끝, 셔터 딜레이 → Shutter Delay, 레시피 탭 → 레시피 열기) — 챔버K 파일만
 const OLD_TERMS_CHK = ["가스 도입", "정상 끝 정지", "셔터 딜레이", "레시피 탭"];
 // '블록'·'스텝'은 레시피 편집(레시피 탭) 파일에서만 — 챔버12 는 레시피 탭·블록 정의·v1 행 검사·레시피 저장
@@ -61,7 +63,7 @@ const EXCEPT = [
   ["lib/ops2/chk/blocks.ts", "반복 횟수를 줄일 것"], ["lib/ops2/chk/blocks.ts", "승온 시작"], ["lib/ops2/chk/blocks.ts", "도달 대기 안 함"],
   ["lib/ops2/chk/recipe.ts", "DC 를 쓸 때만"], ["lib/ops2/chk/recipe.ts", "파이썬 램프로 실행"], ["lib/ops2/chk/recipe.ts", "저장된 값을 읽지 못함"],
   // CH1&2 가 같은 부품으로 그리는 글(kit·Chk2Config) — 바꾸면 CH1&2 화면이 달라진다. CH1&2 와 같은 문제로 보고만
-  ["components/ops2/chk/kit.tsx", "잠김 — "], ["components/ops2/chk/kit.tsx", "— 명령을 장비에 보냅니다."],
+  ["components/ops2/chk/kit.tsx", "— 명령을 장비에 보냅니다."],
   ["components/ops2/chk/Chk2Config.tsx", "보내지 못함"],
   ["components/ops2/chk/Chk2Config.tsx", "장비 대기 키 —"],
   ["components/ops2/chk/Chk2Config.tsx", "장비가 지금 쓰는 값을 보여 줍니다"],
@@ -119,6 +121,8 @@ function* files(dir) {
 }
 
 const hits = [];
+const tipHits = [];
+const TIP_DASH = /[가-힣]\s*—\s/;
 const except = (rel, t) => EXCEPT.some(([f, part]) => (f === "*" || f === rel) && t.includes(part));
 const add = (rel, line, t) => {
   const p = problems(rel, t);
@@ -136,6 +140,14 @@ const LISTS = [...["components/ops2/chk", "lib/ops2/chk", "components/ops2/ch12"
     const visit = (n) => {
       if (ts.isImportDeclaration(n) || ts.isExportDeclaration(n)) return;
       if (ts.isJsxAttribute(n) && SKIP_ATTR.has(n.name.getText(sf))) return;
+      // W-25 B1: 도움말(title·data-tip 속성) 속 '한글 — ' 꼴 — 잠긴 버튼 앞말 '잠김: ' 처럼 쌍점으로
+      if (ts.isJsxAttribute(n) && ["title", "data-tip"].includes(n.name.getText(sf)) && n.initializer) {
+        const parts = [];
+        const grab = (x) => { if (ts.isStringLiteral(x) || ts.isNoSubstitutionTemplateLiteral(x)) parts.push(x.text);
+          else if (ts.isTemplateExpression(x)) parts.push(x.head.text, ...x.templateSpans.map((y) => y.literal.text)); ts.forEachChild(x, grab); };
+        grab(n.initializer);
+        for (const t of parts) if (TIP_DASH.test(t) && !except(rel, t)) tipHits.push(`${rel}:${lineOf(n)}  [도움말 속 '한글 — '] ${t.trim().slice(0, 100)}`);
+      }
       if (ts.isJsxText(n)) add(rel, lineOf(n), n.getText(sf));
       else if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) add(rel, lineOf(n), n.text);
       else if (ts.isTemplateExpression(n)) {
@@ -147,6 +159,29 @@ const LISTS = [...["components/ops2/chk", "lib/ops2/chk", "components/ops2/ch12"
     };
     visit(sf);
   }
+}
+
+hits.push(...tipHits);
+// 도움말 검사 자체가 잡는가
+if (!TIP_DASH.test("잠김 — 장비 끊김") || TIP_DASH.test("잠김: 장비 끊김")) { console.log("도움말 '한글 — ' 검사가 잘못됨"); process.exit(1); }
+
+// W-25 A4: 화면 용어 바꿈(lib/ops2/chk/terms.ts toTerms)은 낱말 경계에서만 — 낱말 속(클램프)은 그대로, 조사만 붙은 낱말은 바꿈
+{
+  const esbuild = await import("esbuild");
+  const { mkdirSync } = await import("node:fs");
+  const { pathToFileURL } = await import("node:url");
+  const cache = join(root, "node_modules", ".cache", "ops2-chk-wording");
+  mkdirSync(cache, { recursive: true });
+  const out = join(cache, "terms.mjs");
+  await esbuild.build({ absWorkingDir: root, bundle: true, format: "esm", platform: "node", outfile: out, logLevel: "warning",
+    tsconfig: join(root, "tsconfig.json"), stdin: { resolveDir: root, loader: "ts", contents: `export { toTerms } from "./lib/ops2/chk/terms";` } });
+  const { toTerms } = await import(`${pathToFileURL(out).href}?t=${Date.now()}`);
+  const CASES = [["DAC 포화 클램프 해제", "DAC 포화 클램프 해제"], ["RF 램프다운", "RF 천천히 내리기"], ["스텝 3", "단계 3"], ["블록을 고름", "단계을 고름"],
+    ["히터 램프 2 °C/min", "히터 승온 2 °C/min"], ["반사파 대기", "Reflected 대기"], ["도어 열림", "Door 열림"], ["방출 전류", "Emission 전류"],
+    ["로컬에서", "노트북에서"], ["이벤트 3", "이벤트 3"], ["실제값", "실제값"], ["인터록이 꺼짐", "인터락이 꺼짐"]];
+  const bad = CASES.filter(([a, b]) => toTerms(a) !== b);
+  for (const [a, b] of bad) hits.push(`lib/ops2/chk/terms.ts  [용어 바꿈 낱말 경계] '${a}' → '${toTerms(a)}' (기대 '${b}')`);
+  console.log(`용어 바꿈 낱말 경계 ${CASES.length}경우 — 다름 ${bad.length}`);
 }
 
 // 골든 묶음(있으면) — 화면에 나오는 이름·설명
@@ -173,7 +208,7 @@ const DESC_BAD = [
   ["장비 명령 글자", /(?<![A-Za-z0-9])(R\d{1,3}|MEAS:\w+\??|OUTP\??|FACT:[\w-]+\??|VOLT:\w+\??|CURR:\w+\??|SYST:\w+\??|\*IDN\?|\*RST|APPLy|[QSDLMXVPWZ]\d{1,3}|D0\d{4}|M0\d{4}|X\d\d|S\d\d[A-Z]?)(?![A-Za-z0-9])/],
   ["금지 문구", /—|안 ?(함|씀|됨)(?![가-힣])|못 ?함(?![가-힣])|미룸|(?<![가-힣])(켬|끔)(?![가-힣])/],
   ["옛 말", new RegExp(["인터록", "이온 게이지", "필라멘트", "디개스", "방출", "냉각수", "도어", "차단 ?밸브", "메인 밸브", "순방향", "반사", "설정점",
-    "램프", "블록", "스텝", "사건", "로컬", "시퀀스", "벤트", "로터리", "터보 펌프", "가스 도입", "정상 끝 정지", "셔터 딜레이"].join("|"))],
+    "램프", "블록", "스텝", "사건", "로컬", "시퀀스", "벤트", "로터리", "터보 펌프", "가스 도입", "정상 끝 정지", "셔터 딜레이", "두절"].join("|"))],
 ];
 function descProblems(t) {
   const out = DESC_BAD.filter(([, re]) => re.test(t)).map(([n]) => n);

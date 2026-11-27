@@ -216,7 +216,8 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
     return () => { off = true; };
   }, [cmp, fetchVersion]);
 
-  const params = useMemo(() => (bundle?.params ?? []).filter((p) => p.scope !== "secret"), [bundle]);
+  // 아무 동작도 하지 않는 설정(묶음 25 unused — W-25 C2)은 상세 보기에서만('쓰지 않음' 표시). 그 밖의 묶음(챔버12·옛 장비)은 unused 가 없어 그대로
+  const params = useMemo(() => (bundle?.params ?? []).filter((p) => p.scope !== "secret" && (detail || !p.unused)), [bundle, detail]);
   // 묶음 고르기 순서 = 묶음 paramGroups 순서(v15 — 장비별 통신 묶음이 장비 순서대로), 거기 없는 묶음은 뒤에 나온 순서대로
   const groups = useMemo(() => {
     const have = [...new Set(params.map((p) => p.group ?? "기타"))];
@@ -452,6 +453,7 @@ export default function Chk2Config({ equipment, bundle, st, perms, connected, re
                             {(!keyInDetail || detail) && <p className={`font-mono ${FS.small} text-[#5B6470]`}>{p.key}</p>}
                             <span className="flex flex-wrap gap-0.5">
                               {p.webLocked && <Tag kind="lock">노트북 설정 파일로만</Tag>}
+                              {p.unused && <Tag kind="info" title="프로그램이 이 값을 쓰지 않습니다. 저장된 설정이 깨지지 않게 남겨 둔 설정입니다.">쓰지 않음</Tag>}
                               {overridden.has(p.key) && (
                                 <Tag kind="info" title="노트북 local_override.json 이 정한 키라 웹 적용 값은 저장 값 기준이고 실행은 덮어쓰기 값">
                                   노트북 덮어쓰기 — 지금 실행 값 {ov.overridden && p.key in ov.overridden && ov.overridden[p.key] !== null ? show(ov.overridden[p.key]) : "?"}

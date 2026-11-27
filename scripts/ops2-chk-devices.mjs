@@ -3,6 +3,9 @@
 //     CHK2-SIM 을 끄면 하나(상자 없음), 저장된 선택이 CH12·꺼진 장비면 CHK2
 //  ② POST /api/ops2/admin/devices/[equipment]/enabled — 관리자만(아니면 403), 바꾸면 enabled·사건 한 줄(누가),
 //     같은 값이면 사건 없음, 없는 장비 404. DB·로그인·SSE 는 메모리 대역(esbuild alias)으로 — 실제 DB 에 닿지 않는다.
+//  ③ W-25 C1 POST /api/ops2/uplink/ingest 의 끝 표시("bye": true): 끝 표시 뒤 새 실행이 바로 받아들여짐, 끝 표시 없이 끊기면
+//     지금과 같음(조용한 시간 전 409), 살아 있는 다른 실행이 있으면 여전히 409, 주인이 아닌 실행의 끝 표시는 주인을 비우지 않음.
+//     주인 자리(lease)는 claimLease·releaseLease 의 SQL 조건을 그대로 옮긴 메모리 대역
 import { mkdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -96,6 +99,51 @@ r = await call("NOPE", { enabled: false }, "admin");
 eq("없는 장비 → 404", r[0], 404);
 r = await call("CHK2", { enabled: "no" }, "admin");
 eq("enabled 가 참·거짓이 아님 → 400", r[0], 400);
+
+console.log("③ 정상 종료 끝 표시(bye) — 주인 자리");
+{
+  const lease = { holder: null, seen: null };
+  globalThis.__lease = lease;
+  const mocks2 = {
+    "@/lib/ops2/ingest": `const L = () => globalThis.__lease; export const LEASE_MS = 30000;
+      export async function claimLease(eq, inst, now) { const s = L();      // WHERE holder IS NULL OR = inst OR seen IS NULL OR seen < now − LEASE
+        if (!s.holder || s.holder === inst || !s.seen || now.getTime() - s.seen > LEASE_MS) { const prev = s.holder; s.holder = inst; s.seen = now.getTime(); return { ok: true, prev }; }
+        return { ok: false, holder: s.holder, quietMs: now.getTime() - s.seen }; }
+      export async function releaseLease(eq, inst) { const s = L(); if (s.holder === inst) { s.holder = null; s.seen = null; return true; } return false; }
+      export async function processIngest() { return { acked: [], needWebSchema: false, fallback: 0 }; }
+      export const ingestMaxBytes = () => 1000000; export const sqlState = () => null; export const stripNul = (x) => x;`,
+    "@/lib/ops2/db": `export const ops2Db = { ops2Device: { async findUnique() { return { tokenHash: "h", enabled: true }; } } };`,
+    "@/lib/ops2/token": `export const tokenMatches = () => true;`,
+    "@/lib/ops2/commands": `export async function commandsForPost() { return []; }`,
+    "@/lib/ops2/body": `export async function readLimited(req) { return req.text(); }`,
+    "next/server": mocks["next/server"],
+  };
+  const plugin2 = {
+    name: "mocks2",
+    setup(b) {
+      b.onResolve({ filter: /^(@\/lib\/ops2\/(ingest|db|token|commands|body)|next\/server)$/ }, (a) => ({ path: a.path, namespace: "m2" }));
+      b.onLoad({ filter: /.*/, namespace: "m2" }, (a) => ({ contents: mocks2[a.path], loader: "js" }));
+    },
+  };
+  const out2 = join(cache, "ingest.mjs");
+  await esbuild.build({ absWorkingDir: root, bundle: true, format: "esm", platform: "node", outfile: out2, logLevel: "warning", plugins: [plugin2],
+    tsconfig: join(root, "tsconfig.json"), stdin: { resolveDir: root, loader: "ts", contents: `export { POST } from "./app/api/ops2/uplink/ingest/route";` } });
+  const I = await import(`${pathToFileURL(out2).href}?t=${Date.now()}`);
+  const post = async (instance, bye) => {
+    const body = { equipment: "CHK2", instance, schemaHash: "s", messages: [], ...(bye ? { bye: true } : {}) };
+    const r = await I.POST(new Request("http://x/ingest", { method: "POST", body: JSON.stringify(body), headers: { authorization: "Bearer t" } }));
+    return r.status;
+  };
+  eq("실행 A 연결", await post("A"), 200);
+  eq("A 살아 있음 → 새 실행 B 409", await post("B"), 409);
+  eq("끝 표시 없이 끊김 → B 는 여전히 409(조용한 시간 전 — 지금과 같음)", await post("B"), 409);
+  eq("주인이 아닌 B 의 끝 표시 → 409·A 그대로", [await post("B", true), lease.holder], [409, "A"]);
+  eq("A 정상 종료 끝 표시 → 200·주인 비움", [await post("A", true), lease.holder], [200, null]);
+  eq("끝 표시 뒤 새 실행 C 바로 받아들여짐", [await post("C"), lease.holder], [200, "C"]);
+  eq("C 살아 있음 → D 409", await post("D"), 409);
+  lease.seen -= 31000;                                          // 조용한 시간이 지나면 넘겨받음(지금 규칙 그대로)
+  eq("C 가 31 s 조용 → D 넘겨받음", [await post("D"), lease.holder], [200, "D"]);
+}
 
 if (fails.length) {
   console.log(`다름 ${fails.length}개`);

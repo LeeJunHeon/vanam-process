@@ -138,6 +138,16 @@ export type Lease =
   | { ok: true; prev: string | null; prevSeen: Date | null }
   | { ok: false; holder: string | null; quietMs: number | null };
 
+/** 정상 종료 끝 표시(W-25 C1 — 장비 마지막 POST 의 "bye": true) — 그 실행이 아직 주인이면 주인 자리를 바로 비운다.
+ *  다시 켠 실행이 조용한 시간(LEASE_MS)을 기다리지 않고 바로 받아들여진다. 다른 실행이 주인이면 아무것도 하지 않는다.
+ *  끝 표시가 없으면(죽은 실행·옛 장비·챔버12) 부르지 않으므로 지금과 같다. 돌려주는 값 = 비웠는가 */
+export async function releaseLease(equipment: string, instance: string): Promise<boolean> {
+  const n = await ops2Db.$executeRaw`
+    UPDATE "process"."ops2_device" SET holder_instance = NULL, holder_seen_at = NULL
+     WHERE equipment = ${equipment} AND holder_instance = ${instance}`;
+  return n > 0;
+}
+
 /** 조건부 UPDATE 한 문장 — 동시에 와도 주인은 하나(경합하면 PostgreSQL 이 바뀐 행으로 조건을 다시 본다). */
 export async function claimLease(equipment: string, instance: string, now: Date): Promise<Lease> {
   const stale = new Date(now.getTime() - LEASE_MS);
