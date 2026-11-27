@@ -4,6 +4,8 @@
 // 화면 틀: 제목·장비 고르기 → 상태 띠(모든 탭 위에 늘 — Ch12Status, 스크롤로 안 보이면 위에 얇은 줄) → bench 정보 띠 →
 //   탭 상태 · 운전 · HMI · 레시피 · 기록 · 설정(노트북 화면은 상태 · 운전 · HMI · 기록, 주소 ?tab= 에 남김 — 옛 ?tab=run 도 그대로)
 //   + 오른쪽 끝 '상세 보기' 토글. 상태 = 장비 박스와 알림, 운전 = 다음 공정과 공정 중 화면(U4 — 챔버K Chk2Page 와 같은 나눔).
+//   T: 운전 탭에 Plasma Cleaning · TSP · 프리스퍼터 예약 · 노트북 레시피 파일(노트북만), 상태 탭에 Loadlock · 로봇 연결 · 장비 공통 조작 · 장비 응답 시간.
+//   화면 글이 가리키는 곳('아래 …'·'… 탭')은 실제 자리와 맞춘다(노트북에는 레시피·설정 탭과 조작 기록이 없음).
 // 떠 있는 상자(확인창·알림창·토스트·도움말·순서 고치기)는 body 포털(Float — 챔버K W-23 A)이라 열고 닫아도 페이지 높이·스크롤이 그대로(U5).
 // kit 옵션(U1): chkColors(확인창 빨강은 정지·끄기·끝내기만)·lineIcons(띠 아이콘을 첫 줄 가운데에)는 챔버K 와 같이 켜고, chkWords 는 켜지 않는다
 //   (설정 카드 접은 줄에 챔버K 장비 이름 'CHK·CHK-SIM', 기록의 출처 'LOCAL' 이 나와서 — 보고).
@@ -66,14 +68,15 @@ export type TabKey = "status" | "run" | "hmi" | "recipe" | "log" | "config";
 export const FEED_MAIN_KEEP12 = 1500;
 // U4(챔버K W-21 과 같은 나눔): 상태(장비 박스 + 알림 — 기본 탭) / 운전(대기: 다음 공정, 공정 중: 공정 화면). 공정이 시작·끝나도 탭은 그대로
 export const WEB_TABS: { key: TabKey; label: string; title: string }[] = [
-  { key: "status", label: "상태", title: "장비 박스와 알림" },
-  { key: "run", label: "운전", title: "다음 공정, 공정 중이면 공정 순서·주요 값·추세" },
+  { key: "status", label: "상태", title: "장비 박스·Loadlock·로봇 연결·장비 공통 조작과 알림" },
+  { key: "run", label: "운전", title: "다음 공정, 공정 중이면 공정 순서·주요 값·추세, Plasma Cleaning·TSP·프리스퍼터 예약" },
   { key: "hmi", label: "HMI", title: "장비 계통도와 PLC 버튼" },
   { key: "recipe", label: "레시피", title: "공정·Plasma Cleaning 레시피 목록과 편집" },
   { key: "log", label: "기록", title: "로그·조작 기록·공정 이력" },
   { key: "config", label: "설정", title: "장비 설정 보기와 적용" },
 ];
-export const LOCAL_TABS = WEB_TABS.filter((t) => t.key === "status" || t.key === "run" || t.key === "hmi" || t.key === "log");
+export const LOCAL_TABS = WEB_TABS.filter((t) => t.key === "status" || t.key === "run" || t.key === "hmi" || t.key === "log")
+  .map((t) => (t.key === "run" ? { ...t, title: `${t.title}·노트북 레시피 파일` } : t.key === "log" ? { ...t, title: "장비 로그(조작 기록·공정 이력은 웹 화면)" } : t));   // 노트북 기록 탭은 로그만(T)
 
 type Device = { equipment: string; label: string | null; runMode: string | null };
 
@@ -249,7 +252,7 @@ export function Ch12Device({ equipment, dirtyRef, mode: screen = "web" }: {
     else if (b.status === "rejected") notify({ tone: "bad", title: `${what}: 거부`,
       text: `${reasonLabel(asChk(bundle), b.reasonCode)}${b.reasonCode && detail ? ` (${b.reasonCode})` : ""}${detail && b.detail ? ` · ${b.detail}` : ""}` });
     else if (b.status === "expired") notify({ tone: "warn", title: `${what}: 만료`, text: reasonLabel(asChk(bundle), b.reasonCode) });
-    else notify({ tone: "warn", title: `${what}: 결과를 기다리는 중`, text: "10 s 안에 결과가 오지 않았습니다. 기록 탭의 조작 기록에서 확인하세요." });
+    else notify({ tone: "warn", title: `${what}: 결과를 기다리는 중`, text: `10 s 안에 결과가 오지 않았습니다. ${local ? "웹 화면 " : ""}기록 탭의 조작 기록에서 확인하세요.` });   // 노트북 기록 탭에는 조작 기록이 없다(T)
     if (a.plc && !(r.ok && b.status === "accepted")) {
       const t = a.plc.target;
       setPlcPending((m) => { const next = { ...m }; delete next[t]; return next; });

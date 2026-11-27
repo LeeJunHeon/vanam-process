@@ -1,7 +1,7 @@
 "use client";
 
-// 챔버12 운전 탭 공통 장비(W-20 — 챔버K W-20 장비 박스 틀 DevCard 를 그대로 가져다 씀): Plasma Cleaning · TSP · 프리스퍼터 예약 · 로봇 연결 ·
-// 장비 공통 조작(Loadlock 은 Ch12Devices, 노트북 레시피 파일은 Ch12LocalFiles, 장비 응답 시간은 Ch12Timing — 같은 틀).
+// 챔버12 공통 박스(W-20 — 챔버K W-20 장비 박스 틀 DevCard 를 그대로 가져다 씀): 운전 탭 = Plasma Cleaning · TSP · 프리스퍼터 예약,
+// 상태 탭 = 로봇 연결 · 장비 공통 조작(T). Loadlock 은 Ch12Devices, 노트북 레시피 파일은 Ch12LocalFiles, 장비 응답 시간은 Ch12Timing — 같은 틀.
 // 틀: 머리(제목 + 칩) → 큰 값 또는 요약 한 줄 → 라벨-값 줄 → 상태 → 안내 → 맨 아래 버튼 줄(위에 구분선, 버튼 없으면 줄 없음).
 // 입력은 작업자 말로(이름·단위·범위 — 범위는 묶음 파라미터·장비 판단과 같은 값, 범위 밖이면 보내기 전에 막음), 명령 인자를 그대로 그리지 않는다.
 // 조작은 확인창 → 명령(잠금 = 부르는 쪽 lock — 권한·bench·끊김·결과 기다림·PLC 값 오래됨, 챔버K 와 같은 순서·문구). 마지막 판단은 장비.
@@ -173,7 +173,7 @@ const pad2 = (n: number) => String(n).padStart(2, "0");
 
 /** TSP — 큰 값 TSP Ion Gauge 압력, 줄 = 진행·TSP 상태, 목표 압력·사이클 칸, 매일 예약, 버튼 줄 = TSP 시작 · TSP 정지 */
 export function TspPanel({ bundle, st, lock, onAsk, nowMs }: Common & { nowMs: number }) {
-  const { detail } = useChk2Mode();
+  const { detail, local } = useChk2Mode();   // local — 노트북 화면에는 설정 탭이 없어 안내 글이 '웹 화면 설정 탭'(T)
   const snap = st?.snapshot;
   const tsp = blockOf(bundle, "tsp"), ig0 = blockOf(bundle, "tsp.ig");
   const name = placeName(bundle, "tsp");
@@ -197,7 +197,7 @@ export function TspPanel({ bundle, st, lock, onAsk, nowMs }: Common & { nowMs: n
     <DevCard title={name} sub={detail ? tsp?.desc : undefined}
       chip={<><ProcChip bundle={bundle} st={st} ch="tsp" /><QBadge link={st?.links?.tsp} /></>}
       big={ig && <Big12 f={ig.fields.find((f) => f.name === "pressure_torr")} snap={snap} bundle={bundle} off={st?.links?.["tsp.ig"]?.q === "off"} />}
-      note={<p>켜짐 {short(pv("TSP_ON_SEC"))} s / 꺼짐 {short(pv("TSP_OFF_SEC"))} s. 바꾸기는 설정의 TSP 운전에서 합니다.</p>}
+      note={<p>켜짐 {short(pv("TSP_ON_SEC"))} s / 꺼짐 {short(pv("TSP_OFF_SEC"))} s. 바꾸기는 {local ? "웹 화면 " : ""}설정 탭의 TSP 운전에서 합니다.</p>}
       actions={<>
         <Btn size="lg" kind="primary" lock={lock(kStart) ?? bad ?? (running ? "실행 중" : null)}
           onClick={() => onAsk({ kind: kStart, label: "TSP 시작", red: true, args,

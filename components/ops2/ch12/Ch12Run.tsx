@@ -3,10 +3,11 @@
 // 챔버12 상태·운전 탭(2026-11-18 — 챔버K Chk2Run 구성, W-20 — 챔버K W-20 장비 박스 틀·대기 화면 격자, U4 — 챔버K 상태·운전 나눔).
 // 영역(컨테이너 run) 1360px 이상: 왼쪽 3/4 = CH1·CH2 칸(1280 이상 나란히), 오른쪽 1/4 = 알림 띠 하나(두 챔버·공통, 왼쪽 높이를 따름).
 //   더 좁으면 알림은 맨 아래.
-// 상태 탭(view status): 챔버 칸 = 장비 박스 격자, 그 아래 공통 장비 박스(Loadlock · Plasma Cleaning · TSP · 프리스퍼터 예약 · 로봇 연결 ·
-//   장비 공통 조작 · 노트북 레시피 파일 · 장비 응답 시간).
+// 상태 탭(view status): 챔버 칸 = 장비 박스 격자, 그 아래 공통 장비 박스(Loadlock · 로봇 연결 · 장비 공통 조작 · 장비 응답 시간).
 // 운전 탭(view run): 챔버 칸 = 대기면 머리 카드(상태·조작) → 다음 공정, 공정 중(정지 중 포함)이면 머리 카드 → 공정 순서 →
 //   공정 중 값 바꾸기 → 주요 값(칸마다 목표·큰 값·막대) → 추세 → OES/RGA 그래프 → 공정 목표값.
+//   그 아래 운전 공통 박스(T — Plasma Cleaning · TSP · 프리스퍼터 예약 · 노트북 레시피 파일(노트북 화면만, 맨 끝 — Plasma Cleaning
+//   아래 · 다음 공정 아래라 안내 글 '아래 ...'가 맞음)). 레시피 파일을 골라 적재하고 공정 시작까지 운전 탭 한 곳에서 한다.
 // 장비 박스(Ch12Devices — 챔버K DevCard 틀): 진공 · 셔터·인터락 · 가스·압력 · Ion Gauge · 파워 · 히터(CH2) · 두께 모니터 · OES · RGA,
 //   격자는 칸 폭 950px 3개 · 650px 2개 · 그 밖 1개.
 import { useEffect, useMemo, useState } from "react";
@@ -242,7 +243,7 @@ function NextProcess({ bundle, st, ch, recipes, getRecipe, lock, onAsk, label, o
   return (
     <Card title={CARD.next} right={!loaded && <span className={`${FS.body} text-[#5B6470]`}>장비에 적재된 공정 레시피 없음</span>}>
       {!recipes ? (
-        <p className={`${FS.body} text-[#5B6470]`}>{`레시피 고르기·적재는 웹 화면에서 합니다. 장비 폴더의 레시피 파일은 아래 '${CARD.localFiles}'에서 고릅니다.`}</p>
+        <p className={`${FS.body} text-[#5B6470]`}>{`웹 레시피 목록에서 고르기는 웹 화면에서 합니다. 장비 폴더의 레시피 파일은 아래 '${CARD.localFiles}'에서 골라 적재합니다.`}</p>
       ) : (
         <div className="space-y-3">
           <div className="min-w-0">
@@ -456,7 +457,8 @@ export default function Ch12Run(p: RunProps & { view?: "status" | "run" }) {
     </div>
   );
   // 운전 탭(U4 — 챔버K Chk2Page 와 같은 나눔): CH1·CH2 칸마다 머리 카드(상태·STOP·시작) + 대기면 다음 공정, 공정 중이면 공정 화면.
-  //   영역(컨테이너 run) 1360px 이상이면 왼쪽 3/4 = 챔버 칸, 오른쪽 1/4 = 알림 띠, 더 좁으면 알림은 맨 아래. 장비 박스는 상태 탭
+  //   영역(컨테이너 run) 1360px 이상이면 왼쪽 3/4 = 챔버 칸, 오른쪽 1/4 = 알림 띠, 그 아래 전체 폭 = 운전 공통 박스(Plasma Cleaning · TSP ·
+  //   프리스퍼터 예약 · 노트북 레시피 파일). 더 좁으면 챔버 → 운전 공통 → 알림(맨 아래). 장비 박스는 상태 탭
   if (p.view !== "status") {
     return (
       <div className="@container/run">
@@ -467,12 +469,23 @@ export default function Ch12Run(p: RunProps & { view?: "status" | "run" }) {
             </div>
           </div>
           {alerts}
+          {/* 운전 공통 박스(T — 상태 탭의 공통 장비 박스와 같은 틀·같은 격자 기준: 950px 이상 3개, 650px 이상 2개, 그 밖 1개).
+              노트북 레시피 파일은 맨 끝(3개 격자면 Plasma Cleaning 바로 아래) */}
+          <div className="@container/common min-w-0 @min-[1360px]/run:col-span-4">
+            <div className="grid grid-cols-1 gap-3 @min-[650px]/common:grid-cols-2 @min-[950px]/common:grid-cols-3" data-common="run">
+              <PcPanel {...cmn} recipes={p.pcRecipes} getRecipe={p.getRow} />
+              <TspPanel {...cmn} nowMs={nowMs} />
+              <PresputterPanel {...cmn} />
+              {p.local && p.localCan && <LocalFiles bundle={bundle} can={p.localCan} onAsk={onAsk} />}
+            </div>
+          </div>
         </div>
       </div>
     );
   }
   // 상태 탭(U4 — 챔버K 상태 탭: 장비 박스와 알림): 1360px 이상이면 왼쪽 3/4 = CH1·CH2 장비 박스, 오른쪽 1/4 = 알림 띠(두 챔버·공통 알림 하나 —
-  //   높이는 왼쪽 묶음을 따르고 목록 안에서 스크롤), 공통 장비는 그 아래 전체 폭. 더 좁으면 챔버 → 공통 장비 → 알림(맨 아래, 목록 최대 240px)
+  //   높이는 왼쪽 묶음을 따르고 목록 안에서 스크롤), 공통 장비(Loadlock · 로봇 연결 · 장비 공통 조작 · 장비 응답 시간)는 그 아래 전체 폭.
+  //   더 좁으면 챔버 → 공통 장비 → 알림(맨 아래, 목록 최대 240px). 운전에 쓰는 박스(Plasma Cleaning · TSP · 프리스퍼터 · 레시피 파일)는 운전 탭(T)
   return (
     <div className="@container/run">
       <div className="grid grid-cols-1 gap-3 @min-[1360px]/run:grid-cols-4">
@@ -484,14 +497,10 @@ export default function Ch12Run(p: RunProps & { view?: "status" | "run" }) {
         {alerts}
         {/* 공통 장비(W-20 — 챔버 장비 박스와 같은 틀·같은 격자 기준: 이 영역 폭 950px 이상 3개, 650px 이상 2개, 그 밖 1개) */}
         <div className="@container/common min-w-0 @min-[1360px]/run:col-span-4">
-          <div className="grid grid-cols-1 gap-3 @min-[650px]/common:grid-cols-2 @min-[950px]/common:grid-cols-3" data-common="">
+          <div className="grid grid-cols-1 gap-3 @min-[650px]/common:grid-cols-2 @min-[950px]/common:grid-cols-3" data-common="status">
             <LoadlockBox12 ctx={{ ...cmn, onHmi: p.onHmi }} plcOk={p.plcOk} />
-            <PcPanel {...cmn} recipes={p.pcRecipes} getRecipe={p.getRow} />
-            <TspPanel {...cmn} nowMs={nowMs} />
-            <PresputterPanel {...cmn} />
             <RobotPanel bundle={bundle} st={st} feed={feed} />
             <CommonOps {...cmn} plcOk={p.plcOk} />
-            {p.local && p.localCan && <LocalFiles bundle={bundle} can={p.localCan} onAsk={onAsk} />}
             <Ch12Timing st={st} bundle={bundle} />
           </div>
         </div>

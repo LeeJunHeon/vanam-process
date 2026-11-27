@@ -348,28 +348,53 @@ const statusView = (over = {}) => render(U.Ch12Run, { ...runP0, view: "status", 
   const band = /class="relative order-last min-w-0 @min-\[1360px\]\/run:order-none" data-alerts=""/.test(html)
     && /@min-\[1360px\]\/run:absolute @min-\[1360px\]\/run:inset-0/.test(html) && /max-h-\[240px\][^"]*@min-\[1360px\]\/run:flex-1/.test(html);
   const one = (html.match(/data-alerts=""/g) ?? []).length === 1 && !textOf(html).includes("알림·로그");
-  const order = html.indexOf('data-chamber="ch2"') < html.indexOf('data-alerts=""') && html.indexOf('data-alerts=""') < html.indexOf("Plasma Cleaning");
+  const order = html.indexOf('data-chamber="ch2"') < html.indexOf('data-alerts=""') && html.indexOf('data-alerts=""') < html.indexOf('data-common="status"')
+    && runV.indexOf('data-chamber="ch2"') < runV.indexOf('data-alerts=""') && runV.indexOf('data-alerts=""') < runV.indexOf('data-common="run"');
   const runTab = /class="min-w-0 @min-\[1360px\]\/run:col-span-3"/.test(runV) && (runV.match(/data-alerts=""/g) ?? []).length === 1
-    && !runV.includes('data-common=""') && !runV.includes("data-devices=");
-  check("ui:run-band — 상태·운전 탭 1360px 이상 왼쪽 3/4 챔버 칸 · 오른쪽 1/4 알림 띠(하나, 왼쪽 높이·목록 안 스크롤), 좁으면 알림 맨 아래(240px), 공통 장비는 상태 탭에만",
+    && !runV.includes('data-common="status"') && !html.includes('data-common="run"') && !runV.includes("data-devices=");
+  check("ui:run-band — 상태·운전 탭 1360px 이상 왼쪽 3/4 챔버 칸 · 오른쪽 1/4 알림 띠(하나, 왼쪽 높이·목록 안 스크롤), 좁으면 알림 맨 아래(240px), 그 아래 탭마다 공통 박스(상태·운전 따로)",
         left && grid4 && band && one && order && runTab, { left, grid4, band, one, order, runTab });
 }
 {
   // W-20 ⑤ 공통 장비 — 챔버 장비 박스와 같은 틀(DevCard)·같은 격자 기준(영역 폭 950px 3개 · 650px 2개 · 그 밖 1개).
-  //   읽는 순서 Loadlock → Plasma Cleaning → TSP → 프리스퍼터 예약 → 로봇 연결 → 장비 공통 조작 → (노트북 레시피 파일) → 장비 응답 시간
-  const titlesOf = (h) => [...h.slice(h.indexOf('data-common=""')).matchAll(/<h3 class="min-w-0 truncate[^"]*">([^<]*)<\/h3>/g)].map((m) => m[1]);
+  // T — 탭마다 나눔: 상태 탭 Loadlock → 로봇 연결 → 장비 공통 조작 → 장비 응답 시간,
+  //   운전 탭 Plasma Cleaning → TSP → 프리스퍼터 예약 → (노트북 레시피 파일 — 노트북만, 맨 끝이라 Plasma Cleaning·다음 공정의 '아래 …' 안내가 맞음)
+  const titlesOf = (h, k) => { const seg = h.slice(h.indexOf(`data-common="${k}"`)); return h.includes(`data-common="${k}"`)
+    ? [...seg.matchAll(/<h3 class="min-w-0 truncate[^"]*">([^<]*)<\/h3>/g)].map((m) => m[1]) : []; };
   const web = statusView(), loc = statusView({ local: true, localCan: () => true });
-  const want = ["Loadlock", "Plasma Cleaning", "TSP", "프리스퍼터 예약", "로봇 연결", "장비 공통 조작", "장비 응답 시간"];
-  const wantLoc = ["Loadlock", "Plasma Cleaning", "TSP", "프리스퍼터 예약", "로봇 연결", "장비 공통 조작", "노트북 레시피 파일", "장비 응답 시간"];
-  const grid = /class="grid grid-cols-1 gap-3 @min-\[650px\]\/common:grid-cols-2 @min-\[950px\]\/common:grid-cols-3" data-common=""/.test(web);
-  const seg = web.slice(web.indexOf('data-common=""'));
+  const runW = render(U.Ch12Run, runP0), runL = render(U.Ch12Run, { ...runP0, local: true, localCan: () => true, recipes: null, pcRecipes: null });
+  const wantSt = ["Loadlock", "로봇 연결", "장비 공통 조작", "장비 응답 시간"];
+  const wantRun = ["Plasma Cleaning", "TSP", "프리스퍼터 예약"], wantRunLoc = [...wantRun, "노트북 레시피 파일"];
+  const gridRe = (k) => new RegExp(`class="grid grid-cols-1 gap-3 @min-\\[650px\\]/common:grid-cols-2 @min-\\[950px\\]/common:grid-cols-3" data-common="${k}"`);
+  const grid = gridRe("status").test(web) && gridRe("run").test(runW) && gridRe("run").test(runL);
+  const seg = web.slice(web.indexOf('data-common="status"'));
   const ll = seg.slice(0, seg.indexOf("</section>"));
   const llOk = ll.includes("HMI 열기") && ll.indexOf("mt-auto") < ll.indexOf("HMI 열기") && /인터락/.test(ll) && ll.includes("4Pin 올림");
-  const pcSeg = seg.slice(seg.indexOf(">Plasma Cleaning</h3>")), pcBox = pcSeg.slice(0, pcSeg.indexOf("</section>"));
+  const rseg = runW.slice(runW.indexOf('data-common="run"'));
+  const pcSeg = rseg.slice(rseg.indexOf(">Plasma Cleaning</h3>")), pcBox = pcSeg.slice(0, pcSeg.indexOf("</section>"));
   const pcOk = pcBox.indexOf("mt-auto") < pcBox.indexOf(">시작<") || pcBox.indexOf("mt-auto") < pcBox.search(/<\/svg> ?시작/);
-  check("ui:common-boxes — 공통 장비 박스(상태 탭 — 챔버K DevCard 틀) 읽는 순서·격자 기준(950·650), Loadlock 상태·인터락·[HMI 열기], 버튼은 맨 아래 줄",
-        JSON.stringify(titlesOf(web)) === JSON.stringify(want) && JSON.stringify(titlesOf(loc)) === JSON.stringify(wantLoc) && grid && llOk && pcOk,
-        { web: titlesOf(web), loc: titlesOf(loc), grid, llOk, pcOk });
+  const got = { web: titlesOf(web, "status"), loc: titlesOf(loc, "status"), runW: titlesOf(runW, "run"), runL: titlesOf(runL, "run") };
+  check("ui:common-boxes — 공통 박스(챔버K DevCard 틀) 탭마다: 상태 Loadlock·로봇 연결·장비 공통 조작·장비 응답 시간 / 운전 Plasma Cleaning·TSP·프리스퍼터 예약·(노트북) 레시피 파일, 격자 기준(950·650), Loadlock [HMI 열기]·버튼 맨 아래 줄",
+        JSON.stringify(got.web) === JSON.stringify(wantSt) && JSON.stringify(got.loc) === JSON.stringify(wantSt)
+        && JSON.stringify(got.runW) === JSON.stringify(wantRun) && JSON.stringify(got.runL) === JSON.stringify(wantRunLoc) && grid && llOk && pcOk,
+        { ...got, grid, llOk, pcOk });
+}
+{
+  // T — 화면 글이 가리키는 자리가 실제와 맞음: 노트북 운전 탭 다음 공정·Plasma Cleaning 의 "아래 '노트북 레시피 파일'"은 같은 탭 그 카드보다 위,
+  //   노트북에는 설정 탭·조작 기록이 없어 'TSP 운전'·'조작 기록' 안내는 '웹 화면 …', 노트북 운전 탭 한 곳에서 파일 고르기 → 적재 → 공정 시작
+  const runL = render(U.Ch12Run, { ...runP0, ch: "ch2", local: true, localCan: () => true, recipes: null, pcRecipes: null }, { local: true });
+  const stL = statusView({ local: true, localCan: () => true });
+  const tL = textOf(runL), lf = runL.indexOf(">노트북 레시피 파일</h3>");
+  const nextIdx = runL.indexOf("아래 &#x27;노트북 레시피 파일&#x27;에서 골라 적재합니다"), pcIdx = runL.indexOf("레시피는 아래 &#x27;노트북 레시피 파일&#x27;에서 CSV");
+  const tspW = textOf(render(U.TspPanel, { bundle, st, lock: noLock, onAsk: noop, nowMs })), tspL = textOf(render(U.TspPanel, { bundle, st, lock: noLock, onAsk: noop, nowMs }, { local: true }));
+  const pageSrc = readFileSync(join(root, "components/ops2/ch12/Ch12Page.tsx"), "utf8");
+  const lt = Object.fromEntries(U.LOCAL_TABS.map((t) => [t.key, t.title]));
+  const ok = lf > 0 && nextIdx > 0 && nextIdx < lf && pcIdx > 0 && pcIdx < lf && tL.includes("공정 시작")
+    && !/>(Plasma Cleaning|TSP|프리스퍼터 예약|노트북 레시피 파일)<\/h3>/.test(stL)
+    && tspW.includes("바꾸기는 설정 탭의 TSP 운전에서 합니다") && tspL.includes("바꾸기는 웹 화면 설정 탭의 TSP 운전에서 합니다")
+    && pageSrc.includes('${local ? "웹 화면 " : ""}기록 탭의 조작 기록에서 확인하세요') && lt.run.includes("노트북 레시피 파일") && !lt.log.includes("·조작 기록·공정 이력");
+  check("ui:tab-texts — '아래 노트북 레시피 파일' 안내는 같은 탭 그 카드 위, 노트북 TSP·조작 기록 안내는 '웹 화면', 노트북 운전 탭에 레시피 파일·공정 시작, 상태 탭에 운전 박스 없음",
+        ok, { lf, nextIdx, pcIdx, start: tL.includes("공정 시작"), tspL: tspL.match(/바꾸기는[^.]*/)?.[0], lt });
 }
 {
   // W-21·22 B — RF 꺼짐 표시: cmd_on·uncommanded 둘 다 false 면 평소 보기 Forward·Reflected 0 W·'출력 꺼짐'(상세 보기는 읽은 값),
