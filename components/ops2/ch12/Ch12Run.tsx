@@ -366,7 +366,7 @@ export function ChamberRun(p: ChamberProps) {
             <Square size={14} /> {label} STOP
           </Btn>
           {!running && hasKind(bundle, KINDS.start) && (
-            <Btn size="lg" kind="dangerSolid" lock={lock(kStart, key(kStart))} onClick={() => ask({ kind: kStart, label: `${label} 공정 시작`, red: true,
+            <Btn size="lg" kind="primary" lock={lock(kStart, key(kStart))} onClick={() => ask({ kind: kStart, label: `${label} 공정 시작`, red: true,
               args: chArgs(bundle, kStart, ch), lines: [eng?.recipe_name ? `적재된 '${String(eng.recipe_name)}' 을(를) 시작합니다.` : "적재된 레시피가 없으면 장비가 거부합니다."],
               note: "공정을 시작합니다. 가스·파워·셔터가 움직입니다." })}>
               <Play size={14} /> 공정 시작

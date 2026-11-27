@@ -112,7 +112,7 @@ export function PcPanel({ bundle, st, lock, onAsk, recipes, getRecipe }: Common 
         <p>입력 칸 순서: {PC_FIELDS.map((f) => f.label).join(" · ")}</p>
       </>}
       actions={<>
-        <Btn size="lg" kind="dangerSolid" lock={lock(kStart) ?? (running ? "실행 중" : null)}
+        <Btn size="lg" kind="primary" lock={lock(kStart) ?? (running ? "실행 중" : null)}
           onClick={() => onAsk({ kind: kStart, label: commandName(bundle, kStart), red: true, args: { ch: rowCh ?? chSel, ...(row ? { rows: [row] } : {}) },
             lines: [row ? pcRowLine(row) : "장비에 불러온 값(마지막 CSV·화면 값)으로 시작합니다.", `채널 CH${rowCh ?? chSel}`],
             note: `${pc} 을(를) 시작합니다. 가스·RF 가 움직입니다.` })}>
@@ -199,7 +199,7 @@ export function TspPanel({ bundle, st, lock, onAsk, nowMs }: Common & { nowMs: n
       big={ig && <Big12 f={ig.fields.find((f) => f.name === "pressure_torr")} snap={snap} bundle={bundle} off={st?.links?.["tsp.ig"]?.q === "off"} />}
       note={<p>켜짐 {short(pv("TSP_ON_SEC"))} s / 꺼짐 {short(pv("TSP_OFF_SEC"))} s. 바꾸기는 설정의 TSP 운전에서 합니다.</p>}
       actions={<>
-        <Btn size="lg" kind="dangerSolid" lock={lock(kStart) ?? bad ?? (running ? "실행 중" : null)}
+        <Btn size="lg" kind="primary" lock={lock(kStart) ?? bad ?? (running ? "실행 중" : null)}
           onClick={() => onAsk({ kind: kStart, label: "TSP 시작", red: true, args,
             lines: [`목표 ${args.target ?? `${short(pv("TSP_UI_DEFAULT_TARGET"))}(설정)`} Torr · 사이클 ${args.cycles ?? `${short(pv("TSP_UI_DEFAULT_CYCLES"))}(설정)`}회`] })}>
           <Play size={14} /> TSP 시작

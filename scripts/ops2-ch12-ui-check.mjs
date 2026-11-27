@@ -948,6 +948,31 @@ const statusView = (over = {}) => render(U.Ch12Run, { ...runP0, view: "status", 
   check("ui:narrow-390 — 추세 그래프 fitLegend(범례 다음 줄)·위 띠 챔버 칸 flex-basis 18rem(좁으면 정지 버튼 아래 줄)",
         /<Chk2Trend[^>]*\bfitLegend\b/.test(runSrc.replace(/\n\s*/g, " ")) && band.includes("flex-[1_1_18rem]"), null);
 }
+{
+  // C 버튼 색(챔버K 규칙 — Chk2Run 적재 시작 primary, Chk2Status 정지 버튼): 시작·켜기·적재·적용 파랑(primary), 정지·끄기 빨강 테두리(danger),
+  //   빨강 채움(dangerSolid)은 ALL STOP 뿐. 확인창 실행 색(chkColors)은 따로(ui:kit-colors)
+  const SOLID = "bg-[#B42318] text-white", BLUE = "bg-[#1D4ED8] text-white", LINE = "bg-white text-[#B42318]";
+  const ctx = { bundle, st, lock: noLock, onAsk: noop };
+  const html = [
+    render(U.ChamberRun, chamberProps("ch2")), render(U.Ch12Run, runP0), statusView(),
+    render(U.PcPanel, { bundle, st, lock: noLock, onAsk: noop, recipes: [], getRecipe: async () => null }),
+    render(U.TspPanel, { bundle, st, lock: noLock, onAsk: noop, nowMs }), render(U.HeaterBox12, { ctx, plcOk: true }),
+    render(U.StatusBand12, { bundle, st, connected: true, conn: { label: "연결됨", tone: "neutral" }, links: [], mode: "sim", equipment: "CH12-SIM",
+      label: null, lock: noLock, onAsk: noop, nowMs, plcOk: true }),
+  ].join("");
+  const btns = [...html.matchAll(/<button([^>]*)>([\s\S]*?)<\/button>/g)].map((m) => ({ text: textOf(m[2]).trim(), cls: /class="([^"]*)"/.exec(m[1])?.[1] ?? "" }));
+  const solid = [...new Set(btns.filter((x) => x.cls.includes(SOLID)).map((x) => x.text))];
+  const kindOf = (label) => [...new Set(btns.filter((x) => x.text === label).map((x) => (x.cls.includes(BLUE) ? "primary" : x.cls.includes(SOLID) ? "dangerSolid" : x.cls.includes(LINE) ? "danger" : "neutral")))].join();
+  const want = { "공정 시작": "primary", "시작": "primary", "TSP 시작": "primary", "히터 켜기": "primary", "CH2 STOP": "danger", "정지": "danger", "TSP 정지": "danger", "ALL STOP": "dangerSolid" };
+  const got = Object.fromEntries(Object.keys(want).map((k) => [k, kindOf(k)]));
+  const ch12Dir = join(root, "components/ops2/ch12");
+  const srcSolid = execFileSync("grep", ["-rln", "kind=\"dangerSolid\"", ch12Dir], { encoding: "utf8" }).trim().split("\n").map((f) => f.replace(ch12Dir + "/", ""));
+  const statusSrc = readFileSync(join(ch12Dir, "Ch12Status.tsx"), "utf8");
+  const solidSrcOk = srcSolid.join() === "Ch12Status.tsx" && (statusSrc.match(/kind="dangerSolid"/g) ?? []).length === 1
+    && /kind="dangerSolid"[\s\S]{0,400}ALL STOP/.test(statusSrc);
+  check("ui:btn-colors — 빨강 채움은 ALL STOP 뿐(그린 화면·소스), 공정 시작·Plasma Cleaning 시작·TSP 시작·히터 켜기 파랑, STOP·정지 빨강 테두리",
+        solid.join() === "ALL STOP" && Object.entries(want).every(([k, v]) => got[k] === v) && solidSrcOk, { solid, got, srcSolid });
+}
 
 // ───────────── 2) logic.ts ─────────────
 {

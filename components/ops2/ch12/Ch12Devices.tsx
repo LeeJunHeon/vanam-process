@@ -415,7 +415,7 @@ export function HeaterBox12({ ctx, plcOk }: { ctx: BoxCtx; plcOk: boolean }) {
             <Square size={14} /> 히터 끄기
           </Btn>
         ) : (
-          <Btn kind="dangerSolid" lock={lock(kOn, key(kOn)) ?? inputBad}
+          <Btn kind="primary" lock={lock(kOn, key(kOn)) ?? inputBad}
             onClick={() => c.value !== null && onAsk({ kind: kOn, key: key(kOn), label: "히터 켜기", red: true, args: { target: String(c.value) },
               lines: [`목표 ${c.value} °C 로 운전을 켭니다. 승온 속도는 설정 기본값입니다.`] })}>
             <Play size={14} /> 히터 켜기

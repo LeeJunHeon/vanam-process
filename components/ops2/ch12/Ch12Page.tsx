@@ -7,6 +7,7 @@
 // 떠 있는 상자(확인창·알림창·토스트·도움말·순서 고치기)는 body 포털(Float — 챔버K W-23 A)이라 열고 닫아도 페이지 높이·스크롤이 그대로(U5).
 // kit 옵션(U1): chkColors(확인창 빨강은 정지·끄기·끝내기만)·lineIcons(띠 아이콘을 첫 줄 가운데에)는 챔버K 와 같이 켜고, chkWords 는 켜지 않는다
 //   (설정 카드 접은 줄에 챔버K 장비 이름 'CHK·CHK-SIM', 기록의 출처 'LOCAL' 이 나와서 — 보고).
+// 버튼 색(C — 챔버K 규칙): 시작·켜기·적재·적용 파랑(primary), 정지·끄기 빨강 테두리(danger), 빨강 채움(dangerSolid)은 ALL STOP 뿐.
 //   레시피 편집 중 저장 안 한 변경이 있으면 탭·장비를 바꿀 때 확인창.
 // 데이터는 챔버K useChk2 그대로(hello·schema(묶음)·stream·commands·runs — /api/ops2/[equipment]/v1/* 와 노트북 /api/v1/*), 추세 열만 챔버12 열.
 // 잠금(logic.lockReason — 챔버K lockOf 와 같은 순서·문구): 로그인 끊김 → 권한(웹 perms·노트북은 hello.commandKinds) → bench(runMode bench·
