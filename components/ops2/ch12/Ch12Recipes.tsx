@@ -27,10 +27,10 @@ type Kind = "ch1" | "ch2" | "pc";
 
 /** 옛 작은 버튼 자리 — 챔버K kit 버튼으로(tone → kind, small → sm) */
 const Btn = ({ onClick, disabled, title, tone, small, children }: {
-  onClick: () => void; disabled?: boolean; title?: string; tone?: "blue" | "rose" | "roseSolid"; small?: boolean; children: React.ReactNode;
+  onClick: () => void; disabled?: boolean; title?: string; tone?: "blue" | "rose"; small?: boolean; children: React.ReactNode;
 }) => (
   <KBtn onClick={onClick} disabled={disabled} title={title} size={small ? "sm" : "md"}
-    kind={tone === "blue" ? "primary" : tone === "rose" ? "danger" : tone === "roseSolid" ? "dangerSolid" : "neutral"}>{children}</KBtn>
+    kind={tone === "blue" ? "primary" : tone === "rose" ? "danger" : "neutral"}>{children}</KBtn>
 );
 const KIND_LABEL: Record<Kind, string> = { ch1: PLACE.ch1, ch2: PLACE.ch2, pc: PLACE.pc };
 type Draft = { id: string | null; kind: Kind; name: string; rows: Row[]; updatedAt: string | null; base: string };
