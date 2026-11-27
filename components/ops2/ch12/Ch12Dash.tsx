@@ -49,7 +49,7 @@ function useEvery<T>(v: T, ms: number): T {
 type Snap = Record<string, unknown> | undefined;
 type B = ReturnType<typeof asCh12>;
 
-function ChamberCell({ bundle, st, ch, nowMs }: { bundle: B; st: Ch12State | null; ch: "ch1" | "ch2"; nowMs: number }) {
+export function ChamberCell({ bundle, st, ch, nowMs, online }: { bundle: B; st: Ch12State | null; ch: "ch1" | "ch2"; nowMs: number; online: boolean }) {
   const cs = chamberState(st, ch);
   const info = stateInfo(bundle, cs?.procState, ch);
   const running = isRunning(bundle, cs);
@@ -64,7 +64,8 @@ function ChamberCell({ bundle, st, ch, nowMs }: { bundle: B; st: Ch12State | nul
     <div className="flex min-w-0 flex-col gap-1.5 rounded-[10px] border border-[#E3E6EA] px-3.5 py-3" data-dash-cell={ch}>
       <span className={`flex flex-wrap items-center gap-1.5 ${FS.small} text-[#5B6470]`}>
         <b className="text-[#1B1F24]">{name}</b>
-        {running ? <Chip tone="dark">{info.kind === "stopping" ? "정지 중" : "공정 중"}</Chip> : info.kind === "stopping" ? <Chip tone="warn">정지 중</Chip> : <Chip>대기</Chip>}
+        {!online ? <Chip>미연결</Chip>   /* 끊기면 챔버 칩도 미연결(맨 위 개수와 같게 — 값은 챔버K 박스처럼 마지막 값 그대로) */
+          : running ? <Chip tone="dark">{info.kind === "stopping" ? "정지 중" : "공정 중"}</Chip> : info.kind === "stopping" ? <Chip tone="warn">정지 중</Chip> : <Chip>대기</Chip>}
         {cs?.paused && <Chip tone="warn">일시정지</Chip>}
         {alarms > 0 && <Chip tone="alarm">알람 {alarms}개</Chip>}
       </span>
@@ -149,8 +150,8 @@ export function Ch12Area({ id, onOpen, onReport }: { id: string; onOpen?: () => 
         {stateChip}
       </span>}>
       <div className="grid grid-cols-1 gap-2.5 @min-[520px]/dash:grid-cols-3" data-dash-ch12="">
-        <ChamberCell bundle={bundle} st={st} ch="ch1" nowMs={now + d.offsetMs} />
-        <ChamberCell bundle={bundle} st={st} ch="ch2" nowMs={now + d.offsetMs} />
+        <ChamberCell bundle={bundle} st={st} ch="ch1" nowMs={now + d.offsetMs} online={online} />
+        <ChamberCell bundle={bundle} st={st} ch="ch2" nowMs={now + d.offsetMs} online={online} />
         <LoadlockCell bundle={bundle} snap={snap} />
       </div>
       <div className="mt-auto flex flex-wrap items-center gap-2 border-t border-[#E3E6EA] pt-3">

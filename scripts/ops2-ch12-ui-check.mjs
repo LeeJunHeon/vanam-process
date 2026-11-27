@@ -147,6 +147,7 @@ await esbuild.build({
       export { default as Ch12Confirm, PlcConfirmBody, recordNote, isPlcAsk, runRed } from "./components/ops2/ch12/Ch12Confirm";
       export { connOf, connParts } from "./lib/ops2/chk/conn";
       export { deviceChoiceOf } from "./lib/ops2/display";
+      export { ChamberCell as DashChamberCell } from "./components/ops2/ch12/Ch12Dash";
       export { withServerArgs } from "./lib/ops2/commandArgs";
       export { Ch12EventFeed, ch12LogLine, RunAlerts, alertLines12 } from "./components/ops2/ch12/Ch12Logs";
       export { WEB_TABS, LOCAL_TABS } from "./components/ops2/ch12/Ch12Page";
@@ -931,6 +932,15 @@ const statusView = (over = {}) => render(U.Ch12Run, { ...runP0, view: "status", 
         one.list.length === 1 && one.picked === "CH12-SIM" && !one.showPicker && two.list.length === 2 && two.showPicker && two.picked === "CH12"
         && kept.picked === "CH12-SIM" && /devices && devices\.length > 1 &&/.test(src),
         { one, two: two.picked, kept: kept.picked });
+}
+{
+  // D 운전 대시보드 CH1&2 칸 — 연결 중엔 챔버 상태(공정 중·대기), 끊기면 미연결(맨 위 개수와 같게, 값은 마지막 값 그대로)
+  const cell = (ch, online) => textOf(render(U.DashChamberCell, { bundle, st, ch, nowMs, online }));
+  const on1 = cell("ch1", true), on2 = cell("ch2", true), off1 = cell("ch1", false), off2 = cell("ch2", false);
+  check("ui:dash-cell — 대시보드 CH1&2 칸: 연결 중 CH1 공정 중·단계, 끊기면 CH1·CH2 칩 미연결(공정 중·대기 글 없음)",
+        on1.includes("공정 중") && on1.includes("단계") && !on1.includes("미연결") && off1.includes("미연결") && !off1.includes("공정 중")
+        && off2.includes("미연결") && !/대기(?! 중)/.test(off2.replace(/챔버 압력|Ion Gauge 압력/g, "")) && !on2.includes("미연결"),
+        { on1: on1.slice(0, 80), on2: on2.slice(0, 80), off1: off1.slice(0, 80), off2: off2.slice(0, 80) });
 }
 
 // ───────────── 2) logic.ts ─────────────
